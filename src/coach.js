@@ -7,6 +7,7 @@ import { TaskError, sha256, planningStatus, planningAction, ready } from './task
 import { HEADINGS } from './memory.js';
 import { outlineSensors, outputSensors } from './sensors.js';
 import { Projects } from './projects.js';
+import { killTree } from './platform.js';
 
 const now = () => new Date().toISOString();
 const stageName = id => stages.find(s => s.id === id).name;
@@ -283,8 +284,8 @@ export class Coach {
     });
     await this.audit(id, 'STOP_REQUESTED', { stage: task.planning.running.stage, turnId: task.planning.running.turnId });
     const child = this.children.get(id);
-    child?.kill('SIGTERM');
-    const kill = setTimeout(() => this.children.get(id)?.kill('SIGKILL'), graceMs);
+    killTree(child, 'SIGTERM');
+    const kill = setTimeout(() => killTree(this.children.get(id), 'SIGKILL'), graceMs);
     const flag = setTimeout(async () => {
       if (!this.pending.has(id)) return;
       await this.store.mutate(id, 'latest', null, t => {
@@ -760,7 +761,7 @@ export class Coach {
         try {
           const real = await realpath(full);
           if (!real.startsWith(`${outDir}${path.sep}`) || !(await stat(real)).isFile()) continue;
-          outputs.push({ file: path.relative(outDir, real), sha: sha256(await readFile(real)) });
+          outputs.push({ file: path.relative(outDir, real).split(path.sep).join('/'), sha: sha256(await readFile(real)) });
         } catch {}
       }
       item.attempts += 1;

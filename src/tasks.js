@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { readFile, writeFile, rename, readdir, realpath, stat, lstat, unlink } from 'node:fs/promises';
 import path from 'node:path';
+import { renameReplace } from './platform.js';
 import { stages } from './models.js';
 
 const stageName = id => stages.find(s => s.id === id)?.name || id;
@@ -393,7 +394,7 @@ export class TaskStore {
         await unlink(temporary);
         throw new TaskError(409, 'FILE_CHANGED', '任務檔在處理期間被修改，已停止寫入以免覆蓋。', { revision: task.revision - 1 });
       }
-      await rename(temporary, target);
+      await renameReplace(temporary, target);
       if (result?.after) await result.after();
       return { task: { ...task, humanEdited: false, nextAction: nextHumanAction(task) }, ...result?.extra };
     });

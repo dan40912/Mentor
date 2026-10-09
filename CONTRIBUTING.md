@@ -12,9 +12,9 @@ Thanks for helping. Mentor is small on purpose, so a few ground rules keep it th
 ## Setup
 
 ```sh
-git clone https://github.com/OWNER/mentor.git
+git clone https://github.com/dan40912/mentor.git
 cd mentor
-npm test          # Node.js 22+
+npm test          # Node.js 20+
 npm run demo      # fictional data, http://127.0.0.1:4317
 ```
 
@@ -34,7 +34,7 @@ User data lives in `vault/` and `outputs/` (or `$MENTOR_HOME`) and is git-ignore
 ## Pull requests
 
 1. Keep a PR to one change. Add or update tests.
-2. Run `npm test` before pushing. CI runs Node 22 and 24 on Linux and macOS.
+2. Run `npm test` before pushing. CI runs Node 20, 22 and 24 on Linux, macOS and Windows.
 3. Describe what changed and why. Screenshots for UI changes.
 
 ## Most wanted

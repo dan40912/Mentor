@@ -1,8 +1,9 @@
 import http from 'node:http';
 import { randomUUID, randomBytes } from 'node:crypto';
-import { mkdir, readFile, writeFile, rename, realpath, readdir, stat } from 'node:fs/promises';
-import { fileURLToPath } from 'node:url';
+import { mkdir, readFile, writeFile, realpath, readdir, stat } from 'node:fs/promises';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import path from 'node:path';
+import { renameReplace } from './platform.js';
 import { providers, resolveModel, stages, defaultStageSettings, profiles, recommendationPlans } from './models.js';
 import { Memory } from './memory.js';
 import { Trash } from './trash.js';
@@ -15,7 +16,8 @@ import { TaskStore, TaskError, buildBrief } from './tasks.js';
 const appDir = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const webDir = path.join(appDir, 'web');
 // 使用者資料（vault、outputs、設定）放在 MENTOR_HOME，預設是 repo 根目錄。
-const root = path.resolve(process.env.MENTOR_HOME || appDir);
+const flag = name => { const i = process.argv.indexOf(`--${name}`); return i > 0 ? process.argv[i + 1] : undefined; };
+const root = path.resolve(flag('home') || process.env.MENTOR_HOME || appDir);
 const memory = path.join(root, 'vault');
 const token = randomBytes(32).toString('hex');
 let settings = { revision: 1, stages: defaultStageSettings() };
@@ -69,7 +71,7 @@ let queue = Promise.resolve();
 async function atomicWrite(file, content) {
   const temporary = `${file}.${randomUUID()}.tmp`;
   await writeFile(temporary, content, { flag: 'wx' });
-  await rename(temporary, file);
+  await renameReplace(temporary, file);
 }
 
 export function handoffMarkdown(input, id) {
@@ -125,7 +127,7 @@ async function body(req) {
   return JSON.parse(text);
 }
 
-export async function startServer(port = Number(process.env.PORT || 4317)) {
+export async function startServer(port = Number(flag('port') || process.env.PORT || 4317)) {
   await mkdir(memory, { recursive: true });
   const canonicalRoot = await realpath(root);
   if (!((await realpath(memory)).startsWith(`${canonicalRoot}${path.sep}`))) {
@@ -393,7 +395,7 @@ export async function startServer(port = Number(process.env.PORT || 4317)) {
   return server;
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   startServer().then(server => console.log(`Mentor: http://127.0.0.1:${server.address().port}`)).catch(error => {
     console.error(error.code === 'EADDRINUSE' ? '連接埠已使用。請執行 PORT=4318 npm start。' : error);
     process.exitCode = 1;

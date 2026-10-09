@@ -8,10 +8,11 @@
 
 A zero-dependency local workbench. One task file is the source of truth: the AI reads it before it starts, writes back when it stops, and you only decide and review.
 
-[![CI](https://github.com/OWNER/mentor/actions/workflows/ci.yml/badge.svg)](https://github.com/OWNER/mentor/actions/workflows/ci.yml)
+[![CI](https://github.com/dan40912/mentor/actions/workflows/ci.yml/badge.svg)](https://github.com/dan40912/mentor/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Dependencies: 0](https://img.shields.io/badge/dependencies-0-brightgreen)
-![Node](https://img.shields.io/badge/node-%3E%3D22-339933)
+![Node](https://img.shields.io/badge/node-%3E%3D20-339933)
+![Platforms](https://img.shields.io/badge/macOS%20%7C%20Linux%20%7C%20Windows-lightgrey)
 
 English · [繁體中文](README.zh-TW.md)
 
@@ -41,10 +42,10 @@ Mentor takes you out of the courier role.
 
 ## Quick start
 
-Requires Node.js 22+ and at least one logged-in CLI if you want Mentor to run agents ([Codex](https://github.com/openai/codex), [Claude Code](https://claude.com/claude-code) or GitHub Copilot CLI). Without a CLI you can still use the task file and manual handoff.
+Requires Node.js 20 or newer (tested on 20, 22 and 24) on macOS, Linux or Windows, and at least one logged-in CLI if you want Mentor to run agents ([Codex](https://github.com/openai/codex), [Claude Code](https://claude.com/claude-code) or GitHub Copilot CLI). Without a CLI you can still use the task file and manual handoff.
 
 ```sh
-git clone https://github.com/OWNER/mentor.git
+git clone https://github.com/dan40912/mentor.git
 cd mentor
 npm run demo      # seeds a fictional vault in .demo-home/ and starts the server
 ```
@@ -52,11 +53,19 @@ npm run demo      # seeds a fictional vault in .demo-home/ and starts the server
 Open <http://127.0.0.1:4317>. When you want your own data:
 
 ```sh
-npm start         # data goes in ./vault and ./outputs (git-ignored)
-MENTOR_HOME=~/mentor-data npm start   # or keep it anywhere else
-PORT=4318 npm start                   # if 4317 is taken
+npm start                                  # data goes in ./vault and ./outputs (git-ignored)
+npm start -- --home ~/mentor-data          # keep data anywhere else
+npm start -- --port 4318                   # if 4317 is taken
 npm test
 ```
+
+`--home` and `--port` work the same in macOS, Linux, PowerShell and cmd. The `MENTOR_HOME` and `PORT` environment variables also work.
+
+### Windows notes
+
+- CLIs installed with npm (for example `codex`) are `.cmd` shims on Windows. Mentor finds them through `PATH` and `PATHEXT` and runs them through `cmd.exe`. Arguments containing `& | < > ^ % ! "` are refused instead of escaped, so keep your project and output paths free of those characters.
+- Stopping a run ends the whole process tree with `taskkill`.
+- Windows runs in CI on every push. It has not yet been tried with a real logged-in `codex`, `claude` or `copilot` on a Windows machine, so please report anything odd.
 
 ## How it works
 
@@ -109,7 +118,7 @@ Mentor is not trying to replace your agent. It is the layer where your agents ha
 - [ ] Demo GIF of a full Claude → Codex handoff
 - [ ] `npx mentor-ai`
 
-Have an idea? [Open an issue](https://github.com/OWNER/mentor/issues/new/choose).
+Have an idea? [Open an issue](https://github.com/dan40912/mentor/issues/new/choose).
 
 ## Docs
 

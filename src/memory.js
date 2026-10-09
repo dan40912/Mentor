@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile, rename, readdir } from 'node:fs/promises';
 import { randomUUID, createHash } from 'node:crypto';
 import path from 'node:path';
+import { renameReplace } from './platform.js';
 
 // 規則分兩層：team.md 跨任務，projects/<專案>.md 只給同一個專案。兩層一起帶進提示，不互相覆蓋。
 // 規則在任務開始時讀一次並存進任務；中途保存的學習只影響下一個任務。
@@ -50,7 +51,7 @@ export class Memory {
       }
       const temporary = `${target}.${randomUUID()}.tmp`;
       await writeFile(temporary, content, { flag: 'wx' });
-      await rename(temporary, target);
+      await renameReplace(temporary, target);
       return { added: true };
     });
     this.queue = run.catch(() => {});
@@ -101,7 +102,7 @@ export class Memory {
       const target = path.join(this.dir, 'recall.json');
       const temporary = `${target}.${randomUUID()}.tmp`;
       await writeFile(temporary, JSON.stringify(reviews, null, 2), { flag: 'wx' });
-      await rename(temporary, target);
+      await renameReplace(temporary, target);
       return { card: { ...card, ...record } };
     });
     this.queue = run.catch(() => {});

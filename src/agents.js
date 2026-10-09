@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { spawnPlan, killTree } from './platform.js';
 
 // 呼叫已登入的 CLI。只用 argv 與 stdin，不經 shell；不使用任何 bypass 權限旗標。
 // mode：chat 不給工具；read 只能讀產出資料夾；write 只能在產出資料夾內寫檔。
@@ -64,13 +65,14 @@ export async function runAgent({ provider, modelId = null, effort = null, mode =
   const args = buildArgs({ provider, modelId, effort, mode, cwd: workdir, outputFile });
   try {
     const { code, stdout, stderr } = await new Promise((resolve, reject) => {
-      const child = spawn(bin(provider), args, { cwd: workdir, stdio: ['pipe', 'pipe', 'pipe'], env: { ...process.env, NO_COLOR: '1' } });
+      const plan = spawnPlan(bin(provider), args);
+      const child = spawn(plan.command, plan.args, { ...plan.options, cwd: workdir, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true, env: { ...process.env, NO_COLOR: '1' } });
       onSpawn?.(child);
       let stdout = '', stderr = '';
-      const timer = setTimeout(() => { child.kill('SIGTERM'); reject(new AgentError('AGENT_TIMEOUT', `AI 超過 ${Math.round(timeoutMs / 60000)} 分鐘沒有完成，已停止。`)); }, timeoutMs);
+      const timer = setTimeout(() => { killTree(child, 'SIGTERM'); reject(new AgentError('AGENT_TIMEOUT', `AI 超過 ${Math.round(timeoutMs / 60000)} 分鐘沒有完成，已停止。`)); }, timeoutMs);
       child.stdout.on('data', chunk => { stdout += chunk; if (stdout.length > 2_000_000) stdout = stdout.slice(-1_000_000); });
       child.stderr.on('data', chunk => { stderr += chunk; if (stderr.length > 200_000) stderr = stderr.slice(-100_000); });
-      child.on('error', error => { clearTimeout(timer); reject(error.code === 'ENOENT' ? new AgentError('AGENT_NOT_INSTALLED', `找不到 ${bin(provider)} 指令。`) : error); });
+      child.on('error', error => { clearTimeout(timer); reject(error.code === 'ENOENT' || error.code === 'EINVAL' ? new AgentError('AGENT_NOT_INSTALLED', `找不到 ${bin(provider)} 指令。`) : error); });
       child.on('close', code => { clearTimeout(timer); resolve({ code, stdout, stderr }); });
       child.stdin.end(prompt);
     });

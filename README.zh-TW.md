@@ -8,9 +8,11 @@
 
 零依賴的本機工作台。一份任務檔是唯一正本：AI 開工前讀它，做完寫回它，你只負責決策和驗收。
 
-[![CI](https://github.com/OWNER/mentor/actions/workflows/ci.yml/badge.svg)](https://github.com/OWNER/mentor/actions/workflows/ci.yml)
+[![CI](https://github.com/dan40912/mentor/actions/workflows/ci.yml/badge.svg)](https://github.com/dan40912/mentor/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Dependencies: 0](https://img.shields.io/badge/dependencies-0-brightgreen)
+![Node](https://img.shields.io/badge/node-%3E%3D20-339933)
+![Platforms](https://img.shields.io/badge/macOS%20%7C%20Linux%20%7C%20Windows-lightgrey)
 
 [English](README.md) · 繁體中文
 
@@ -40,10 +42,10 @@ Mentor 讓你不用再當搬運工。
 
 ## 快速開始
 
-需要 Node.js 22 以上。若要讓 Mentor 呼叫 AI，需要已登入的 CLI（[Codex](https://github.com/openai/codex)、[Claude Code](https://claude.com/claude-code) 或 GitHub Copilot CLI）。沒有 CLI 也能用任務檔與手動交接。
+支援 macOS、Linux 與 Windows，需要 Node.js 20 以上（已測 20、22、24）。若要讓 Mentor 呼叫 AI，需要已登入的 CLI（[Codex](https://github.com/openai/codex)、[Claude Code](https://claude.com/claude-code) 或 GitHub Copilot CLI）。沒有 CLI 也能用任務檔與手動交接。
 
 ```sh
-git clone https://github.com/OWNER/mentor.git
+git clone https://github.com/dan40912/mentor.git
 cd mentor
 npm run demo      # 在 .demo-home/ 建立虛構資料並啟動
 ```
@@ -52,10 +54,18 @@ npm run demo      # 在 .demo-home/ 建立虛構資料並啟動
 
 ```sh
 npm start                              # 資料在 ./vault 與 ./outputs（已加入 .gitignore）
-MENTOR_HOME=~/mentor-data npm start    # 資料放在別處
-PORT=4318 npm start                    # 連接埠衝突時
+npm start -- --home ~/mentor-data      # 資料放在別處
+npm start -- --port 4318               # 連接埠衝突時
 npm test
 ```
+
+`--home` 與 `--port` 在 macOS、Linux、PowerShell、cmd 用法相同，也可以用環境變數 `MENTOR_HOME`、`PORT`。
+
+### Windows 注意事項
+
+- 用 npm 安裝的 CLI（例如 `codex`）在 Windows 是 `.cmd` 捷徑。Mentor 會依 `PATH` 與 `PATHEXT` 找到它，並經由 `cmd.exe` 執行。參數含有 `& | < > ^ % ! "` 時會直接拒絕而不是跳脫，專案與產出路徑請避開這些字元。
+- 停止執行時，用 `taskkill` 結束整個程序樹。
+- 每次 push 都會在 CI 跑 Windows。尚未在真實 Windows 機器上搭配已登入的 `codex`、`claude`、`copilot` 試過，遇到問題請回報。
 
 ## 運作方式
 
