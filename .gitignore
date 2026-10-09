@@ -1,0 +1,12 @@
+# 你自己的資料：任務、對話、規則、產出、設定
+/vault/
+/outputs/
+.settings.json
+.diagnosis.json
+.demo-home/
+.env
+.env.*
+node_modules/
+.DS_Store
+*.log
+.claude/

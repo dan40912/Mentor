@@ -1,0 +1,26 @@
+{
+  "name": "mentor-ai",
+  "version": "0.1.0",
+  "description": "A zero-dependency local workbench that hands work off between Codex, Claude Code and Copilot, and teaches you what to remember.",
+  "type": "module",
+  "license": "MIT",
+  "keywords": [
+    "ai-agents",
+    "multi-agent",
+    "claude-code",
+    "codex",
+    "copilot",
+    "handoff",
+    "workflow",
+    "harness",
+    "obsidian"
+  ],
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node --test \"tests/*.test.js\"",
+    "demo": "node scripts/demo.mjs"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

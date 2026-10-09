@@ -1,0 +1,401 @@
+import http from 'node:http';
+import { randomUUID, randomBytes } from 'node:crypto';
+import { mkdir, readFile, writeFile, rename, realpath, readdir, stat } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
+import path from 'node:path';
+import { providers, resolveModel, stages, defaultStageSettings, profiles, recommendationPlans } from './models.js';
+import { Memory } from './memory.js';
+import { Trash } from './trash.js';
+import { Conversations } from './conversations.js';
+import { Projects } from './projects.js';
+import { Coach } from './coach.js';
+import { diagnose } from './agents.js';
+import { TaskStore, TaskError, buildBrief } from './tasks.js';
+
+const appDir = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
+const webDir = path.join(appDir, 'web');
+// 使用者資料（vault、outputs、設定）放在 MENTOR_HOME，預設是 repo 根目錄。
+const root = path.resolve(process.env.MENTOR_HOME || appDir);
+const memory = path.join(root, 'vault');
+const token = randomBytes(32).toString('hex');
+let settings = { revision: 1, stages: defaultStageSettings() };
+const diagnosis = {};
+const previewTypes = { '.html': ['text/html; charset=utf-8', 5 * 1024 * 1024], '.md': ['text/plain; charset=utf-8', 5 * 1024 * 1024], '.png': ['image/png', 20 * 1024 * 1024], '.jpg': ['image/jpeg', 20 * 1024 * 1024], '.jpeg': ['image/jpeg', 20 * 1024 * 1024], '.webp': ['image/webp', 20 * 1024 * 1024] };
+const inside = (parent, child) => child.startsWith(`${parent}${path.sep}`);
+
+export async function previewArtifact(tasks, projectRoot, id, file) {
+  if (typeof file !== 'string' || !file || file.includes('\0') || path.isAbsolute(file) || file.split(/[\\/]/).includes('..') || file.includes('\\')) throw new TaskError(400, 'PREVIEW_NAME_INVALID', '成果檔名格式不正確。');
+  const { task } = await tasks.get(id);
+  if (!task.planning?.workItems?.some(item => item.outputs?.some(output => output.file === file))) throw new TaskError(404, 'PREVIEW_NOT_REGISTERED', '這份成果尚未登記在任務中。');
+  const type = previewTypes[path.extname(file).toLowerCase()];
+  if (!type) throw new TaskError(415, 'PREVIEW_TYPE_UNSUPPORTED', '目前只支援 HTML、Markdown、PNG、JPEG 與 WebP。');
+  const canonicalRoot = await realpath(projectRoot);
+  const taskDir = path.join(canonicalRoot, 'outputs', id);
+  let canonicalDir, resolved;
+  try { canonicalDir = await realpath(taskDir); resolved = await realpath(path.join(task.allowedRoots[0], file)); }
+  catch (error) { if (error.code === 'ENOENT') throw new TaskError(404, 'PREVIEW_MISSING', '成果檔已不存在，請回任務核對檔名與產出。'); throw error; }
+  if (canonicalDir !== taskDir || !inside(canonicalRoot, canonicalDir) || !inside(canonicalDir, resolved) || !inside(canonicalRoot, resolved) || !inside(await realpath(task.allowedRoots[0]), resolved)) throw new TaskError(403, 'PREVIEW_OUTSIDE_TASK', '成果檔超出此任務的產出範圍。');
+  const info = await stat(resolved);
+  if (!info.isFile()) throw new TaskError(415, 'PREVIEW_TYPE_UNSUPPORTED', '只能預覽一般檔案。');
+  if (info.size > type[1]) throw new TaskError(413, 'PREVIEW_TOO_LARGE', '成果檔超過預覽大小上限。');
+  const content = await readFile(resolved);
+  if (content.length > type[1]) throw new TaskError(413, 'PREVIEW_TOO_LARGE', '成果檔超過預覽大小上限。');
+  const ext = path.extname(file).toLowerCase();
+  if (['.html', '.md'].includes(ext)) {
+    try { new TextDecoder('utf-8', { fatal: true }).decode(content); }
+    catch { throw new TaskError(415, 'PREVIEW_TYPE_UNSUPPORTED', '文字檔不是有效的 UTF-8。'); }
+  }
+  if ((ext === '.png' && !content.subarray(0, 8).equals(Buffer.from('89504e470d0a1a0a', 'hex'))) ||
+      (['.jpg', '.jpeg'].includes(ext) && !content.subarray(0, 3).equals(Buffer.from('ffd8ff', 'hex'))) ||
+      (ext === '.webp' && !(content.toString('ascii', 0, 4) === 'RIFF' && content.toString('ascii', 8, 12) === 'WEBP'))) throw new TaskError(415, 'PREVIEW_TYPE_UNSUPPORTED', '圖片內容與檔案格式不符。');
+  if (ext === '.md') {
+    const escaped = content.toString('utf8').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    return { content: Buffer.from(`<meta charset="utf-8"><pre style="white-space:pre-wrap;overflow-wrap:anywhere;font:inherit">${escaped}</pre>`), mime: 'text/html; charset=utf-8', html: false };
+  }
+  return { content, mime: type[0], html: ext === '.html' };
+}
+
+// 每個階段要嘛是可解析的 provider＋模型，要嘛（只有 F）沿用 D。
+function resolveStageInput(stageId, input) {
+  if (stageId === 'F' && input?.provider === 'same-as-D') return { provider: 'same-as-D', modelId: null, effort: null };
+  const model = resolveModel(input?.provider, input?.modelKey || 'default');
+  const provider = providers.find(p => p.id === model.provider);
+  const mode = stages.find(s => s.id === stageId).mode;
+  if (!provider.runnable || !provider.modes?.includes(mode)) throw new Error(`${provider.name} 不能負責 ${stageId} 階段：這一階段需要${{ chat: '只對話', read: '唯讀資料夾', write: '寫產出資料夾' }[mode]}，這個 AI 沒有可呼叫的 CLI。`);
+  return model;
+}
+let queue = Promise.resolve();
+
+async function atomicWrite(file, content) {
+  const temporary = `${file}.${randomUUID()}.tmp`;
+  await writeFile(temporary, content, { flag: 'wx' });
+  await rename(temporary, file);
+}
+
+export function handoffMarkdown(input, id) {
+  const model = resolveModel(input.provider, input.modelKey);
+  for (const field of ['goal', 'scope', 'acceptance', 'next']) {
+    if (typeof input[field] !== 'string' || !input[field].trim() || input[field].length > 6000) {
+      throw new Error(`INVALID_${field.toUpperCase()}`);
+    }
+  }
+  const yaml = value => JSON.stringify(value);
+  return `---
+type: handoff
+schema_version: 1
+handoff_id: ${yaml(id)}
+provider: ${yaml(model.provider)}
+model_id: ${yaml(model.modelId)}
+reasoning_effort: ${yaml(model.effort)}
+status: prepared
+created_at: ${yaml(new Date().toISOString())}
+---
+
+# ${input.goal.replace(/[\r\n]+/g, ' ')}
+
+## 目標
+${input.goal}
+
+## 允許範圍
+${input.scope}
+
+## 驗收條件
+${input.acceptance}
+
+## 唯一下一步
+${input.next}
+
+## 限制與未知
+此文件是人工交接草稿。尚未核對原執行停止、工作區版本、來源與成果。
+接手前必須核對；資訊不足時回報 NEEDS_INPUT，不自行擴大範圍。
+模型選項尚未驗證帳號可用性。建立此文件不代表執行已啟動。
+
+## 接手回報
+包含 handoff ID、DONE／BLOCKED／NEEDS_INPUT、完成事項、證據、未完成事項與下一步。
+DONE 僅為回報，仍須核對驗收證據。
+`;
+}
+
+async function body(req) {
+  let text = '';
+  for await (const chunk of req) {
+    text += chunk;
+    if (Buffer.byteLength(text) > 40000) throw new Error('BODY_TOO_LARGE');
+  }
+  return JSON.parse(text);
+}
+
+export async function startServer(port = Number(process.env.PORT || 4317)) {
+  await mkdir(memory, { recursive: true });
+  const canonicalRoot = await realpath(root);
+  if (!((await realpath(memory)).startsWith(`${canonicalRoot}${path.sep}`))) {
+    throw new Error('工作記憶 symlink 指向工作區之外，拒絕啟動');
+  }
+  const settingsPath = path.join(root, '.settings.json');
+  const diagnosisPath = path.join(root, '.diagnosis.json');
+  try { const saved = JSON.parse(await readFile(diagnosisPath, 'utf8')); for (const id of ['codex','claude','copilot']) if (typeof saved[id]?.ok === 'boolean') diagnosis[id] = saved[id]; } catch (error) { if (error.code !== 'ENOENT') throw error; }
+  const tasks = new TaskStore(memory);
+  try {
+    const saved = JSON.parse(await readFile(settingsPath, 'utf8'));
+    if (!Number.isInteger(saved.revision) || saved.revision < 1 || !saved.stages) throw new Error('INVALID_SETTINGS');
+    for (const stage of stages) {
+      const value = saved.stages[stage.id];
+      if (!(stage.id === 'F' && value?.provider === 'same-as-D')) {
+        const key = providers.find(p => p.id === value?.provider)?.models.find(m => m.modelId === value.modelId && m.effort === value.effort)?.key || 'default';
+        const resolved = resolveModel(value.provider, key);
+        if (resolved.modelId !== value.modelId || resolved.effort !== value.effort) throw new Error('INVALID_SETTINGS');
+      }
+    }
+    settings = saved;
+  } catch (error) {
+    if (error.code !== 'ENOENT') console.error('設定檔格式不支援，改用預設角色設定：', error.message);
+  }
+  const memoryStore = new Memory(path.join(memory, 'memory'));
+  const conversations = new Conversations(path.join(memory, 'conversations'));
+  const projects = new Projects(path.join(memory, 'projects'));
+  const coach = new Coach(tasks, () => settings, root, memoryStore);
+  await coach.recover();
+  const trash = new Trash(memory, tasks, coach);
+  const server = http.createServer(async (req, res) => {
+    const origin = `http://127.0.0.1:${server.address().port}`;
+    const send = (status, data) => {
+      res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+      res.end(JSON.stringify(data));
+    };
+    const port = server.address().port;
+    // 用 localhost 開啟首頁時導到 127.0.0.1，cookie 與 CSRF 只綁一個來源。
+    if (req.method === 'GET' && req.url === '/' && req.headers.host === `localhost:${port}`) {
+      res.writeHead(302, { Location: `${origin}/` });
+      return res.end();
+    }
+    // 從其他 App 點連結打開首頁是跨站導覽；首頁只回 HTML，可以放行。API 仍拒絕跨站。
+    const pageNavigation = req.method === 'GET' && req.url === '/' && req.headers['sec-fetch-mode'] === 'navigate';
+    if (req.headers.host !== new URL(origin).host ||
+      (req.headers.origin && req.headers.origin !== origin) ||
+      (req.headers['sec-fetch-site'] === 'cross-site' && !pageNavigation)) {
+      return send(403, { code: 'FORBIDDEN_ORIGIN', message: `請用 ${origin} 開啟工作台。` });
+    }
+    try {
+      if (req.method === 'GET' && req.url === '/') {
+        const html = await readFile(path.join(webDir, 'index.html'), 'utf8');
+        res.writeHead(200, {
+          'Content-Type': 'text/html; charset=utf-8',
+          'Cache-Control': 'no-store',
+          'Content-Security-Policy': "default-src 'self'; img-src 'self' data:; script-src 'self' 'unsafe-inline'; style-src 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'",
+          'Set-Cookie': `awc=${token}; HttpOnly; SameSite=Strict; Path=/`
+        });
+        return res.end(html);
+      }
+      if (req.method === 'GET' && /^\/assets\/(mentor\.svg|openai\.svg|claude\.svg|copilot\.svg|conversation\.js|project\.js|control\.js|auto\.js)$/.test(req.url)) {
+        res.writeHead(200, { 'Content-Type': req.url.endsWith('.js') ? 'application/javascript; charset=utf-8' : req.url.endsWith('.svg') ? 'image/svg+xml' : 'image/png', 'Cache-Control': req.url.endsWith('.js') ? 'no-store' : 'max-age=86400' });
+        return res.end(await readFile(path.join(webDir, 'assets', path.basename(req.url))));
+      }
+      // 同源頁面在服務重啟或 cookie 過期後可更新驗證，不需要丟掉表單內容。
+      if (req.method === 'GET' && req.url === '/api/session') {
+        res.setHeader('Set-Cookie', `awc=${token}; HttpOnly; SameSite=Strict; Path=/`);
+        return send(200, { csrfToken: token });
+      }
+      if (req.method === 'GET' && req.url === '/api/health') {
+        return send(200, { status: 'ok', execution: 'controlled-cli-and-manual-handoff', memory });
+      }
+      const taskRoute = req.url.match(/^\/api\/tasks(?:\/(TASK-[a-zA-Z0-9-]+)(?:\/([a-z-]+))?)?(?:\?(.*))?$/);
+      const projectRoute = req.url.match(/^\/api\/projects(?:\/([^/]+)(?:\/(save|summary|trash|stop-all))?)?$/);
+      const trashRoute = req.url.match(/^\/api\/trash(?:\/(T-[0-9]{8}-[a-f0-9]{8})\/(restore|purge))?$/);
+      if (req.method === 'GET' && trashRoute && !trashRoute[1]) {
+        if (!req.headers.cookie?.split('; ').includes(`awc=${token}`)) return send(403, { code: 'SESSION_REQUIRED' });
+        return send(200, { items: await trash.list() });
+      }
+      if (req.method === 'GET' && projectRoute) {
+        if (!req.headers.cookie?.split('; ').includes(`awc=${token}`)) return send(403, { code: 'SESSION_REQUIRED' });
+        if (!projectRoute[1]) return send(200, { projects: await projects.list() });
+        const project = await projects.read(decodeURIComponent(projectRoute[1]));
+        if (projectRoute[2] === 'summary') return send(200, await trash.projectSummary(decodeURIComponent(projectRoute[1])));
+        return send(200, { project });
+      }
+      if (req.method === 'GET' && req.url === '/api/memory') {
+        if (!req.headers.cookie?.split('; ').includes(`awc=${token}`)) return send(403, { code: 'SESSION_REQUIRED' });
+        return send(200, await memoryStore.list());
+      }
+      if (req.method === 'GET' && taskRoute) {
+        if (!req.headers.cookie?.split('; ').includes(`awc=${token}`)) return send(403, { code: 'SESSION_REQUIRED' });
+        const [, id, action, query] = taskRoute;
+        if (!id && !action) return send(200, { tasks: await tasks.list() });
+        if (id && action === 'events') return send(200, { events: await coach.events(id) });
+        if (id && action === 'conversation') return send(200, await conversations.read((await tasks.get(id)).task));
+        if (id && action === 'preview') {
+          const file = new URLSearchParams(query || '').get('file');
+          const preview = await previewArtifact(tasks, root, id, file);
+          res.writeHead(200, { 'Content-Type': preview.mime, 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Content-Disposition': 'inline', 'Content-Security-Policy': preview.html ? "sandbox allow-scripts; default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; connect-src 'none'; form-action 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; frame-ancestors 'self'" : "default-src 'none'; style-src 'unsafe-inline'; sandbox; frame-ancestors 'self'" });
+          return res.end(preview.content);
+        }
+        if (id && action === 'brief') {
+          const { task } = await tasks.get(id);
+          const receiver = new URLSearchParams(query || '').get('for') || 'unassigned';
+          if (!['codex', 'claude', 'copilot', 'unassigned'].includes(receiver)) return send(400, { code: 'UNKNOWN_RECEIVER' });
+          return send(200, buildBrief(task, receiver));
+        }
+        return send(404, { code: 'NOT_FOUND' });
+      }
+      if (req.method === 'GET' && req.url === '/api/settings') {
+        if (!req.headers.cookie?.split('; ').includes(`awc=${token}`)) return send(403, { code: 'SESSION_REQUIRED' });
+        return send(200, { settings, providers, stages, profiles, recommendationPlans, diagnosis, csrfToken: token });
+      }
+      if (req.method === 'GET' && ['/api/sessions', '/api/handoffs'].includes(req.url)) {
+        if (!req.headers.cookie?.split('; ').includes(`awc=${token}`)) return send(403, { code: 'SESSION_REQUIRED' });
+        if (req.url === '/api/sessions') {
+          try {
+            return send(200, { sessions: JSON.parse(await readFile(path.join(root, 'imported-sessions.json'), 'utf8')) });
+          } catch (error) {
+            if (error.code !== 'ENOENT') throw error;
+            return send(200, { sessions: [] });
+          }
+        }
+        if (await realpath(memory) !== path.join(canonicalRoot, 'vault')) throw new Error('MEMORY_PATH_CHANGED');
+        const handoffs = [];
+        for (const file of (await readdir(memory)).filter(name => /^HANDOFF-[a-zA-Z0-9-]+\.md$/.test(name))) {
+          const resolved = await realpath(path.join(memory, file));
+          if (path.dirname(resolved) !== path.join(canonicalRoot, 'vault')) throw new Error('HANDOFF_PATH_OUTSIDE_MEMORY');
+          const info = await stat(resolved);
+          if (!info.isFile() || info.size > 200000) throw new Error('HANDOFF_FILE_UNSUPPORTED');
+          handoffs.push({ file, content: await readFile(resolved, 'utf8'), modifiedAt: info.mtime.toISOString() });
+        }
+        return send(200, { handoffs: handoffs.sort((a, b) => b.modifiedAt.localeCompare(a.modifiedAt)) });
+      }
+      if (req.method !== 'POST') return send(404, { code: 'NOT_FOUND' });
+      if (!req.headers.cookie?.split('; ').includes(`awc=${token}`) || req.headers['x-csrf-token'] !== token) {
+        return send(403, { code: 'CSRF_FAILED' });
+      }
+      const input = await body(req);
+      if (projectRoute) {
+        if (!projectRoute[1]) return send(201, { project: await projects.create(input) });
+        if (projectRoute[2] === 'save') return send(200, await projects.save(decodeURIComponent(projectRoute[1]), input));
+        if (projectRoute[2] === 'trash') return send(200, await trash.trashProject(decodeURIComponent(projectRoute[1]), input));
+        if (projectRoute[2] === 'stop-all') {
+          const summary = await trash.projectSummary(decodeURIComponent(projectRoute[1]));
+          for (const t of summary.tasks.filter(t => t.running)) await coach.stop(t.id).catch(error => { if (error.code !== 'NOTHING_RUNNING') throw error; });
+          return send(202, await trash.projectSummary(decodeURIComponent(projectRoute[1])));
+        }
+      }
+      if (trashRoute?.[1]) {
+        if (trashRoute[2] === 'restore') return send(200, await trash.restore(trashRoute[1]));
+        return send(200, await trash.purge(trashRoute[1], input));
+      }
+      if (taskRoute?.[1] && taskRoute[2] === 'conversation-rule') {
+        const task = (await tasks.get(taskRoute[1])).task;
+        const history = await conversations.read(task);
+        const lesson = history.lessons?.find(l => l.id === input.lessonId);
+        if (!lesson) return send(404, { code: 'LESSON_NOT_FOUND', message: '找不到學習重點。' });
+        const result = await memoryStore.append('project', task.project, '取捨', lesson.prevention, `對話歷程 ${task.id} · ${lesson.id} · ${lesson.refs.map(r => `${r.provider} L${r.line}`).join('、')}`);
+        return send(200, { ...result, memory: await memoryStore.list() });
+      }
+      if (req.url === '/api/settings') {
+        const update = queue.then(async () => {
+          if (input.revision !== settings.revision) return send(409, { code: 'REVISION_CONFLICT', revision: settings.revision });
+          const next = { revision: settings.revision + 1, stages: {} };
+          for (const stage of stages) next.stages[stage.id] = resolveStageInput(stage.id, input.stages?.[stage.id]);
+          await atomicWrite(settingsPath, JSON.stringify(next, null, 2));
+          settings = next;
+          send(200, { settings });
+        });
+        queue = update.catch(() => {});
+        return await update;
+      }
+      if (req.url === '/api/agents/diagnose') {
+        const provider = input.provider;
+        if (!['codex', 'claude', 'copilot'].includes(provider)) return send(400, { code: 'UNKNOWN_PROVIDER' });
+        const stage = stages.map(s => settings.stages[s.id]).find(v => v?.provider === provider) || { modelId: null, effort: null };
+        diagnosis[provider] = { ...(await diagnose(provider, { modelId: stage.modelId, effort: stage.effort })), model: stage.modelId, at: new Date().toISOString() };
+        await atomicWrite(diagnosisPath, JSON.stringify(diagnosis, null, 2));
+        return send(200, { diagnosis });
+      }
+      if (req.url === '/api/memory/recall') {
+        const result = await memoryStore.recordRecall(input);
+        return send(200, { ...result, memory: await memoryStore.list() });
+      }
+      if (req.url === '/api/memory/promote') {
+        if (typeof input.text !== 'string' || !input.text.trim()) return send(400, { code: 'TEXT_REQUIRED' });
+        const result = await memoryStore.append('team', null, input.heading || '詮釋', input.text, `從專案「${String(input.project || '未分類').slice(0, 40)}」升級 · ${new Date().toISOString().slice(0, 10)}`);
+        return send(200, { ...result, memory: await memoryStore.list() });
+      }
+      if (taskRoute && !taskRoute[1] && !taskRoute[2]) {
+        const result = await coach.create(input);
+        return send(202, { task: result.task });
+      }
+      const coachActions = {
+        retry: (id, key) => coach.retry(id, input.revision, key, input.provider || null),
+        answer: (id, key) => coach.answer(id, input.revision, key, input),
+        outline: id => coach.draftOutline(id, input.feedback),
+        learn: (id, key) => coach.keepLearnings(id, input.revision, key, input),
+        reflect: (id, key) => coach.reflect(id, input.revision, key, input),
+        approve: (id, key) => coach.approveOutline(id, input.revision, key),
+        execute: id => coach.execute(id, input.itemId),
+        review: id => coach.review(id, input.itemId),
+        fix: id => coach.fix(id, input.itemId),
+        confirm: (id, key) => coach.confirm(id, input.revision, key, input),
+        cancel: id => coach.stop(id),
+        stop: id => coach.stop(id),
+        instruct: (id, key) => coach.instruct(id, input.revision, key, input),
+        resume: (id, key) => coach.resume(id, input.revision, key, input),
+        trash: id => trash.trashTask(id, input),
+        autopilot: (id, key) => coach.setAutopilot(id, input.revision, key, input),
+        'confirm-all': (id, key) => coach.confirmAll(id, input.revision, key)
+      };
+      if (taskRoute?.[1] && coachActions[taskRoute[2]]) {
+        const [, id, action] = taskRoute;
+        const key = req.headers['idempotency-key'];
+        const result = await coachActions[action](id, key);
+        // 開著「一路做到完」時，你做完任何一步，AI 會自己接著往下。
+        if (!['stop', 'cancel', 'trash', 'autopilot'].includes(action)) coach.resumeAuto(id);
+        if (action === 'cancel' || action === 'stop') return send(202, { stopping: true, task: (await tasks.list()).find(t => t.id === id) || result.task });
+        if (action === 'trash') return send(200, result);
+        if (action === 'instruct' && input.dryRun) return send(200, result);
+        // answer 先寫入回答再啟動 B；回傳時 B 已在背景跑。
+        const latest = result.task ? result : await tasks.get(id).then(r => ({ task: r.task }));
+        const { done, task: _task, ...extra } = result;
+        return send(done ? 202 : 200, { ...extra, task: (await tasks.list()).find(t => t.id === id) || latest.task });
+      }
+      if (taskRoute?.[1] && taskRoute[2]) {
+        const [, id, action] = taskRoute;
+        const key = req.headers['idempotency-key'];
+        if (typeof key !== 'string' || !/^[a-zA-Z0-9-]{8,80}$/.test(key)) return send(400, { code: 'IDEMPOTENCY_KEY_REQUIRED', message: '缺少 Idempotency-Key。' });
+        const handlers = {
+          decide: () => tasks.decide(id, input.revision, key, input),
+          check: () => tasks.markCheck(id, input.revision, key, input),
+          run: () => tasks.runCheck(id, input.revision, key, input),
+          report: () => tasks.report(id, input.revision, key, input),
+          accept: () => tasks.accept(id, input.revision, key),
+          reject: () => tasks.reject(id, input.revision, key, input)
+        };
+        if (!handlers[action]) return send(404, { code: 'NOT_FOUND' });
+        return send(200, await handlers[action]());
+      }
+      if (req.url === '/api/handoffs') {
+        const id = `HANDOFF-${randomUUID()}`;
+        const content = handoffMarkdown(input, id);
+        if (await realpath(memory) !== path.join(canonicalRoot, 'vault')) throw new Error('MEMORY_PATH_CHANGED');
+        const file = `${id}.md`;
+        await writeFile(path.join(memory, file), content, { flag: 'wx' });
+        return send(201, { id, file, content, status: 'prepared' });
+      }
+      send(404, { code: 'NOT_FOUND' });
+    } catch (error) {
+      if (error instanceof TaskError) {
+        return send(error.status, { code: error.code, message: error.message, ...error.extra, nextStep: error.status === 409 ? '重新整理，比對最新內容後再操作。' : undefined });
+      }
+      console.error(error);
+      send(400, { code: 'REQUEST_FAILED', message: error.message, nextStep: '檢查輸入；保存失敗時查看終端錯誤。' });
+    }
+  });
+  await new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(port, '127.0.0.1', resolve);
+  });
+  return server;
+}
+
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  startServer().then(server => console.log(`Mentor: http://127.0.0.1:${server.address().port}`)).catch(error => {
+    console.error(error.code === 'EADDRINUSE' ? '連接埠已使用。請執行 PORT=4318 npm start。' : error);
+    process.exitCode = 1;
+  });
+}
