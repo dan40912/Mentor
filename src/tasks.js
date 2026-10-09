@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { readFile, writeFile, rename, readdir, realpath, stat, lstat, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import { renameReplace } from './platform.js';
+import { pendingFeedback } from './feedback.js';
 import { stages } from './models.js';
 
 const stageName = id => stages.find(s => s.id === id)?.name || id;
@@ -93,7 +94,7 @@ function renderHuman(task) {
 }
 
 export function serializeTask(task) {
-  const { id, revision, status, updatedAt, file, prelude, notes, humanEdited, nextAction, ...data } = task;
+  const { id, revision, status, updatedAt, file, prelude, notes, humanEdited, nextAction, feedbackPrompt, ...data } = task;
   const yaml = value => JSON.stringify(value);
   const json = JSON.stringify(data, null, 2);
   return `---
@@ -338,7 +339,7 @@ export class TaskStore {
     for (const file of (await readdir(this.dir)).filter(name => /^TASK-[a-zA-Z0-9-]+\.md$/.test(name)).sort()) {
       try {
         const task = parseTask(await readFile(await this.safePath(file), 'utf8'), file);
-        tasks.push({ ...task, nextAction: nextHumanAction(task) });
+        tasks.push({ ...task, nextAction: nextHumanAction(task), feedbackPrompt: pendingFeedback(task) });
       } catch (error) {
         tasks.push({ id: file.replace(/\.md$/, ''), file, status: 'UNSUPPORTED', error: error.message });
       }
@@ -362,7 +363,7 @@ export class TaskStore {
       if (!/^TASK-[a-zA-Z0-9-]+$/.test(task.id)) throw new TaskError(400, 'TASK_ID_INVALID', '任務 ID 格式不正確。');
       task.file = `${task.id}.md`;
       await writeFile(await this.safePath(task.file), serializeTask(task), { flag: 'wx' });
-      return { task: { ...task, nextAction: nextHumanAction(task) } };
+      return { task: { ...task, nextAction: nextHumanAction(task), feedbackPrompt: pendingFeedback(task) } };
     });
     this.queue = run.catch(() => {});
     return run;
@@ -396,7 +397,7 @@ export class TaskStore {
       }
       await renameReplace(temporary, target);
       if (result?.after) await result.after();
-      return { task: { ...task, humanEdited: false, nextAction: nextHumanAction(task) }, ...result?.extra };
+      return { task: { ...task, humanEdited: false, nextAction: nextHumanAction(task), feedbackPrompt: pendingFeedback(task) }, ...result?.extra };
     });
     this.queue = run.catch(() => {});
     if (key) {

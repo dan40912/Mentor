@@ -25,7 +25,7 @@ function decorateOneThing(t,{one,oneText,jump}){
    const go=element('button',`前往：${t.nextAction.button}`,'btn primary');go.dataset.focus='jump';go.onclick=()=>jumpToNext(t);actions.append(go);
    const reviewed=(p.workItems||[]).filter(i=>i.owner==='ai'&&i.status==='REVIEWED');
    if(wait.kind==='confirm'&&reviewed.length){go.className='btn';const all=focusKey(element('button',`確認全部通過（${reviewed.length} 項）`,'btn primary'),'confirm-all');all.onclick=busy(all,async()=>{await coachAct(t,'confirm-all');tell(`已確認 ${reviewed.length} 項。AI 會接著做下一步。`);});actions.prepend(all);}
-   actions.append(off());one.append(actions,element('p',{answer:'你回答後，AI 會自己接著往下做。',approve:'確認大綱後，AI 會自己做到驗收。',confirm:'確認後，AI 會自己接著做剩下的項目。',human:'你完成這一項後，AI 會自己接著往下做。','fix-limit':'看過驗收意見後，可以寫修改指示，AI 會繼續。','needs-info':'補上資訊後，AI 會繼續。',wait:'前置項目完成後會繼續。'}[wait.kind]||'','auto-note'));
+   actions.append(off());one.append(actions,element('p',{answer:'你回答後，AI 會自己接著往下做。',approve:'確認大綱後，AI 會自己做到驗收。',confirm:'確認後，AI 會自己接著做剩下的項目。',human:'你完成這一項後，AI 會自己接著往下做。','fix-limit':'看過驗收意見後，可以寫修改指示，AI 會繼續。','needs-info':wait.blocked==='tool'?'AI 的環境做不到這件事。可以改驗收標準、自己完成這部分，或寫指示讓它換個方法。':'補上資訊後，AI 會繼續。',wait:'前置項目完成後會繼續。'}[wait.kind]||'','auto-note'));
   }
   return;
  }

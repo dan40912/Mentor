@@ -3,7 +3,7 @@ import { randomUUID, randomBytes } from 'node:crypto';
 import { mkdir, readFile, writeFile, realpath, readdir, stat } from 'node:fs/promises';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import path from 'node:path';
-import { renameReplace } from './platform.js';
+import { renameReplace, killTree } from './platform.js';
 import { providers, resolveModel, stages, defaultStageSettings, profiles, recommendationPlans } from './models.js';
 import { Memory } from './memory.js';
 import { Trash } from './trash.js';
@@ -12,6 +12,7 @@ import { Projects } from './projects.js';
 import { Coach } from './coach.js';
 import { diagnose } from './agents.js';
 import { TaskStore, TaskError, buildBrief } from './tasks.js';
+import { summarize, MOMENTS } from './feedback.js';
 
 const appDir = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const webDir = path.join(appDir, 'web');
@@ -188,7 +189,7 @@ export async function startServer(port = Number(flag('port') || process.env.PORT
         });
         return res.end(html);
       }
-      if (req.method === 'GET' && /^\/assets\/(mentor\.svg|openai\.svg|claude\.svg|copilot\.svg|conversation\.js|project\.js|control\.js|auto\.js)$/.test(req.url)) {
+      if (req.method === 'GET' && /^\/assets\/(mentor\.svg|openai\.svg|claude\.svg|copilot\.svg|conversation\.js|project\.js|control\.js|auto\.js|feedback\.js)$/.test(req.url)) {
         res.writeHead(200, { 'Content-Type': req.url.endsWith('.js') ? 'application/javascript; charset=utf-8' : req.url.endsWith('.svg') ? 'image/svg+xml' : 'image/png', 'Cache-Control': req.url.endsWith('.js') ? 'no-store' : 'max-age=86400' });
         return res.end(await readFile(path.join(webDir, 'assets', path.basename(req.url))));
       }
@@ -213,6 +214,11 @@ export async function startServer(port = Number(flag('port') || process.env.PORT
         const project = await projects.read(decodeURIComponent(projectRoute[1]));
         if (projectRoute[2] === 'summary') return send(200, await trash.projectSummary(decodeURIComponent(projectRoute[1])));
         return send(200, { project });
+      }
+      if (req.method === 'GET' && req.url === '/api/feedback') {
+        if (!req.headers.cookie?.split('; ').includes(`awc=${token}`)) return send(403, { code: 'SESSION_REQUIRED' });
+        const all = (await tasks.list()).filter(t => !t.error && !t.trashed);
+        return send(200, { summary: summarize(all), moments: MOMENTS });
       }
       if (req.method === 'GET' && req.url === '/api/memory') {
         if (!req.headers.cookie?.split('; ').includes(`awc=${token}`)) return send(403, { code: 'SESSION_REQUIRED' });
@@ -340,6 +346,7 @@ export async function startServer(port = Number(flag('port') || process.env.PORT
         resume: (id, key) => coach.resume(id, input.revision, key, input),
         trash: id => trash.trashTask(id, input),
         autopilot: (id, key) => coach.setAutopilot(id, input.revision, key, input),
+        feedback: (id, key) => coach.feedback(id, input.revision, key, input),
         'confirm-all': (id, key) => coach.confirmAll(id, input.revision, key)
       };
       if (taskRoute?.[1] && coachActions[taskRoute[2]]) {
@@ -347,7 +354,8 @@ export async function startServer(port = Number(flag('port') || process.env.PORT
         const key = req.headers['idempotency-key'];
         const result = await coachActions[action](id, key);
         // 開著「一路做到完」時，你做完任何一步，AI 會自己接著往下。
-        if (!['stop', 'cancel', 'trash', 'autopilot'].includes(action)) coach.resumeAuto(id);
+        // 評分只是記錄，不推動流程；否則停下時評分會讓 AI 重新判斷又停一次。
+        if (!['stop', 'cancel', 'trash', 'autopilot', 'feedback'].includes(action)) coach.resumeAuto(id);
         if (action === 'cancel' || action === 'stop') return send(202, { stopping: true, task: (await tasks.list()).find(t => t.id === id) || result.task });
         if (action === 'trash') return send(200, result);
         if (action === 'instruct' && input.dryRun) return send(200, result);
@@ -392,11 +400,21 @@ export async function startServer(port = Number(flag('port') || process.env.PORT
     server.once('error', reject);
     server.listen(port, '127.0.0.1', resolve);
   });
+  // 服務結束時一併停掉它啟動的 CLI，不留在背景繼續跑、繼續寫檔。
+  server.stopAgents = () => { for (const child of coach.children.values()) killTree(child, 'SIGTERM'); return coach.children.size; };
   return server;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  startServer().then(server => console.log(`Mentor: http://127.0.0.1:${server.address().port}`)).catch(error => {
+  startServer().then(server => {
+    console.log(`Mentor: http://127.0.0.1:${server.address().port}`);
+    for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, () => {
+      const stopped = server.stopAgents();
+      if (stopped) console.log(`已停止 ${stopped} 個執行中的 AI。下次啟動時這些步驟會標成結果未知。`);
+      server.close();
+      setTimeout(() => process.exit(0), 300).unref();
+    });
+  }).catch(error => {
     console.error(error.code === 'EADDRINUSE' ? '連接埠已使用。請執行 PORT=4318 npm start。' : error);
     process.exitCode = 1;
   });

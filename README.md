@@ -37,6 +37,7 @@ Mentor takes you out of the courier role.
 | **You decide, AI does** | Decisions are separate cards with a recommendation, the cost of each option, and what is unknown. "Ask someone else" stays blocked until a real answer is recorded. An AI cannot pick a default for you. |
 | **Evidence, not vibes** | Artifact checks compute SHA-256 on the file. If you edit a file yourself, that is a new baseline. Reports built on a stale revision are rejected. `DONE` only means "ready for review". |
 | **A coach, not just a runner** | Stages A–F (task card → Grill me → outline → execute → review → revise) with a different permission level each: chat-only, read-only, or write-in-the-output-folder. |
+| **Feedback that steers** | When you confirm a result, when autopilot stops, and when a task ends, Mentor asks one 1–5 question with tags. Low scores become directions the AI reads at the start of the next task, and you see the trend on the home page. |
 | **Learning that sticks** | After each step the AI writes a diary: interpretations, deviations, trade-offs. You tick what to keep. Kept rules go into the next task, and come back as spaced recall questions. |
 | **Zero dependencies** | Plain Node.js and vanilla JS. No `npm install`, no database, no Obsidian plugin. |
 

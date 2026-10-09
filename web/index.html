@@ -553,6 +553,22 @@ dialog.sheet [data-anchor],dialog.sheet [data-item]{scroll-margin-top:0}
 .visually-hidden{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 .one-thing.is-parked{border-left:4px solid var(--status-warning)}.one-thing.is-auto{background:var(--brand-wash)}
 @media(max-width:700px){.one-thing .one-actions{width:100%}.one-thing .one-actions .btn{width:100%;min-height:44px}.check-line{min-height:44px}}
+.feedback-card{background:var(--glass);border:1px solid var(--border-default);border-left:3px solid var(--content-highlight);border-radius:var(--radius-card);padding:var(--space-d) 20px;margin-bottom:var(--space-l);display:grid;gap:var(--space-m)}
+.feedback-card strong{font-size:16px;line-height:24px;font-weight:600;display:block}.feedback-card p{margin:2px 0 0}
+.fb-scale,.fb-tags{border:0;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:8px}.fb-scale{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px}
+.fb-scale label{cursor:pointer;min-width:0}.fb-scale input,.fb-tags input{position:absolute;opacity:0;pointer-events:none}
+.fb-scale span{display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 6px;border:1px solid var(--border-default);border-radius:var(--radius-container);text-align:center;transition:background-color .15s ease-out,border-color .15s ease-out}
+.fb-scale b{font-size:18px;line-height:22px;font-variant-numeric:tabular-nums}.fb-scale small{font-size:11px;line-height:14px;color:var(--muted)}
+.fb-scale input:checked+span{background:var(--highlight-wash);border-color:var(--content-highlight);color:var(--content-highlight)}
+.fb-scale input:focus-visible+span,.fb-tags input:focus-visible+span{outline:2px solid var(--content-highlight);outline-offset:2px}
+.fb-tags legend{margin-bottom:6px;width:100%}.fb-tags label{cursor:pointer}
+.fb-tags span{display:inline-block;padding:4px 12px;border:1px solid var(--border-default);border-radius:var(--radius-pill);font-size:13px;line-height:20px}
+.fb-tags input:checked+span{background:var(--brand-wash);border-color:var(--content-highlight);color:var(--content-highlight)}
+.feedback-card textarea{width:100%;font:inherit;font-size:13px;padding:8px 12px;border:1px solid var(--border-default);border-radius:var(--radius-container);background:transparent;color:inherit;resize:vertical}
+.fb-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--space-m);margin-bottom:var(--space-d)}
+.fb-sub{font-size:14px;line-height:20px;margin:var(--space-d) 0 var(--space-s)}
+.fb-directions,.fb-quotes{margin:0;padding-left:20px;display:grid;gap:6px;font-size:13px;line-height:20px}.fb-directions small{margin-left:8px}
+@media(max-width:700px){.fb-stats{grid-template-columns:1fr}.fb-scale span{padding:6px 2px}}
 </style>
 </head>
 <body>
@@ -583,6 +599,7 @@ dialog.sheet [data-anchor],dialog.sheet [data-item]{scroll-margin-top:0}
   <div class="section-heading"><h2>任務看板 <span class="muted small" id="task-count"></span></h2><label class="small filter-label">顯示 <select id="filter" class="btn" aria-label="篩選任務"><option value="all">全部</option><option value="you">在你手上</option><option value="ai-ready">可交給 AI</option><option value="ai">AI 在跑</option><option value="wait">等前置項目</option><option value="done">已完成</option></select></label></div>
   <div id="tasks" class="kanban"><div class="task-row lane skeleton"><span class="sk sk-avatar small"></span><div><span class="sk sk-line"></span><span class="sk sk-line short"></span></div><span class="sk sk-line"></span><span class="sk sk-line short"></span></div><div class="task-row lane skeleton"><span class="sk sk-avatar small"></span><div><span class="sk sk-line"></span><span class="sk sk-line short"></span></div><span class="sk sk-line"></span><span class="sk sk-line short"></span></div></div>
   <button class="btn subtle" id="show-all" hidden>展開全部工作</button>
+  <article class="card" id="feedback-trend" style="margin-top:20px"><div class="section-heading" style="margin-top:0"><h2>你的回饋</h2><span class="small muted">讓 AI 知道下次怎麼做</span></div><div id="feedback-body"><p class="small muted">正在讀取回饋…</p></div></article>
   <article class="card" style="margin-top:20px"><div class="section-heading" style="margin-top:0"><h2>今日回想</h2><span class="small muted">先自己想，再看答案</span></div><div id="recall"></div></article>
   <div class="split lower"><article class="card"><h2>最近動態</h2><div id="activity"></div></article><article class="card"><h2>現在學什麼</h2><div id="recent-rules"><p class="small muted">還沒有規則。完成任務時在「學習迴圈」勾選，就會出現在這裡。</p></div><button class="btn" data-go="knowledge">查看工作記憶</button></article></div>
  </section>
@@ -643,6 +660,7 @@ dialog.sheet [data-anchor],dialog.sheet [data-item]{scroll-margin-top:0}
 <script src="/assets/conversation.js"></script>
 <script src="/assets/control.js"></script>
 <script src="/assets/auto.js"></script>
+<script src="/assets/feedback.js"></script>
 <script>
 const $=selector=>document.querySelector(selector);
 const names={overview:'工作總覽',workspaces:'工作區與 Session',handoff:'交接中心',knowledge:'工作記憶',settings:'角色與設定',journeys:'專案歷程',conversations:'對話紀錄',trash:'回收桶'};
@@ -727,7 +745,7 @@ function renderOverview(){
  $('#demo-banner').hidden=true;
  const today=new Date();$('#hero-date').textContent=today.toLocaleDateString('zh-TW',{month:'long',day:'numeric',weekday:'long'});
  const parts=[counts.you&&`${counts.you} 件在你手上`,counts.ai&&`${counts.ai} 件 AI 正在跑`,counts['ai-ready']&&`${counts['ai-ready']} 件可以交給 AI`,counts.wait&&`${counts.wait} 件在等前置項目`,counts.done&&`${counts.done} 件已完成`].filter(Boolean);
- $('#hero-sub').textContent=window.loadFailed&&!state?'連不到本機服務，任務暫時讀不到。請確認 npm start 仍在執行。':all.length?`${parts.join('，')}。`:'還沒有任務。用一兩句話告訴 AI 你想完成什麼，它會先反問你。';
+ renderFeedbackTrend();$('#hero-sub').textContent=window.loadFailed&&!state?'連不到本機服務，任務暫時讀不到。請確認 npm start 仍在執行。':all.length?`${parts.join('，')}。`:'還沒有任務。用一兩句話告訴 AI 你想完成什麼，它會先反問你。';
  // 分布條：比例即狀態，不需要四張數字卡
  const bar=$('#stats');bar.replaceChildren();if(all.length){const track_=element('div',undefined,'bar');for(const key of ['you','ai-ready','ai','wait','done']){if(!counts[key])continue;const seg=element('span','',`seg ${key}`);seg.style.flexGrow=counts[key];track_.append(seg);}const legend=element('ul',undefined,'legend');for(const key of ['you','ai-ready','ai','wait','done']){if(key==='wait'&&!counts.wait)continue;const li=element('li',undefined,key);li.append(element('span','','swatch'),element('span',holderText[key]),element('strong',String(counts[key])));legend.append(li);}bar.append(track_,legend);}bar.hidden=!all.length;
  // 接力棒卡：只放一件事
@@ -961,7 +979,7 @@ function openTask(id,{background=false}={}){
  const control=controlBar(t);if(control)detail.append(control);
  const one=focusKey(element('div',undefined,'one-thing'),'one');one.tabIndex=-1;const oneText=element('div');oneText.append(element('div','你現在要做的一件事','eyebrow'),element('strong',t.nextAction.label));one.append(oneText);
  const jump=element('button',`前往：${t.nextAction.button}`,'btn');jump.onclick=()=>{const target=(t.nextAction.kind==='item'&&detail.querySelector(`[data-item="${t.nextAction.id}"]`))||detail.querySelector(`[data-anchor="${t.nextAction.kind}"]`)||detail.querySelector('.running')||detail.querySelector('[data-anchor=handoff]');target?.scrollIntoView({block:'start',behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth'});if(t.nextAction.kind==='running'){target?.focus({preventScroll:true});return;}const buttons=[...detail.querySelectorAll('button:not(:disabled)')].filter(b=>!one.contains(b));(buttons.find(b=>target?.contains(b)&&b.textContent.startsWith(t.nextAction.button))||buttons.find(b=>b.textContent.startsWith(t.nextAction.button))||target?.querySelector('.btn.primary:not(:disabled)')||target?.querySelector('textarea,input,button'))?.focus({preventScroll:true});};
- if(!['none','stopping'].includes(t.nextAction.kind))one.append(jump);decorateOneThing(t,{one,oneText,jump});detail.append(one);const historyButton=element('button','閱讀每輪問答與改善','btn');historyButton.onclick=()=>showConversations(t.id);detail.append(historyButton);
+ if(!['none','stopping'].includes(t.nextAction.kind))one.append(jump);decorateOneThing(t,{one,oneText,jump});detail.append(one);{const fb=feedbackCard(t);if(fb)detail.append(fb);}const historyButton=element('button','閱讀每輪問答與改善','btn');historyButton.onclick=()=>showConversations(t.id);detail.append(historyButton);
  const open=t.decisions.filter(d=>d.status!=='DECIDED');const [label]=statuses[t.status]||[t.status];
  const facts=definition(t.planning?[['狀態',`${label} · 第 ${t.revision} 版 · 最後更新 ${when(t.updatedAt)}`],['目前成果',t.current.summary],['產出資料夾',t.allowedRoots[0]]]:[['狀態',`${label} · 第 ${t.revision} 版 · 最後更新 ${when(t.updatedAt)}`],['目標',t.goal],['目前成果',t.current.summary],['卡點',open.length?open.map(d=>d.question).join('\n'):'沒有待決策'],...t.decisions.filter(d=>d.status==='DECIDED').map(d=>['已確認決策',`${d.options.find(o=>o.id===d.choice)?.label}（${when(d.decidedAt)}）${d.note?`\n${d.note}`:''}`]),['AI 的唯一下一步',t.next]]);
  detail.append(facts);

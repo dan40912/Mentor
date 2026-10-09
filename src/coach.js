@@ -8,6 +8,7 @@ import { HEADINGS } from './memory.js';
 import { outlineSensors, outputSensors } from './sensors.js';
 import { Projects } from './projects.js';
 import { killTree } from './platform.js';
+import { validateFeedback, feedbackBrief } from './feedback.js';
 
 const now = () => new Date().toISOString();
 const stageName = id => stages.find(s => s.id === id).name;
@@ -38,8 +39,10 @@ learning 格式：{"change":"這次相對於需求或上一版調整了什麼，
 function context(task) {
   const p = task.planning;
   const folder = task.folderListing ? `\n\n產出資料夾（AI 的工作目錄）：${task.allowedRoots[0]}\n目前檔案：\n${task.folderListing}` : '';
+  // 開工前就在資料夾裡的檔案是素材。附上當時的 SHA-256，要證明沒改過素材時自己算一次比對，不用問人。
+  const baseline = p.baseline?.length ? `\n開工前已有的素材（建立任務時記錄的 SHA-256，可用 shasum -a 256 比對）：\n${p.baseline.map(b => `- ${b.file}  ${b.sha}`).join('\n')}` : '';
   const profile = profileOf(p.profile);
-  const rules = (p.rules?.trim() ? `\n\n團隊與專案規則（開工前已確定，照做；與這次需求衝突時在 deviations 說明）：\n${p.rules.trim()}` : '') + (p.projectBrief ? `\n\n${p.projectBrief}` : '');
+  const rules = (p.rules?.trim() ? `\n\n團隊與專案規則（開工前已確定，照做；與這次需求衝突時在 deviations 說明）：\n${p.rules.trim()}` : '') + (p.projectBrief ? `\n\n${p.projectBrief}` : '') + (p.feedbackBrief ? `\n\n${p.feedbackBrief}` : '');
   const alignment = `\n\n交辦對齊與減少返工：
 - 最初需求：${p.request}
 - 先依最新明確指示、目前任務卡與現檔判斷；較早對話供對照，已被取代的數字與指令不可帶回。
@@ -48,7 +51,7 @@ function context(task) {
 - 未知事實要保留缺口；數字、單位、期間與資料範圍附來源，跨頁一起檢查。使用者要求只討論時不可寫檔。
 - 改局部時保留主張、已確認邊界與未要求修改的內容；完成後分開回報指定改動、取捨、證據與未完成。
 ${p.projectLocked ? `- 專案已由使用者選定：${task.project}，不可換成另一個專案。` : ''}`;
-  return { profile, rules: rules + folder + alignment, diary: profile.diary ? `\n${DIARY}` : '', diaryField: profile.diary ? `,${diaryShape}` : '' };
+  return { profile, rules: rules + folder + baseline + alignment, diary: profile.diary ? `\n${DIARY}` : '', diaryField: profile.diary ? `,${diaryShape}` : '' };
 }
 
 export const prompts = {
@@ -98,7 +101,7 @@ ${transcript(task.planning.messages)}
 - sections：逐段（簡報就是逐頁），每段寫重點、evidence（依據或資料來源；沒有依據就寫「無依據」，不要編）${profile.evidence ? '、risk（最可能被質疑的地方）' : ''}，以及需要的視覺：type 是 image、chart、diagram、screenshot、none 之一，count 是張數。${profile.id === 'quick' ? '段落精簡，只留必要的。' : ''}
 - imageTotal：全部需要的圖片與圖表張數加總。
 - workItems：可以交給 AI 或人的工作。owner 是 ai 或 human。AI 項目必須能在一個資料夾內用檔案完成（例如產出 HTML、Markdown、圖表程式）。
-  每項寫 2～4 條可檢查的 acceptance，dependsOn 填前置項目 id。真的需要人提供的素材或判斷，owner 設 human。${profile.skeleton ? `
+  每項寫 2～4 條可檢查的 acceptance，dependsOn 填前置項目 id。acceptance 只寫驗收者能從產出檔案或自己執行指令確認的成果；驗收者看不到執行過程，不要寫「有沒有回報」「是否貼出輸出」這類流程條件。需要人用眼睛確認的事（例如在瀏覽器實際操作）不要寫進 AI 項目的 acceptance。真的需要人提供的素材或判斷，owner 設 human。${profile.skeleton ? `
   第一個 AI 項目必須是「骨架版」：最小但從頭到尾走得通的版本（例如簡報的封面、主張頁、一頁證據），讓使用者先確認方向；其他 AI 項目 dependsOn 它。` : ''}
 - coaching：教使用者怎麼 review 這份大綱，列出最該看的 3 件事。${diary}${rules}
 ${previous && feedback ? `
@@ -120,7 +123,7 @@ ${transcript(task.planning.messages)}
   D: (task, item, done) => {
     const { diary, diaryField, rules } = context(task);
     return `你是 Mentor的「執行」角色。${VOICE}
-在目前資料夾內完成下面的工作項目。目前資料夾就是產出資料夾，裡面的檔案就是可用的資料。只能建立或修改目前資料夾內的檔案，不要碰其他位置，不要對外發布。
+在目前資料夾內完成下面的工作項目，只做這一項，不要提前做其他工作項目。目前資料夾就是產出資料夾，裡面的檔案就是可用的資料。只能建立或修改目前資料夾內的檔案，不要碰其他位置，不要對外發布。
 成果要寫成檔案；只在回覆裡描述、沒有產出檔案，不算完成。
 資訊不足時不要猜，回報 NEEDS_INPUT 並寫出缺什麼。${rules}
 
@@ -151,8 +154,9 @@ FILES: 相對路徑, 相對路徑
   E: (task, item) => {
     const { diary, diaryField, rules } = context(task);
     return `你是 Mentor的「驗收」角色。${VOICE}
-唯讀檢查目前資料夾內的成果，逐條核對驗收條件。不要修改檔案。只採信你實際讀到的內容，執行者的自述不算證據。
+唯讀檢查目前資料夾內的成果，逐條核對驗收條件。不要修改檔案。只採信你實際讀到的內容或自己執行指令的結果，執行者的自述不算證據。
 看不到或無法判斷的條件標 NOT_RUN，不要猜 PASS。
+只核對這一項列出的驗收條件。任務卡的其他成功標準由其他工作項目負責，不要因此判 FAIL，fixes 也不要要求做其他項目的事。${item.skeleton ? '\n這一項是骨架版：只確認最小版本走得通，內容不完整是預期的。' : ''}
 另外寫 coaching：教使用者自己 review 時最該看的 3 件事，以及怎麼看（例如打開哪個檔、看哪一段）。${diary}${rules}
 
 任務卡：
@@ -165,6 +169,7 @@ ${cardText(task.planning.card)}
 ${(item.sensors || []).map(s => `- ${s.result}｜${s.name}：${s.detail}`).join('\n') || '- 無'}
 驗收條件：
 ${item.acceptance.map((a, i) => `${i + 1}. ${a}`).join('\n')}
+${item.log?.length ? `\n執行者最後一次回報（自述，不算證據，只用來知道去哪裡找）：\n${item.log.at(-1).text.slice(-1500)}\n` : ''}
 ${item.instructions?.length ? `\n使用者補充指示（原文，請逐條核對；指示不代替成果證據）：\n${item.instructions.map(x => `- ${x.text}`).join('\n')}` : ''}
 
 只輸出一個 JSON（放在 \`\`\`json 區塊）：
@@ -172,10 +177,19 @@ ${item.instructions?.length ? `\n使用者補充指示（原文，請逐條核�
   }
 };
 
+// 升級前建立的任務從現在開始收回饋，之前完成的項目不補問。
+const startFeedback = p => { if (!Array.isArray(p.feedback)) Object.assign(p, { feedback: [], feedbackSince: now() }); };
+
 export function parseExecution(text) {
   const status = text.match(/^STATUS:\s*(DONE|BLOCKED|NEEDS_INPUT)\s*$/m)?.[1];
-  const files = (text.match(/^FILES:\s*(.*)$/m)?.[1] || '').split(/[,，、]/).map(f => f.trim()).filter(f => f && f !== '無');
-  return { status: status || 'NEEDS_INPUT', files, parsed: Boolean(status) };
+  // 模型常把檔名包成 `a.html` 或 [a.html](/abs/a.html:12)；取出真正的路徑，去掉行號。
+  const files = (text.match(/^FILES:\s*(.*)$/m)?.[1] || '').split(/[,，、]/)
+    .map(f => f.trim().replace(/^\[[^\]]*\]\(([^)]+)\)$/, '$1').replace(/^[`'"]+|[`'"]+$/g, '').replace(/:\d+(?::\d+)?$/, '').trim())
+    .filter(f => f && f !== '無');
+  // 「未完成」那一段就是停下的原因，直接給人看，不用打開紀錄。
+  const after = text.match(/^未完成：([\s\S]*)$/m)?.[1] || '';
+  const missing = after.split('```')[0].trim().split(/\n\s*\n/)[0].replace(/\s+/g, ' ').trim();
+  return { status: status || 'NEEDS_INPUT', files, parsed: Boolean(status), missing: /^(無|none)?$/i.test(missing) ? '' : missing.slice(0, 300) };
 }
 
 export class Coach {
@@ -329,7 +343,11 @@ export class Coach {
     // AI 能做的都做完了，剩下的要人處理
     if (failing) return { stop: { kind: 'fix-limit', label: `${failing.id}「${failing.title}」自動修了 ${Coach.AUTO_MAX_FIX} 輪仍沒通過，請看驗收意見後決定`, itemId: failing.id } };
     const blocked = aiItems.find(i => i.status === 'BLOCKED');
-    if (blocked) return { stop: { kind: 'needs-info', label: `${blocked.id}「${blocked.title}」需要你補資訊`, itemId: blocked.id } };
+    if (blocked) {
+      const b = blocked.blocked || {};
+      const why = b.kind === 'tool' ? '做不下去' : '需要你補資訊';
+      return { stop: { kind: 'needs-info', blocked: b.kind || 'info', label: `${blocked.id}「${blocked.title}」${why}${b.reason ? `：${b.reason}` : ''}${b.count > 1 ? `（同一原因第 ${b.count} 次）` : ''}`, itemId: blocked.id } };
+    }
     const reviewed = aiItems.filter(i => i.status === 'REVIEWED');
     if (reviewed.length) return { stop: { kind: 'confirm', label: `確認 ${reviewed.length} 項 AI 驗收通過的成果（${reviewed.map(i => i.id).join('、')}）` } };
     const human = items.find(i => i.owner === 'human' && i.status === 'TODO' && ready(items, i));
@@ -368,6 +386,7 @@ export class Coach {
   async park(id, waitingFor) {
     await this.store.mutate(id, 'latest', null, t => {
       if (!t.planning.autopilot) return { status: planningStatus(t) };
+      startFeedback(t.planning);
       t.planning.autopilot.waitingFor = { ...waitingFor, at: now() };
       return { status: planningStatus(t) };
     });
@@ -426,6 +445,7 @@ export class Coach {
     return this.store.mutate(id, revision, key, t => {
       const items = (t.planning?.workItems || []).filter(i => i.owner === 'ai' && i.status === 'REVIEWED');
       if (!items.length) throw new TaskError(409, 'NOTHING_TO_CONFIRM', '目前沒有等你確認的成果。');
+      startFeedback(t.planning);
       for (const item of items) Object.assign(item, { status: 'DONE', humanNote: '', doneAt: now() });
       if (t.planning.workItems.every(i => i.status === 'DONE')) { t.planning.phase = 'done'; t.current.summary = `全部 ${t.planning.workItems.length} 個工作項目已由你確認。`; }
       return { status: planningStatus(t) };
@@ -573,6 +593,12 @@ export class Coach {
     if (!path.isAbsolute(out)) throw new TaskError(400, 'OUTPUT_INVALID', '產出資料夾需要是絕對路徑。');
     await mkdir(out, { recursive: true });
     const real = await realpath(out);
+    const baseline = [];
+    for (const name of (await readdir(real)).filter(n => !n.startsWith('.')).slice(0, 40)) {
+      const full = path.join(real, name);
+      const info = await stat(full);
+      if (info.isFile() && info.size <= 50 * 1024 * 1024) baseline.push({ file: name, sha: sha256(await readFile(full)) });
+    }
     const task = {
       id, revision: 1, status: 'BLOCKED', updatedAt: now(), prelude: `\n# ${request.trim().slice(0, 40)}\n\n> Mentor建立的任務。人工筆記寫在最下方。\n\n`, notes: '\n\n## 人工筆記\n',
       title: request.trim().slice(0, 30), project: project || '未分類', goal: request.trim(),
@@ -581,7 +607,7 @@ export class Coach {
       current: { summary: '剛建立，正在整理任務卡。', artifact: null, sources: [] },
       decisions: [], checks: [], facts: [], learnings: [], parked: [], reports: [],
       next: '先完成 Grill，再擬定大綱。',
-      planning: { phase: 'grill', profile, projectLocked: Boolean(project), projectBrief: await new Projects(path.join(this.root,'vault','projects')).context(project || '未分類'), rules: await this.memory.rules(project || '未分類'), diary: [], request: request.trim(), card: { title: '', project: project || '未分類', goal: request.trim(), audience: '', deliverable: '', success: [], constraints: [], unknowns: [] }, messages: [{ id: randomUUID(), role: 'user', stage: 'A', text: request.trim(), at: now() }], outline: null, workItems: [], running: null, readyForOutline: false }
+      planning: { phase: 'grill', profile, projectLocked: Boolean(project), projectBrief: await new Projects(path.join(this.root,'vault','projects')).context(project || '未分類'), rules: await this.memory.rules(project || '未分類'), diary: [], request: request.trim(), card: { title: '', project: project || '未分類', goal: request.trim(), audience: '', deliverable: '', success: [], constraints: [], unknowns: [] }, messages: [{ id: randomUUID(), role: 'user', stage: 'A', text: request.trim(), at: now() }], outline: null, workItems: [], running: null, readyForOutline: false, baseline, feedback: [], feedbackSince: now(), feedbackBrief: feedbackBrief(await this.store.list(), project || '未分類') }
     };
     await this.store.create(task);
     await this.audit(id, 'TASK_CREATED', { request: request.trim(), profile, outputDir: real });
@@ -611,6 +637,7 @@ export class Coach {
           t.project = String(json.card.project).slice(0, 40);
           t.planning.rules = await this.memory.rules(t.project);
           t.planning.projectBrief = await new Projects(path.join(this.root,'vault','projects')).context(t.project);
+          t.planning.feedbackBrief = feedbackBrief(await this.store.list(), t.project);
         }
         if (t.planning.projectLocked) t.planning.card.project = t.project;
       }
@@ -771,6 +798,11 @@ export class Coach {
       const noFiles = parsed.status === 'DONE' && !item.outputs.length;
       item.status = parsed.status === 'DONE' && !noFiles ? 'AWAITING_REVIEW' : 'BLOCKED';
       if (noFiles) item.fixes = [...(item.fixes || []), 'AI 回報完成，但產出資料夾沒有新的檔案。請把成果寫成檔案並在 FILES 列出。'];
+      if (item.status === 'BLOCKED') {
+        const reason = noFiles ? '回報完成但沒有產出檔案' : parsed.missing || (parsed.parsed ? '' : '回覆沒有 STATUS 行');
+        // 同一原因連續停下要讓人看得出來，免得一直補同一句話。
+        item.blocked = { kind: parsed.status === 'NEEDS_INPUT' ? 'info' : 'tool', reason, count: item.blocked?.reason === reason ? item.blocked.count + 1 : 1, at: now() };
+      } else item.blocked = null;
       item.executor = agent;
       item.review = null;
       item.sensors = await outputSensors(outDir, item, t.planning.outline);
@@ -905,6 +937,21 @@ export class Coach {
     throw new TaskError(400, 'ROUTE_INVALID', '無法判斷補充指示要交給哪一步。');
   }
 
+  // 你的評分與標籤。只收目前該問的那一題，送出後下一個任務會帶上彙整出的方向。
+  async feedback(id, revision, key, input = {}) {
+    let saved;
+    const result = await this.store.mutate(id, revision, key, t => {
+      if (!t.planning) throw new TaskError(400, 'NOT_PLANNING', '這個任務不是教練流程。');
+      const { entry, error } = validateFeedback(t, input);
+      if (error) throw new TaskError(409, 'FEEDBACK_INVALID', error);
+      t.planning.feedback.push(entry);
+      saved = entry;
+      return { status: planningStatus(t) };
+    }, 'feedback', input);
+    await this.audit(id, 'FEEDBACK', saved || {});
+    return result;
+  }
+
   resume(id, revision, key, { text = '', reason = '' } = {}) {
     return this.instruct(id, revision, key, { text, reason, scope: 'current', confirmImpact: true });
   }
@@ -912,6 +959,7 @@ export class Coach {
   confirm(id, revision, key, { itemId, accept, note = '' }) {
     return this.store.mutate(id, revision, key, t => {
       const item = this.item(t, itemId);
+      startFeedback(t.planning);
       if (item.owner === 'human') {
         if (item.status !== 'TODO') throw new TaskError(409, 'ITEM_CLOSED', '這一項已完成。');
         Object.assign(item, { status: 'DONE', humanNote: String(note).slice(0, 2000), doneAt: now() });

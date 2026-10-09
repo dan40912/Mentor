@@ -9,7 +9,7 @@ import { Coach } from '../src/coach.js';
 import { buildArgs, classify, extractJson, runAgent } from '../src/agents.js';
 import { defaultStageSettings } from '../src/models.js';
 import { Memory } from '../src/memory.js';
-import { prompts } from '../src/coach.js';
+import { prompts, parseExecution } from '../src/coach.js';
 import { previewArtifact } from '../src/server.js';
 
 const fake = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures', 'fake-cli.mjs');
@@ -335,6 +335,44 @@ test('DONE without any file is treated as fake completion, and prompts carry the
   task.folderListing = await coach.listing(task.allowedRoots[0]);
   assert.match(prompts.D(task, w1, []), /產出資料夾（AI 的工作目錄）/);
   assert.match(prompts.B(task), /不要再問使用者資料在哪裡/);
+  // 停下的原因直接寫在等你的那一行，不用打開紀錄
+  assert.deepEqual(w1.blocked && { kind: w1.blocked.kind, reason: w1.blocked.reason, count: w1.blocked.count }, { kind: 'tool', reason: '回報完成但沒有產出檔案', count: 1 });
+  assert.match(coach.nextStep(task, {}).stop.label, /W1「產出 HTML」做不下去：回報完成但沒有產出檔案$/);
+});
+
+test('blocked reasons, repeated stops, and review prompts that see the report but stay in scope', () => {
+  const report = '做好了骨架。\nSTATUS: BLOCKED\nFILES: index.html\n證據：index.html 第 3 行\n未完成：沒有可用的瀏覽器，\n無法實際試玩。\n\n```json\n{}\n```';
+  assert.equal(parseExecution(report).missing, '沒有可用的瀏覽器， 無法實際試玩。');
+  assert.equal(parseExecution('STATUS: DONE\nFILES: a.html\n未完成：無').missing, '');
+  assert.deepEqual(parseExecution('STATUS: DONE\nFILES: `deck.html`, [check.mjs](/out/check.mjs:12), "RETRO.md"').files, ['deck.html', '/out/check.mjs', 'RETRO.md']);
+  const item = { id: 'W1', title: '骨架版', owner: 'ai', status: 'BLOCKED', skeleton: true, dependsOn: [], acceptance: ['可以開始遊戲'], outputs: [], log: [{ text: report }], blocked: { kind: 'tool', reason: '沒有可用的瀏覽器', count: 3 } };
+  const task = { allowedRoots: ['/out'], project: 'Demo', planning: { phase: 'execute', profile: 'standard', request: '做遊戲', rules: '', messages: [], card: { title: '遊戲', success: ['完整可玩'], constraints: [], unknowns: [] }, outline: { storyline: '', logic: [], sections: [] }, workItems: [item] } };
+  const coach = new Coach(null, () => ({}), '/tmp', null);
+  const stop = coach.nextStep(task, {}).stop;
+  assert.equal(stop.blocked, 'tool');
+  assert.match(stop.label, /做不下去：沒有可用的瀏覽器（同一原因第 3 次）/);
+  item.blocked = { kind: 'info', reason: '缺價格', count: 1 };
+  assert.match(coach.nextStep(task, {}).stop.label, /需要你補資訊：缺價格$/);
+  const review = prompts.E(task, item);
+  assert.match(review, /執行者最後一次回報（自述，不算證據/);
+  assert.match(review, /沒有可用的瀏覽器/);
+  assert.match(review, /只核對這一項列出的驗收條件/);
+  assert.match(review, /這一項是骨架版/);
+  assert.doesNotMatch(prompts.E(task, { ...item, skeleton: false }), /這一項是骨架版/);
+  assert.match(prompts.D(task, item, []), /只做這一項，不要提前做其他工作項目/);
+  assert.match(prompts.C(task), /不要寫「有沒有回報」「是否貼出輸出」這類流程條件/);
+});
+
+test('files already in the output folder are recorded as material with a SHA-256 baseline', async () => {
+  const { store, coach, dir } = await setup();
+  const out = path.join(dir, 'material');
+  await import('node:fs/promises').then(fs => fs.mkdir(out, { recursive: true }));
+  await writeFile(path.join(out, 'README.md'), '素材');
+  const created = await coach.create({ request: '依素材做一份簡報給主管', profile: 'quick', outputDir: out });
+  await created.done;
+  const task = await latest(store, created.task.id);
+  assert.deepEqual(task.planning.baseline.map(b => b.file), ['README.md']);
+  assert.match(prompts.A(task), /README\.md  [0-9a-f]{64}/);
 });
 
 test('GitHub Copilot is limited to tool-free chat stages', () => {
