@@ -128,7 +128,8 @@ export function planningStatus(task) {
   return 'READY';
 }
 
-export const ready = (items, item) => (item.dependsOn || []).every(id => items.find(i => i.id === id)?.status === 'DONE');
+// unlock：完全自動模式可以讓 AI 驗收通過（REVIEWED）的前置項目先放行，最後仍由人一次確認。
+export const ready = (items, item, unlock = ['DONE']) => (item.dependsOn || []).every(id => unlock.includes(items.find(i => i.id === id)?.status));
 
 export function planningAction(task) {
   const p = task.planning;

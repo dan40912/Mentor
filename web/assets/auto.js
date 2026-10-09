@@ -10,7 +10,7 @@ function decorateOneThing(t,{one,oneText,jump}){
  const off=()=>{const b=element('button','關閉自動','btn subtle');b.dataset.focus='auto-off';b.onclick=busy(b,async()=>{await coachAct(t,'autopilot',{on:false});tell('已關閉自動，之後每一步由你按。');});return b;};
  const runAuto=(text,primary,provider)=>{const b=focusKey(element('button',text,primary?'btn primary':'btn'),provider?`auto-${provider}`:'auto');b.onclick=busy(b,async()=>{await coachAct(t,'autopilot',{full:fullBox?.checked??Boolean(ap?.full),provider:provider||undefined});tell(provider?`已改用 ${state.providers.find(x=>x.id===provider)?.name} 繼續，角色設定沒有改變。`:'AI 開始一路做；需要你時會停下來說明。');});return b;};
  let fullBox=null;
- const fullChoice=()=>{const l=element('label',undefined,'check-line'),c=element('input');c.type='checkbox';c.checked=autoFull();c.onchange=()=>{try{localStorage.setItem('awc-full',c.checked?'1':'0');}catch{}};fullBox=c;const span=element('span');span.append(element('strong','完全自動'),element('small','連大綱也自動通過。最後的成果仍由你確認。'));l.append(c,span);return l;};
+ const fullChoice=()=>{const l=element('label',undefined,'check-line'),c=element('input');c.type='checkbox';c.checked=autoFull();c.onchange=()=>{try{localStorage.setItem('awc-full',c.checked?'1':'0');}catch{}};fullBox=c;const span=element('span');span.append(element('strong','完全自動'),element('small','大綱自動通過，AI 驗收通過的項目直接接著做下一項。全部做完後由你一次確認。'));l.append(c,span);return l;};
  if(ap&&!wait){ // 自動進行中，兩步之間
   one.classList.add('is-auto');eyebrow.textContent=`AI 自動進行中 · ${step}`;label.textContent='不需要你，做到需要你的地方才會停下來';actions.append(off());one.append(actions);return;
  }

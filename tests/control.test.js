@@ -354,6 +354,34 @@ test('full autopilot approves the outline itself and records it; failing reviews
   mode();
 });
 
+test('full autopilot lets AI-passed items unlock the next ones and asks you once at the end; plain autopilot still waits', async () => {
+  const { store, coach } = await setup();
+  mode();
+  const created = await coach.create({ request: '我要做一份新品簡報給主管十頁', profile: 'standard', autopilot: true, full: true });
+  const id = created.task.id;
+  await created.done;
+  // standard 會補骨架 W0，W1 依賴 W0。完全自動時 W0 驗收通過就接著做 W1，兩項一起等你確認。
+  assert.ok(await waitFor(async () => (await latest(store, id)).planning.autopilot?.waitingFor?.kind === 'confirm', 30000));
+  let task = await latest(store, id);
+  assert.deepEqual(task.planning.workItems.filter(i => i.owner === 'ai').map(i => `${i.id}:${i.status}`), ['W0:REVIEWED', 'W1:REVIEWED']);
+  assert.match(task.planning.autopilot.waitingFor.label, /確認 2 項/);
+  assert.match(task.planning.learningTurns.find(t => t.stage === 'D' && t.workItemId === 'W1').prompt, /已完成的其他項目與檔案：\n- 骨架版/);
+  // 退回骨架時，已經用它做下去的 W1 標成待核對
+  task = (await coach.confirm(id, task.revision, 'k-unlock-1', { itemId: 'W0', accept: false, note: '封面要換' })).task;
+  assert.match(task.planning.workItems.find(i => i.id === 'W1').recheck, /W0 被退回/);
+  await coach.setAutopilot(id, task.revision, 'k-unlock-2', { on: false });
+  // 一般自動模式：W0 通過後就停下等你確認
+  const plain = await coach.create({ request: '我要做一份新品簡報給主管十頁', profile: 'standard', autopilot: true });
+  await plain.done;
+  assert.ok(await waitFor(async () => (await latest(store, plain.task.id)).planning.autopilot?.waitingFor?.kind === 'approve', 15000));
+  task = await latest(store, plain.task.id);
+  await coach.approveOutline(task.id, task.revision, 'k-unlock-3');
+  coach.resumeAuto(task.id);
+  assert.ok(await waitFor(async () => (await latest(store, plain.task.id)).planning.autopilot?.waitingFor?.kind === 'confirm', 15000));
+  task = await latest(store, plain.task.id);
+  assert.deepEqual(task.planning.workItems.filter(i => i.owner === 'ai').map(i => `${i.id}:${i.status}`), ['W0:REVIEWED', 'W1:TODO']);
+});
+
 test('autopilot parks on AI failure with the reason, can resume with another AI, and ends when you stop it', async () => {
   const { store, coach } = await setup();
   mode('filter-zero');

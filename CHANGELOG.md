@@ -15,3 +15,4 @@ First public version.
 - Review sees the executor's report (marked as a claim, not evidence) and only judges its own item; outlines no longer turn process steps into acceptance criteria
 - Autopilot stops show the executor's own reason, separate "missing information" from "the tool can't do this", and count repeated stops
 - Stopping the server also stops the CLIs it started
+- Full autopilot lets AI-reviewed items unlock the next ones; you confirm everything once at the end

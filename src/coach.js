@@ -12,6 +12,8 @@ import { validateFeedback, feedbackBrief } from './feedback.js';
 
 const now = () => new Date().toISOString();
 const stageName = id => stages.find(s => s.id === id).name;
+// 完全自動時，AI 驗收通過的項目先放行後續；你在最後一次確認全部成果。
+const unlockOf = t => t.planning?.autopilot?.full ? ['DONE', 'REVIEWED'] : ['DONE'];
 const agentLabel = agent => `${{ codex: 'Codex', claude: 'Claude Code' }[agent.provider] || agent.provider}${agent.modelId ? ` ${agent.modelId}` : ''}${agent.effort ? ` ${agent.effort}` : ''}`;
 
 const VOICE = '用自然的台灣繁體中文。不要客套、不要「不是 X 而是 Y」句型。使用者是台灣的 PM，正在學習怎麼下好 prompt、怎麼 review AI 的成果；你同時是執行者和教練。';
@@ -338,7 +340,7 @@ export class Coach {
     if (failing && (fixed[failing.id] || 0) < Coach.AUTO_MAX_FIX) return { run: () => this.fix(t.id, failing.id), fixItem: failing.id };
     const reviewable = aiItems.find(i => i.status === 'AWAITING_REVIEW');
     if (reviewable) return { run: () => this.review(t.id, reviewable.id) };
-    const todo = aiItems.find(i => i.status === 'TODO' && ready(items, i));
+    const todo = aiItems.find(i => i.status === 'TODO' && ready(items, i, unlockOf(t)));
     if (todo) return { run: () => this.execute(t.id, todo.id) };
     // AI 能做的都做完了，剩下的要人處理
     if (failing) return { stop: { kind: 'fix-limit', label: `${failing.id}「${failing.title}」自動修了 ${Coach.AUTO_MAX_FIX} 輪仍沒通過，請看驗收意見後決定`, itemId: failing.id } };
@@ -777,8 +779,8 @@ export class Coach {
       if (item.owner !== 'ai') throw new TaskError(400, 'HUMAN_ITEM', '這一項由你完成。');
       if (stageId === 'D' && item.status !== 'TODO') throw new TaskError(409, 'ITEM_STARTED', '這一項已經執行過；驗收沒過請用「交給修改」。');
       if (stageId === 'F' && item.status !== 'REVIEW_FAIL') throw new TaskError(409, 'NOTHING_TO_FIX', '這一項目前沒有待修正的驗收意見。');
-      if (!ready(t.planning.workItems, item)) throw new TaskError(409, 'DEPENDENCY_PENDING', '前置項目還沒完成。');
-      return prompts.D(t, item, t.planning.workItems.filter(i => i.status === 'DONE')) + (item.instructions?.length ? `\n\n這一項的使用者補充指示（原文）：\n${item.instructions.map(x => `- ${x.text}`).join('\n')}` : '');
+      if (!ready(t.planning.workItems, item, unlockOf(t))) throw new TaskError(409, 'DEPENDENCY_PENDING', '前置項目還沒完成。');
+      return prompts.D(t, item, t.planning.workItems.filter(i => unlockOf(t).includes(i.status))) + (item.instructions?.length ? `\n\n這一項的使用者補充指示（原文）：\n${item.instructions.map(x => `- ${x.text}`).join('\n')}` : '');
     }, async (t, text, agent) => {
       const item = this.item(t, itemId);
       const parsed = parseExecution(text);
@@ -970,6 +972,8 @@ export class Coach {
         else {
           if (!String(note).trim()) throw new TaskError(400, 'NOTE_REQUIRED', '退回時寫下要修什麼，修改的 AI 會照這段做。');
           Object.assign(item, { status: 'REVIEW_FAIL', fixes: [...(item.fixes || []), String(note).trim()] });
+          // 完全自動時後續項目可能已經用它做下去了，標成待核對。
+          for (const d of t.planning.workItems.filter(i => i.dependsOn?.includes(item.id) && i.status !== 'TODO')) d.recheck = `前置項目 ${item.id} 被退回，請重新核對`;
         }
       }
       if (t.planning.workItems.every(i => i.status === 'DONE')) {
