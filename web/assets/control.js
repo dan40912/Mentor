@@ -15,14 +15,14 @@ function controlBar(t){
  const text=element('div',undefined,'control-text');
  if(p.running){
   const s=p.running.stopping;bar.classList.add(s?(s.unconfirmed?'is-unconfirmed':'is-stopping'):'is-running');
-  const line=element('span',undefined,'small');line.append(`${stageLabel(p.running.stage)}${p.running.workItemId?` ${p.running.workItemId}`:''} · ${p.running.agent} · 已 `);const since=element('span','');since.dataset.since=p.running.startedAt;line.append(since);
+  const line=element('span',undefined,'small');line.append(`${stageLabel(p.running.stage)}${p.running.workItemId?` ${itemName(p.running.workItemId)}`:''} · ${p.running.agent} · 已 `);const since=element('span','');since.dataset.since=p.running.startedAt;line.append(since);
   text.append(element('strong',s?(s.unconfirmed?'尚未確認停止':'正在停止…'):'AI 執行中'),line);if(s)text.append(element('span',stopNote(s),'small muted'));
   bar.append(element('span','',s?'pulse amber':'pulse'),text);
   if(!s){const stop=focusKey(element('button','停止這次執行','btn'),'stop');stop.onclick=busy(stop,()=>stopRun(t));bar.append(stop);}
   return bar;
  }
  const s=p.stopped;bar.classList.add('is-stopped');
- text.append(element('strong','已停止'),element('span',`${stageLabel(s.stage)}${s.itemId?` ${s.itemId}`:''}（${s.agent}）沒有完成 · 停止於 ${when(s.at)}`,'small'));
+ text.append(element('strong','已停止'),element('span',`${stageLabel(s.stage)}${s.itemId?` ${itemName(s.itemId)}`:''}（${s.agent}）沒有完成 · 停止於 ${when(s.at)}`,'small'));
  const kept=element('ul',undefined,'control-list');kept.append(element('li',`已保存：對話${s.stage==='A'?'':'、任務卡'}、已確認的成果與你的草稿。`));
  if(s.changed?.length)kept.append(element('li',`中斷期間有 ${s.changed.length} 個檔案變動，可能只寫了一半：${s.changed.join('、')}。不算完成，繼續時 AI 會先核對。`));
  if(s.afterRestart)kept.append(element('li','服務曾重啟，無法確認上次的 CLI 是否已結束；繼續前請確認沒有殘留程序。'));
@@ -30,25 +30,32 @@ function controlBar(t){
  text.append(kept);bar.append(element('span','','pulse off'),text);return bar;
 }
 
-// 統一的補充指示輸入區：依狀態決定回答、改大綱、修改工作項目、接續或新一輪。
+// 統一的補充指示輸入區：依狀態決定回答、改計畫、修改工作項目、接續或新一輪。
 function instructionBox(t,{extraButtons=[]}={}){
  const p=t.planning;const s=p.running?.stopping;const mode=p.stopped?'stopped':p.phase;
+ const items=(p.workItems||[]).filter(w=>w.owner==='ai');
+ const next=p.workItems?.find(w=>w.id===t.nextAction?.id);
+ const current=p.workItems?.find(w=>w.id===p.running?.workItemId)||(next?.owner==='ai'?next:items.find(w=>w.status!=='DONE'));
  const form=element('form',undefined,'composer instruct');form.dataset.anchor=mode==='stopped'?'stopped':'instruct';form.noValidate=true;
- const id=`instruct-${t.id}`,label=element('label',{stopped:'補充指示（選填）',grill:'你的回答',outline:'大綱修改意見',execute:'補充指示',done:'追加指示'}[mode]||'補充指示','instruct-label');label.htmlFor=id;
+ const id=`instruct-${t.id}`,label=element('label',{stopped:'繼續前要交代什麼？（可以空白）',grill:'你的回答',outline:'計畫哪裡要改？',execute:'想調整什麼？',done:'還想再做什麼？'}[mode]||'補充指示','instruct-label');label.htmlFor=id;
  const area=focusKey(element('textarea'),'composer');area.id=id;area.maxLength=6000;area.value=loadDraft(t.id);
- area.placeholder=p.running?'可以先寫，停止這次執行後才能送出。例如：第二段先寫結論，P1 保持原樣。':{stopped:'例如：第二段先寫結論，P1 保持原樣。空白也可以直接繼續。',grill:'回答上面的問題；不知道就說不知道，AI 會先給預設值。',outline:'例如：第二段要補數據來源；結論頁移到第 2 頁。',execute:'例如：第二段先寫結論，P1 保持原樣。',done:'例如：再做一份英文版。會建立新一輪，不覆寫已完成的紀錄。'}[mode];
+ const executeExample=current?`例如：『${itemName(current.id)} ${current.title}』的結論放最前面`:'例如：結論放最前面。';
+ area.placeholder={stopped:'例如：繼續前要補充的資訊。空白也可以直接繼續。',grill:'回答上面的問題；不知道就說不知道，AI 會先給預設值。',outline:'例如：第 3 段刪掉；結論移到最前面。',execute:executeExample,done:'例如：再做一份英文版。會建立新一輪，不覆寫已完成的紀錄。'}[mode];
  const count=element('span','','small muted counter');const hint=element('span','','small muted');hint.id=`${id}-hint`;area.setAttribute('aria-describedby',hint.id);
- form.append(label,area);
+ form.append(label);
+ const suggestions=mode==='execute'?(current?.status==='BLOCKED'?['資訊都在任務卡，照現有內容做完，缺的標成假設']:['照驗收意見修改','換個做法再試一次','這項我自己做']):{outline:['段落太多，併成 3 段','每段補上資料來源'],done:['再做一份英文版']}[mode]||[];
+ if(suggestions.length){const chips=element('div',undefined,'buttons instruct-suggestions');for(const text of suggestions){const chip=element('button',text,'btn subtle');chip.type='button';chip.onclick=()=>{area.value=text;area.oninput();area.focus();};chips.append(chip);}form.append(chips);}
+ form.append(area);
  // 套用範圍：執行階段才需要選；接續固定套用在中斷的步驟。
- let scope=null;const items=(p.workItems||[]).filter(w=>w.owner==='ai');
- if(mode==='stopped')form.append(element('p',`套用於：中斷的${stageLabel(p.stopped.stage)}${p.stopped.itemId?` ${p.stopped.itemId}`:''}`,'small muted'));
+ let scope=null;
+ if(mode==='stopped')form.append(element('p',`套用於：中斷的${stageLabel(p.stopped.stage)}${p.stopped.itemId?` ${itemName(p.stopped.itemId)}`:''}`,'small muted'));
  if(mode==='execute'){
-  const next=p.workItems.find(w=>w.id===t.nextAction?.id),cur=next?.owner==='ai'?next:items.find(w=>w.status!=='DONE');scope=element('select');scope.className='btn';scope.id=`${id}-scope`;
-  options(scope,[['current',`目前步驟${cur?`：${cur.id} ${cur.title}`:''}`],...items.map(w=>[w.id,`${w.id} ${w.title}（${itemStatus[w.status]?.[0]||w.status}）`]),['outline','整個大綱（需要你重新確認）']]);
+  const cur=current;scope=element('select');scope.className='btn';scope.id=`${id}-scope`;
+  options(scope,[['current',`正在做的：${cur?`${itemName(cur.id)} ${cur.title}`:''}`],...items.map(w=>[w.id,`${itemName(w.id)} ${w.title}（${itemStatus[w.status]?.[0]||w.status}）`]),['outline','重排整個計畫（排好後你要再核准一次）']]);
   scope.value=instructDrafts.scope[t.id]||'current';scope.onchange=()=>{instructDrafts.scope[t.id]=scope.value;sync();};
-  const row=element('label',undefined,'instruct-field');row.htmlFor=scope.id;row.append(element('span','套用範圍','small'),scope);form.append(row);
+  const row=element('label',undefined,'instruct-field');row.htmlFor=scope.id;row.append(element('span','要改哪裡','small'),scope);form.append(row);
  }
- let reason=null;if(mode!=='grill'){reason=element('input');reason.id=`${id}-reason`;reason.maxLength=500;reason.placeholder='例如：主管要先看結論';reason.value=instructDrafts.reason[t.id]||'';reason.oninput=()=>{instructDrafts.reason[t.id]=reason.value;};reason.dataset.focus='reason';const row=element('label',undefined,'instruct-field');row.htmlFor=reason.id;row.append(element('span','修改原因（選填）','small'),reason);form.append(row);}
+ let reason=null;if(mode!=='grill'){reason=element('input');reason.id=`${id}-reason`;reason.maxLength=500;reason.placeholder='例如：主管要先看結論';reason.value=instructDrafts.reason[t.id]||'';reason.oninput=()=>{instructDrafts.reason[t.id]=reason.value;};reason.dataset.focus='reason';const row=element('label',undefined,'instruct-field');row.htmlFor=reason.id;row.append(element('span','為什麼要改（選填，AI 會參考）','small'),reason);form.append(row);}
  const impact=element('div',undefined,'impact');impact.hidden=true;impact.setAttribute('role','alert');
  const error=element('p','','field-error');error.setAttribute('role','alert');error.hidden=true;
  const primary=mode==='stopped'||(mode==='grill'&&!p.readyForOutline);
@@ -57,15 +64,16 @@ function instructionBox(t,{extraButtons=[]}={}){
  function target(){const v=scope?.value;if(v&&v!=='current'&&v!=='outline')return p.workItems.find(w=>w.id===v);const next=p.workItems?.find(w=>w.id===t.nextAction?.id);return next?.owner==='ai'?next:items.find(w=>w.status!=='DONE');}
  function sync(){
   const has=Boolean(area.value.trim());count.textContent=`${area.value.length.toLocaleString()}／6,000`;
-  const w=target();send.textContent=mode==='stopped'?(has?'送出並繼續':'繼續任務'):mode==='grill'?'送出回答':mode==='outline'?'送出大綱修改':mode==='done'?'建立新一輪':scope?.value==='outline'?'送出並重擬大綱':w?.status==='TODO'?'送出並執行':'送出修改';
+  const w=target();send.textContent=mode==='stopped'?(has?'送出並繼續':'繼續任務'):mode==='grill'?'送出回答':mode==='outline'?'請 AI 改計畫':mode==='done'?'建立新一輪':scope?.value==='outline'?'請 AI 重排計畫':w?.status==='TODO'?'交給 AI 開始做':'請 AI 照這樣改';
   send.disabled=Boolean(p.running);
   hint.textContent=p.running?(s?(s.unconfirmed?'尚未確認停止，暫時不能送出。':'正在停止，完成後才能送出。'):'可以先寫，停止這次執行後才能送出。'):mode==='grill'?'⌘／Ctrl + Enter 送出':mode==='stopped'?'會先顯示影響範圍再繼續':'';
  }
  area.oninput=()=>{saveDraft(t.id,area.value);error.hidden=true;if(!impact.hidden)impact.querySelector('.btn.subtle')?.click();sync();};
  area.onkeydown=e=>{if(e.key==='Enter'&&(e.metaKey||e.ctrlKey)){e.preventDefault();form.requestSubmit();}};
  const payload=confirm=>({text:area.value,scope:scope?.value||'current',reason:reason?.value||'',confirmImpact:confirm});
- const done=text=>{saveDraft(t.id,'');delete instructDrafts.reason[t.id];delete instructDrafts.scope[t.id];tell(mode==='stopped'?'已繼續任務，AI 從保存的成果接續。':mode==='grill'?'已送出回答，AI 繼續釐清。':mode==='outline'?`${agentOf('C')} 正在依你的意見改大綱。`:mode==='done'?'已建立新一輪，先前的完成紀錄保留。':scope?.value==='outline'?'已送出，大綱重擬後需要你再確認一次。':'已送出補充指示。');};
+ const done=text=>{saveDraft(t.id,'');delete instructDrafts.reason[t.id];delete instructDrafts.scope[t.id];tell(mode==='stopped'?'已繼續任務，AI 從保存的成果接續。':mode==='grill'?'已送出回答，AI 繼續釐清。':mode==='outline'?`${agentOf('C')} 正在依你的意見改計畫。`:mode==='done'?'已建立新一輪，先前的完成紀錄保留。':scope?.value==='outline'?'已送出，計畫重排後需要你再核准一次。':'已送出補充指示。');};
  async function submitWith(confirm,button){
+  if(p.running)return;
   const text=area.value;if(mode!=='stopped'&&!text.trim()){error.textContent=mode==='grill'?'先寫下回答。':'先寫下補充指示。';error.hidden=false;area.focus();return;}
   // 送出前先清草稿避免重建面板時又帶回；失敗時放回並把焦點留在輸入區。
   saveDraft(t.id,'');
@@ -75,8 +83,8 @@ function instructionBox(t,{extraButtons=[]}={}){
    if(e.code==='CONFIRM_IMPACT'){showImpact(imp,e.message,box);return;}
    err.textContent=`沒有送出：${e.message}`;err.hidden=false;box?.focus();}
  }
- function showImpact(box,message,areaNow){const owner=box.closest('form'),sendNow=owner?.querySelector('[data-focus="send-instruct"]');if(sendNow){sendNow.classList.remove('primary');sendNow.hidden=true;}box.replaceChildren();box.hidden=false;box.append(element('strong','送出前確認影響範圍'),element('p',message));const ok=focusKey(element('button','確認並送出','btn primary'),'impact-ok'),cancel=element('button','取消','btn subtle');ok.type='button';cancel.type='button';ok.onclick=busy(ok,()=>submitWith(true,ok));cancel.onclick=()=>{box.hidden=true;box.replaceChildren();if(sendNow){sendNow.hidden=false;if(primary)sendNow.classList.add('primary');}(areaNow||area).focus();};const r=element('div',undefined,'buttons');r.append(ok,cancel);box.append(r);ok.focus();}
- form.onsubmit=e=>{e.preventDefault();if(send.disabled)return;busy(send,()=>submitWith(false,send))();};
+ function showImpact(box,message,areaNow){const owner=box.closest('form'),sendNow=owner?.querySelector('[data-focus="send-instruct"]');if(sendNow){sendNow.classList.remove('primary');sendNow.hidden=true;}box.replaceChildren();box.hidden=false;box.append(element('strong','這樣改會動到這些地方'),element('p',message));const ok=focusKey(element('button','知道了，送出','btn primary'),'impact-ok'),cancel=element('button','取消','btn subtle');ok.type='button';cancel.type='button';ok.onclick=busy(ok,()=>submitWith(true,ok));cancel.onclick=()=>{box.hidden=true;box.replaceChildren();if(sendNow){sendNow.hidden=false;if(primary)sendNow.classList.add('primary');}(areaNow||area).focus();};const r=element('div',undefined,'buttons');r.append(ok,cancel);box.append(r);ok.focus();}
+ form.onsubmit=e=>{e.preventDefault();if(send.disabled)return;return busy(send,()=>submitWith(false,send))();};
  sync();return form;
 }
 // 把工作項目的修改導到同一個輸入區，套用範圍自動選好。

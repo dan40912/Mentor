@@ -24,6 +24,9 @@ node scripts/lab.mjs examples/lab/01-mini-game.md      # 只跑一個
 | [01-mini-game.md](01-mini-game.md) | 單檔 HTML 小遊戲「接水果」 | 遊戲邏輯是純函式，`check.mjs` 用 `node:vm` 驗證計分、命數、加速、邊界 |
 | [02-mini-deck.md](02-mini-deck.md) | 6 頁 HTML 簡報，素材是本 repo 的 README 與設計意圖 | 頁數、字數、每個數字都要在素材找得到、模擬按鍵翻頁 |
 | [03-company-site.md](03-company-site.md) | 虛構公司的一頁式網站 | 區塊順序、價格與資料一致、label、WCAG 對比計算、無外部連線 |
+| [04-data-report.md](04-data-report.md) | CSV 算成一頁報表，含手寫 SVG 圖表 | `check.mjs` 自己重算 CSV，比對報表上的每個數字 |
+| [05-cli-tool.md](05-cli-tool.md) | Node.js 時區換算 CLI | `node:test` 實際執行 CLI，含夏令時間與錯誤碼 |
+| [06-policy-faq.md](06-policy-faq.md) | 規章改寫成新人 FAQ 頁 | 每題要有條號出處、數字都在原文、試算工具用 `node:vm` 驗證 |
 
 ## 結果（2026-10-09，Codex gpt-6-sol medium）
 
@@ -33,6 +36,10 @@ node scripts/lab.mjs examples/lab/01-mini-game.md      # 只跑一個
 | v2 prompt（快速流程，1 個工作項目） | 3／3 | 每案 1 次，只有最後確認成果 | 0 | 4.3～5.7 分鐘 |
 | v1 prompt，Mentor 修正第 1～5 點後 | 3／3 | 每案 3 次，全是確認成果（每個工作項目一次） | 0 | 7.4～10.3 分鐘 |
 | v1 prompt，加上完全自動放行（第 6 點） | 3／3 | 每案 1 次，只有最後確認成果 | 0 | 7.5～7.7 分鐘 |
+
+| 新類型 04～06（v2 寫法） | 3／3 | 每案 1 次 | 0 | 3.5～10.9 分鐘 |
+
+新類型第一次跑時，資料報表卡在驗收：驗收是唯讀沙箱，不能執行會寫檔的 `node build.mjs`。改成在成果的暫存副本裡驗收後（見第 12 點），重跑 1 次介入就完成。
 
 後兩列表示：同一份寫得不夠好的 prompt，工具修好後也能跑完；加上第 6 點，停頓降到跟 v2 一樣只剩最後確認。三案產出的 `check.mjs` 都是 `ALL PASS`。
 
@@ -70,6 +77,8 @@ v2 的三份成果我另外親手確認過：`node check.mjs` 都是 `ALL PASS`�
    已修正：解析時去掉反引號、引號、Markdown 連結與行號。
 11. **素材沒有基準 hash。** v1 簡報的 W3 要證明沒改過素材，一直停下來向人要「任務開始前的 SHA-256」。
    已修正：建立任務時記下產出資料夾既有檔案的 SHA-256，放進每個階段的 prompt。
+12. **驗收不能執行會寫檔的指令。** 唯讀沙箱擋下 `node build.mjs`，凡是「先建置再檢查」的任務都判不了。
+   已修正：驗收在成果的暫存副本裡跑，可以建置與測試，結束後刪掉副本，成果本身不會被改到。資料夾超過 200 MB 時退回唯讀。
 
 ### 還要你決定
 

@@ -1,13 +1,15 @@
-import { mkdir, realpath, readFile, stat, appendFile, readdir } from 'node:fs/promises';
+import { mkdir, realpath, readFile, stat, appendFile, readdir, cp, rm, mkdtemp } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { runAgent, extractJson, AgentError } from './agents.js';
-import { stages, resolveStage, profileOf } from './models.js';
+import { stages, resolveStage, profileOf, providers, resolveModel } from './models.js';
 import { TaskError, sha256, planningStatus, planningAction, ready } from './tasks.js';
 import { HEADINGS } from './memory.js';
 import { outlineSensors, outputSensors } from './sensors.js';
 import { Projects } from './projects.js';
 import { killTree } from './platform.js';
+import { itemName, itemNames } from './item-names.js';
 import { validateFeedback, feedbackBrief } from './feedback.js';
 
 const now = () => new Date().toISOString();
@@ -153,10 +155,10 @@ FILES: 相對路徑, 相對路徑
 未完成：${diary ? `\n${diary}\n最後附上一個 \`\`\`json 區塊：{${diaryField.slice(1)}}` : ''}`;
   },
 
-  E: (task, item) => {
+  E: (task, item, { copy = false } = {}) => {
     const { diary, diaryField, rules } = context(task);
     return `你是 Mentor的「驗收」角色。${VOICE}
-唯讀檢查目前資料夾內的成果，逐條核對驗收條件。不要修改檔案。只採信你實際讀到的內容或自己執行指令的結果，執行者的自述不算證據。
+${copy ? '你在成果的暫存副本裡工作：可以執行建置、測試等會產生檔案的指令來驗證，副本的改動不會保留。不要修改成果來讓它通過，你的工作只是判定。' : '唯讀檢查目前資料夾內的成果，不要修改檔案。'}逐條核對驗收條件。只採信你實際讀到的內容或自己執行指令的結果，執行者的自述不算證據。
 看不到或無法判斷的條件標 NOT_RUN，不要猜 PASS。
 只核對這一項列出的驗收條件。任務卡的其他成功標準由其他工作項目負責，不要因此判 FAIL，fixes 也不要要求做其他項目的事。${item.skeleton ? '\n這一項是骨架版：只確認最小版本走得通，內容不完整是預期的。' : ''}
 另外寫 coaching：教使用者自己 review 時最該看的 3 件事，以及怎麼看（例如打開哪個檔、看哪一段）。${diary}${rules}
@@ -332,7 +334,7 @@ export class Coach {
       if (last?.role === 'ai' && last.stage === 'B' && last.questions?.length) return { stop: { kind: 'answer', label: `回答 AI 的 ${last.questions.length} 個問題` } };
       return { run: () => this.grill(t.id) };
     }
-    if (p.phase === 'outline') return ap.full ? { run: () => this.approveOutlineAuto(t.id) } : { stop: { kind: 'approve', label: '確認大綱與工作拆分' } };
+    if (p.phase === 'outline') return ap.full ? { run: () => this.approveOutlineAuto(t.id) } : { stop: { kind: 'approve', label: '看 AI 的計畫，沒問題就核准' } };
     const items = p.workItems || [];
     const aiItems = items.filter(i => i.owner === 'ai');
     const fixed = ap.fixRounds || {};
@@ -343,15 +345,15 @@ export class Coach {
     const todo = aiItems.find(i => i.status === 'TODO' && ready(items, i, unlockOf(t)));
     if (todo) return { run: () => this.execute(t.id, todo.id) };
     // AI 能做的都做完了，剩下的要人處理
-    if (failing) return { stop: { kind: 'fix-limit', label: `${failing.id}「${failing.title}」自動修了 ${Coach.AUTO_MAX_FIX} 輪仍沒通過，請看驗收意見後決定`, itemId: failing.id } };
+    if (failing) return { stop: { kind: 'fix-limit', label: `${itemName(failing.id)}「${failing.title}」自動修了 ${Coach.AUTO_MAX_FIX} 輪仍沒通過，請看驗收意見後決定`, itemId: failing.id } };
     const blocked = aiItems.find(i => i.status === 'BLOCKED');
     if (blocked) {
       const b = blocked.blocked || {};
       const why = b.kind === 'tool' ? '做不下去' : '需要你補資訊';
-      return { stop: { kind: 'needs-info', blocked: b.kind || 'info', label: `${blocked.id}「${blocked.title}」${why}${b.reason ? `：${b.reason}` : ''}${b.count > 1 ? `（同一原因第 ${b.count} 次）` : ''}`, itemId: blocked.id } };
+      return { stop: { kind: 'needs-info', blocked: b.kind || 'info', label: `${itemName(blocked.id)}「${blocked.title}」${why}${b.reason ? `：${b.reason}` : ''}${b.count > 1 ? `（同一原因第 ${b.count} 次）` : ''}`, itemId: blocked.id } };
     }
     const reviewed = aiItems.filter(i => i.status === 'REVIEWED');
-    if (reviewed.length) return { stop: { kind: 'confirm', label: `確認 ${reviewed.length} 項 AI 驗收通過的成果（${reviewed.map(i => i.id).join('、')}）` } };
+    if (reviewed.length) return { stop: { kind: 'confirm', label: `確認 ${reviewed.length} 項 AI 驗收通過的成果（${itemNames(reviewed.map(i => i.id))}）` } };
     const human = items.find(i => i.owner === 'human' && i.status === 'TODO' && ready(items, i));
     if (human) return { stop: { kind: 'human', label: `輪到你：${human.title}`, itemId: human.id } };
     return { stop: { kind: 'wait', label: '等前置項目完成' } };
@@ -360,11 +362,11 @@ export class Coach {
   approveOutlineAuto(id) {
     // 完全自動：大綱視為通過。仍寫入稽核事件，標明是自動通過。
     return this.latest(id).then(t => this.store.mutate(id, t.revision, null, x => {
-      if (x.planning.phase !== 'outline') throw new TaskError(409, 'WRONG_PHASE', '目前沒有待確認的大綱。');
+      if (x.planning.phase !== 'outline') throw new TaskError(409, 'WRONG_PHASE', '目前沒有待確認的計畫。');
       x.planning.phase = 'execute';
-      x.next = '依工作項目順序執行；每項完成後送驗收，再由你確認。';
+      x.next = '依工作項目順序執行；每項完成後讓 AI 檢查，再由你確認。';
       return { status: planningStatus(x) };
-    }, 'approve-auto', {})).then(async r => { await this.audit(id, 'GATE_AUTO_APPROVED', { stage: 'C', note: '完全自動模式，大綱自動通過' }); return { done: Promise.resolve(r), task: r.task }; });
+    }, 'approve-auto', {})).then(async r => { await this.audit(id, 'GATE_AUTO_APPROVED', { stage: 'C', note: '完全自動模式，計畫自動通過' }); return { done: Promise.resolve(r), task: r.task }; });
   }
 
   async setAutopilot(id, revision, key, { full = false, on = true, provider = null } = {}) {
@@ -476,8 +478,11 @@ export class Coach {
   }
 
   // override：只換這一次的 AI，不改角色設定。沿用設定裡該 AI 已選的模型，沒有就用 CLI 預設。
-  agentFor(stageId, override = null) {
-    let agent = resolveStage(this.settings(), stageId);
+  // 任務自己的 AI 優先，沒設定才用全域角色設定。F 沿用 D 時也沿用任務對 D 的設定。
+  agentFor(stageId, override = null, task = null) {
+    const own = task?.planning?.agents || {};
+    const sameAsD = stageId === 'F' && !own.F && (this.settings().stages?.F?.provider ?? 'same-as-D') === 'same-as-D';
+    let agent = own[stageId] || (sameAsD && own.D) || resolveStage(this.settings(), stageId);
     if (override && override !== agent.provider) {
       if (!['codex', 'claude', 'copilot'].includes(override)) throw new TaskError(400, 'PROVIDER_INVALID', '只能改用 Codex、Claude Code 或 GitHub Copilot。');
       const used = Object.values(this.settings().stages || {}).find(v => v?.provider === override);
@@ -495,8 +500,8 @@ export class Coach {
 
   // AI 在背景執行：先標記 running 並立即回應，跑完再用最新 revision 寫回結果。
   async withAgent(id, stageId, mode, cwd, buildPrompt, apply, metadata = {}) {
-    const agent = this.agentFor(stageId, metadata.provider || this.overrides.get(id));
     let task = await this.latest(id);
+    const agent = this.agentFor(stageId, metadata.provider || this.overrides.get(id), task);
     task.folderListing = await this.listing(task.allowedRoots[0]);
     if (task.planning.running || this.pending.has(id)) throw new TaskError(409, 'AGENT_BUSY', 'AI 還在進行中，等它完成再操作。');
     if (task.trashed) throw new TaskError(409, 'TASK_TRASHED', '任務在回收桶，請先還原。');
@@ -585,7 +590,26 @@ export class Coach {
     return { ...started, done };
   }
 
-  async create({ request, outputDir, profile = 'standard', project = '', autopilot = false, full = false }) {
+  // 「provider|modelKey」轉成任務的 AI 設定；inherit 表示沿用角色設定。
+  static parseAgents(input) {
+    if (input == null || input === 'inherit') return null;
+    const [provider, key = 'default'] = String(input).split('|');
+    if (!providers.some(p => p.id === provider && p.runnable)) throw new TaskError(400, 'PROVIDER_INVALID', '找不到這個 AI。');
+    try { return resolveModel(provider, key); } catch { throw new TaskError(400, 'MODEL_INVALID', '這個 AI 沒有這個模型。'); }
+  }
+
+  // 整個任務改用同一個 AI 與模型；只影響之後的執行。
+  async setAgents(id, revision, key, { all }) {
+    const agent = Coach.parseAgents(all);
+    return this.store.mutate(id, revision, key, t => {
+      if (!t.planning) throw new TaskError(400, 'NOT_PLANNING', '這個任務不是教練流程。');
+      t.planning.agents = agent ? Object.fromEntries(stages.map(s => [s.id, agent])) : null;
+      return { status: planningStatus(t) };
+    }, 'agents', { all }).then(async r => { await this.audit(id, 'AGENTS_SET', { all: all || 'inherit' }); return r; });
+  }
+
+  async create({ request, outputDir, profile = 'standard', project = '', autopilot = false, full = false, agent = null }) {
+    const chosen = Coach.parseAgents(agent);
     if (!['quick', 'standard', 'thorough'].includes(profile)) throw new TaskError(400, 'PROFILE_INVALID', '工作流程只能是快速、標準或完整。');
     if (typeof request !== 'string' || request.trim().length < 4 || request.length > 6000) throw new TaskError(400, 'REQUEST_INVALID', '請用一兩句話描述想完成的事。');
     if (typeof project !== 'string' || project.length > 40) throw new TaskError(400, 'PROJECT_INVALID', '專案名稱最多 40 字。');
@@ -608,8 +632,8 @@ export class Coach {
       scope: { allowed: ['只在產出資料夾內建立或修改檔案'], locked: [], forbidden: ['對外發布、上傳或寄送', '修改產出資料夾以外的檔案'] },
       current: { summary: '剛建立，正在整理任務卡。', artifact: null, sources: [] },
       decisions: [], checks: [], facts: [], learnings: [], parked: [], reports: [],
-      next: '先完成 Grill，再擬定大綱。',
-      planning: { phase: 'grill', profile, projectLocked: Boolean(project), projectBrief: await new Projects(path.join(this.root,'vault','projects')).context(project || '未分類'), rules: await this.memory.rules(project || '未分類'), diary: [], request: request.trim(), card: { title: '', project: project || '未分類', goal: request.trim(), audience: '', deliverable: '', success: [], constraints: [], unknowns: [] }, messages: [{ id: randomUUID(), role: 'user', stage: 'A', text: request.trim(), at: now() }], outline: null, workItems: [], running: null, readyForOutline: false, baseline, feedback: [], feedbackSince: now(), feedbackBrief: feedbackBrief(await this.store.list(), project || '未分類') }
+      next: '先完成需求釐清，再讓 AI 擬計畫。',
+      planning: { phase: 'grill', profile, projectLocked: Boolean(project), projectBrief: await new Projects(path.join(this.root,'vault','projects')).context(project || '未分類'), rules: await this.memory.rules(project || '未分類'), diary: [], request: request.trim(), card: { title: '', project: project || '未分類', goal: request.trim(), audience: '', deliverable: '', success: [], constraints: [], unknowns: [] }, messages: [{ id: randomUUID(), role: 'user', stage: 'A', text: request.trim(), at: now() }], outline: null, workItems: [], running: null, readyForOutline: false, baseline, agents: chosen ? Object.fromEntries(stages.map(s => [s.id, chosen])) : null, feedback: [], feedbackSince: now(), feedbackBrief: feedbackBrief(await this.store.list(), project || '未分類') }
     };
     await this.store.create(task);
     await this.audit(id, 'TASK_CREATED', { request: request.trim(), profile, outputDir: real });
@@ -700,7 +724,7 @@ export class Coach {
       }
       t.planning.readyForOutline = Boolean(json?.ready);
       this.addDiary(t, 'B', json?.diary, agent);
-      t.planning.messages.push({ id: randomUUID(), role: 'ai', stage: 'B', agent, text: json ? (json.ready ? `資訊夠了，可以擬定大綱。${json.readyReason || ''}` : '') : text, questions: json?.questions || [], coaching: json?.coaching || '', parseError: !json, at: now() });
+      t.planning.messages.push({ id: randomUUID(), role: 'ai', stage: 'B', agent, text: json ? (json.ready ? `資訊夠了，可以讓 AI 擬計畫。${json.readyReason || ''}` : '') : text, questions: json?.questions || [], coaching: json?.coaching || '', parseError: !json, at: now() });
     }, { provider });
   }
 
@@ -709,15 +733,15 @@ export class Coach {
     const current = await this.latest(id);
     // 接續被停止的擬大綱，或已確認大綱要改：這兩種允許在其他階段重新擬定。
     replan ||= Boolean(current.planning?.stopped?.stage === 'C' && current.planning.stopped.replan);
-    if (feedback && current.planning?.phase !== 'outline' && !replan && current.planning?.stopped?.stage !== 'C') throw new TaskError(409, 'WRONG_PHASE', '目前沒有可以修改的大綱。');
+    if (feedback && current.planning?.phase !== 'outline' && !replan && current.planning?.stopped?.stage !== 'C') throw new TaskError(409, 'WRONG_PHASE', '目前沒有可以修改的計畫。');
     const started = await this.withAgent(id, 'C', 'read', current.allowedRoots[0], t => {
-      if (t.planning.phase !== 'grill' && t.planning.phase !== 'outline' && !(replan && t.planning.phase === 'execute')) throw new TaskError(409, 'WRONG_PHASE', '大綱已確認，不能重新擬定。');
+      if (t.planning.phase !== 'grill' && t.planning.phase !== 'outline' && !(replan && t.planning.phase === 'execute')) throw new TaskError(409, 'WRONG_PHASE', '計畫已確認，不能重新擬定。');
       const keep = replan ? `\n\n【已確認大綱的修改】這份大綱已經確認、正在執行。沿用既有工作項目的 id；沒有要改的項目保持標題與驗收標準原樣，已完成的成果會保留。目前狀態：${t.planning.workItems.map(w => `${w.id}「${w.title}」${w.status}`).join('、')}` : '';
       return prompts.C(t, feedback || (replan ? '依使用者補充指示修改已確認的大綱' : '')) + keep;
     }, (t, text, agent) => {
       const json = extractJson(text);
       if (!json?.outline || !Array.isArray(json.workItems)) {
-        throw new AgentError('RESPONSE_INVALID', '擬定大綱的回覆缺少可解析的 outline 或 workItems。');
+        throw new AgentError('RESPONSE_INVALID', '擬計畫的回覆缺少可解析的 outline 或 workItems。');
       }
       t.planning.outline = { ...json.outline, coaching: json.coaching || '', agent, at: now(), version: (t.planning.outline?.version || 0) + 1, feedback: feedback || null };
       t.planning.outline.sensors = outlineSensors(t.planning.outline);
@@ -729,7 +753,7 @@ export class Coach {
       if (profileOf(t.planning.profile).skeleton && items.some(i => i.owner === 'ai')) {
         let skeleton = items.find(i => i.owner === 'ai' && /骨架/.test(i.title));
         if (!skeleton) {
-          skeleton = { id: 'W0', title: '骨架版', detail: '最小但從頭到尾走得通的版本，讓你先確認方向與結構。', owner: 'ai', acceptance: ['可以從頭到尾打開瀏覽', '段落順序與大綱主線一致'], dependsOn: [], status: 'TODO', attempts: 0, outputs: [], review: null, fixes: [] };
+          skeleton = { id: 'W0', title: '骨架版', detail: '最小但從頭到尾走得通的版本，讓你先確認方向與結構。', owner: 'ai', acceptance: ['可以從頭到尾打開瀏覽', '段落順序與計畫主線一致'], dependsOn: [], status: 'TODO', attempts: 0, outputs: [], review: null, fixes: [] };
           items.unshift(skeleton);
         }
         skeleton.skeleton = true;
@@ -743,24 +767,24 @@ export class Coach {
           const old = before.get(next.id);
           if (!old) { next.added = true; continue; }
           const same = old.title === next.title && JSON.stringify(old.acceptance) === JSON.stringify(next.acceptance) && old.owner === next.owner;
-          items[index] = same ? { ...old, dependsOn: next.dependsOn, detail: next.detail || old.detail } : { ...next, previousOutputs: old.outputs?.length ? old.outputs : old.previousOutputs, recheck: old.status === 'DONE' || old.status === 'REVIEWED' ? '大綱修改後內容改變，需重新執行與驗收' : null };
+          items[index] = same ? { ...old, dependsOn: next.dependsOn, detail: next.detail || old.detail } : { ...next, previousOutputs: old.outputs?.length ? old.outputs : old.previousOutputs, recheck: old.status === 'DONE' || old.status === 'REVIEWED' ? '計畫修改後內容改變，需重新執行與驗收' : null };
         }
         t.planning.removedItems = [...(t.planning.removedItems || []), ...[...before.values()].filter(w => !items.some(i => i.id === w.id)).map(w => ({ ...w, removedAt: now() }))];
       }
       t.planning.workItems = items;
       this.addDiary(t, 'C', json.diary, agent);
       t.planning.phase = 'outline';
-      t.current.summary = `大綱已擬定：${json.outline.sections?.length || 0} 段、${json.outline.imageTotal ?? 0} 張圖，拆成 ${t.planning.workItems.length} 個工作項目。`;
-    }, { userInput: instruction || feedback || '依目前任務卡與素材擬定大綱', inputKind: instruction || feedback ? 'user' : 'action', instruction: '' });
+      t.current.summary = `計畫已擬定：${json.outline.sections?.length || 0} 段、${json.outline.imageTotal ?? 0} 張圖，拆成 ${t.planning.workItems.length} 個工作項目。`;
+    }, { userInput: instruction || feedback || '依目前任務卡與素材擬計畫', inputKind: instruction || feedback ? 'user' : 'action', instruction: '' });
     if (feedback) await this.audit(id, 'CHANGES_REQUESTED', { stage: 'C', text: feedback });
     return started;
   }
 
   approveOutline(id, revision, key) {
     return this.store.mutate(id, revision, key, t => {
-      if (t.planning?.phase !== 'outline') throw new TaskError(409, 'WRONG_PHASE', '目前沒有待確認的大綱。');
+      if (t.planning?.phase !== 'outline') throw new TaskError(409, 'WRONG_PHASE', '目前沒有待確認的計畫。');
       t.planning.phase = 'execute';
-      t.next = '依工作項目順序執行；每項完成後送驗收，再由你確認。';
+      t.next = '依工作項目順序執行；每項完成後讓 AI 檢查，再由你確認。';
       return { status: planningStatus(t) };
     }, 'approve', {}).then(async result => { await this.audit(id, 'GATE_APPROVED', { stage: 'C', outlineVersion: result.task.planning.outline.version }); return result; });
   }
@@ -775,9 +799,9 @@ export class Coach {
     const outDir = (await this.latest(id)).allowedRoots[0];
     return this.withAgent(id, stageId, 'write', outDir, t => {
       const item = this.item(t, itemId);
-      if (t.planning.phase !== 'execute') throw new TaskError(409, 'WRONG_PHASE', '請先確認大綱。');
+      if (t.planning.phase !== 'execute') throw new TaskError(409, 'WRONG_PHASE', '請先核准計畫。');
       if (item.owner !== 'ai') throw new TaskError(400, 'HUMAN_ITEM', '這一項由你完成。');
-      if (stageId === 'D' && item.status !== 'TODO') throw new TaskError(409, 'ITEM_STARTED', '這一項已經執行過；驗收沒過請用「交給修改」。');
+      if (stageId === 'D' && item.status !== 'TODO') throw new TaskError(409, 'ITEM_STARTED', '這一項已經執行過；驗收沒過請用「讓 AI 照意見改」。');
       if (stageId === 'F' && item.status !== 'REVIEW_FAIL') throw new TaskError(409, 'NOTHING_TO_FIX', '這一項目前沒有待修正的驗收意見。');
       if (!ready(t.planning.workItems, item, unlockOf(t))) throw new TaskError(409, 'DEPENDENCY_PENDING', '前置項目還沒完成。');
       return prompts.D(t, item, t.planning.workItems.filter(i => unlockOf(t).includes(i.status))) + (item.instructions?.length ? `\n\n這一項的使用者補充指示（原文）：\n${item.instructions.map(x => `- ${x.text}`).join('\n')}` : '');
@@ -812,11 +836,29 @@ export class Coach {
     }, { workItemId: itemId });
   }
 
-  review(id, itemId, instruction = '') {
-    return this.latest(id).then(task => this.withAgent(id, 'E', 'read', task.allowedRoots[0], t => {
+  // 驗收在成果的暫存副本裡跑：可以執行會寫檔的建置與測試，成果本身不會被改到。
+  // 資料夾太大或複製失敗時，退回唯讀檢查原資料夾。
+  async reviewCopy(outDir) {
+    try {
+      let size = 0;
+      const walk = async dir => { for (const e of await readdir(dir, { withFileTypes: true })) { const full = path.join(dir, e.name); if (e.isDirectory()) await walk(full); else if (e.isFile()) size += (await stat(full)).size; if (size > 200 * 1024 * 1024) throw new Error('TOO_BIG'); } };
+      await walk(outDir);
+      const copy = path.join(await mkdtemp(path.join(tmpdir(), 'awc-review-')), path.basename(outDir));
+      await cp(outDir, copy, { recursive: true, verbatimSymlinks: true });
+      return copy;
+    } catch { return null; }
+  }
+
+  async review(id, itemId, instruction = '') {
+    const task = await this.latest(id);
+    const copy = await this.reviewCopy(task.allowedRoots[0]);
+    const cleanup = () => copy && rm(path.dirname(copy), { recursive: true, force: true }).catch(() => {});
+    let started;
+    try {
+      started = await this.withAgent(id, 'E', copy ? 'write' : 'read', copy || task.allowedRoots[0], t => {
       const item = this.item(t, itemId);
       if (item.status !== 'AWAITING_REVIEW') throw new TaskError(409, 'NOT_READY_FOR_REVIEW', '這一項還沒有可驗收的成果。');
-      return prompts.E(t, item);
+      return prompts.E(t, item, { copy: Boolean(copy) });
     }, (t, text, agent) => {
       const item = this.item(t, itemId);
       const json = extractJson(text);
@@ -827,7 +869,10 @@ export class Coach {
       // AI 驗收通過只是輔助證據，最後由人確認。
       item.status = pass ? 'REVIEWED' : 'REVIEW_FAIL';
       this.addDiary(t, 'E', json?.diary, agent);
-    }, { workItemId: itemId, ...(instruction ? { instruction, userInput: instruction, inputKind: 'user' } : {}) }));
+    }, { workItemId: itemId, ...(instruction ? { instruction, userInput: instruction, inputKind: 'user' } : {}) });
+    } catch (error) { cleanup(); throw error; }
+    started.done.finally(cleanup);
+    return started;
   }
 
   fix(id, itemId) {
@@ -854,37 +899,37 @@ export class Coach {
     if (p.running) throw new TaskError(409, 'AGENT_BUSY', 'AI 還在執行。可以先寫，停止這次執行後才能送出。');
     const items = p.workItems || [];
     const doneIds = items.filter(i => i.status === 'DONE').map(i => i.id);
-    const keepText = ids => ids.length ? `${ids.join('、')} 保持原樣。` : '';
+    const keepText = ids => ids.length ? `${itemNames(ids)} 保持原樣。` : '';
     if (p.stopped) {
       const s = p.stopped;
-      const redo = s.stage === 'A' ? '會重新制定任務卡，完成後接著需求釐清' : `會重做${stageName(s.stage)}${s.itemId ? ` ${s.itemId}` : ''}`;
+      const redo = s.stage === 'A' ? '會重新制定任務卡，完成後接著需求釐清' : `會重做${stageName(s.stage)}${s.itemId ? ` ${itemName(s.itemId)}` : ''}`;
       const files = s.changed?.length ? `中斷期間變動的 ${s.changed.length} 個檔案會先核對，不算完成。` : '';
       return { route: 'resume', label: text ? '送出並繼續' : '繼續任務', impact: `${redo}；${keepText(doneIds.filter(x => x !== s.itemId)) || '已確認的成果保持原樣。'}${files}${s.afterRestart ? '服務曾重啟，無法確認上次的 CLI 是否已結束，請先確認沒有殘留程序。' : ''}` };
     }
     if (!text.trim()) throw new TaskError(400, 'TEXT_REQUIRED', '請先寫下補充指示。');
     if (p.phase === 'grill') return { route: 'answer', label: '送出回答', impact: null };
-    if (p.phase === 'outline') return { route: 'outline', label: '送出大綱修改', impact: null };
+    if (p.phase === 'outline') return { route: 'outline', label: '請 AI 改計畫', impact: null };
     if (p.phase === 'done') {
       const n = items.filter(i => /^R\d+$/.test(i.id)).length + 1;
-      return { route: 'round', itemId: `R${n}`, label: '建立新一輪', impact: `任務會從已完成改回進行中，新增第 ${n} 輪工作項目 R${n} 交給${stageName('D')}；${keepText(doneIds) || '先前的完成紀錄保留。'}` };
+      return { route: 'round', itemId: `R${n}`, label: '建立新一輪', impact: `任務會從已完成改回進行中，新增${itemName(`R${n}`)}工作項目交給${stageName('D')}；${keepText(doneIds) || '先前的完成紀錄保留。'}` };
     }
     if (scope === 'outline') {
-      return { route: 'replan', label: '送出並重擬大綱', impact: `已確認的大綱會重新擬定，需要你再確認一次。內容沒變的項目保留狀態；被修改的已完成項目會改回待執行並重新驗收，舊成果保留。${doneIds.length ? `目前已完成：${doneIds.join('、')}。` : ''}` };
+      return { route: 'replan', label: '請 AI 重排計畫', impact: `已確認的計畫會重新擬定，需要你再確認一次。內容沒變的項目保留狀態；被修改的已完成項目會改回待執行並重新驗收，舊成果保留。${doneIds.length ? `目前已完成：${itemNames(doneIds)}。` : ''}` };
     }
     const next = items.find(i => i.id === planningAction(t)?.id);
     // 「目前步驟」指向由你完成的項目時，改套用第一個還沒完成的 AI 項目。
     const target = scope && scope !== 'current' ? items.find(i => i.id === scope) : next?.owner === 'ai' ? next : items.find(i => i.owner === 'ai' && i.status !== 'DONE');
-    if (!target) throw new TaskError(400, 'SCOPE_REQUIRED', '請選擇要套用的工作項目，或選「整個大綱」。');
+    if (!target) throw new TaskError(400, 'SCOPE_REQUIRED', '請選擇要套用的工作項目，或選「重排整個計畫（排好後你要再核准一次）」。');
     if (target.owner !== 'ai') throw new TaskError(400, 'HUMAN_ITEM', '這一項由你完成，不交給 AI。');
     if (target.status === 'TODO') {
-      if (!ready(items, target)) throw new TaskError(409, 'DEPENDENCY_PENDING', `${target.id} 的前置項目還沒完成。`);
-      return { route: 'execute', itemId: target.id, label: '送出並執行', impact: null };
+      if (!ready(items, target)) throw new TaskError(409, 'DEPENDENCY_PENDING', `${itemName(target.id)} 的前置項目還沒完成。`);
+      return { route: 'execute', itemId: target.id, label: '交給 AI 開始做', impact: null };
     }
     const dependents = items.filter(i => i.id !== target.id && i.dependsOn?.includes(target.id) && i.status !== 'TODO').map(i => i.id);
     if (target.status === 'DONE') {
-      return { route: 'fix', itemId: target.id, label: '送出修改', impact: `${target.id} 已確認，會改回待修改並重新驗收${dependents.length ? `；依賴它的 ${dependents.join('、')} 標為待核對` : ''}。${keepText(doneIds.filter(x => x !== target.id))}` };
+      return { route: 'fix', itemId: target.id, label: '請 AI 照這樣改', impact: `${itemName(target.id)} 已確認，會改回待修改並重新驗收${dependents.length ? `；依賴它的 ${itemNames(dependents)} 標為待核對` : ''}。${keepText(doneIds.filter(x => x !== target.id))}` };
     }
-    return { route: 'fix', itemId: target.id, label: '送出修改', impact: dependents.length ? `會修改 ${target.id} 並重新驗收；依賴它的 ${dependents.join('、')} 標為待核對。` : null };
+    return { route: 'fix', itemId: target.id, label: '請 AI 照這樣改', impact: dependents.length ? `會修改 ${itemName(target.id)} 並重新驗收；依賴它的 ${itemNames(dependents)} 標為待核對。` : null };
   }
 
   async instruct(id, revision, key, { text = '', scope = 'current', reason = '', confirmImpact = false, dryRun = false } = {}) {
@@ -917,13 +962,13 @@ export class Coach {
         const item = this.item(t, plan.itemId);
         (item.instructions ||= []).push({ text, at: now() });
         const dependents = t.planning.workItems.filter(i => i.dependsOn?.includes(item.id) && i.status !== 'TODO');
-        for (const d of dependents) d.recheck = `前置項目 ${item.id} 已修改，請重新核對`;
+        for (const d of dependents) d.recheck = `前置項目 ${itemName(item.id)} 已修改，請重新核對`;
         Object.assign(item, { status: 'REVIEW_FAIL', fixes: [...(item.fixes || []), text], review: item.review ? { ...item.review, superseded: true } : null, doneAt: undefined });
       }
       if (plan.route === 'round') {
         t.planning.phase = 'execute';
-        t.planning.workItems.push({ id: plan.itemId, title: `第 ${plan.itemId.slice(1)} 輪：${text.replace(/\s+/g, ' ').slice(0, 28)}`, detail: text, owner: 'ai', acceptance: ['依這一輪補充指示完成，且不破壞先前已確認的成果'], dependsOn: [], status: 'TODO', attempts: 0, outputs: [], review: null, fixes: [], instructions: [{ text, at: now() }], round: true });
-        t.current.summary = `已完成的任務開始第 ${plan.itemId.slice(1)} 輪補充。`;
+        t.planning.workItems.push({ id: plan.itemId, title: `${itemName(plan.itemId)}：${text.replace(/\s+/g, ' ').slice(0, 28)}`, detail: text, owner: 'ai', acceptance: ['依這一輪補充指示完成，且不破壞先前已確認的成果'], dependsOn: [], status: 'TODO', attempts: 0, outputs: [], review: null, fixes: [], instructions: [{ text, at: now() }], round: true });
+        t.current.summary = `已完成的任務開始${itemName(plan.itemId)}補充。`;
       }
       return { status: planningStatus(t) };
     }, 'instruct', { text, scope, reason, route: plan.route });
@@ -966,14 +1011,14 @@ export class Coach {
         if (item.status !== 'TODO') throw new TaskError(409, 'ITEM_CLOSED', '這一項已完成。');
         Object.assign(item, { status: 'DONE', humanNote: String(note).slice(0, 2000), doneAt: now() });
       } else {
-        if (item.status !== 'REVIEWED' && item.status !== 'REVIEW_FAIL' && item.status !== 'BLOCKED') throw new TaskError(409, 'NOT_REVIEWED', '先送驗收，再由你確認。');
+        if (item.status !== 'REVIEWED' && item.status !== 'REVIEW_FAIL' && item.status !== 'BLOCKED') throw new TaskError(409, 'NOT_REVIEWED', '先讓 AI 檢查，再由你確認。');
         if (accept && item.status !== 'REVIEWED') throw new TaskError(409, 'NOT_REVIEWED', '這一項還沒通過驗收；可以退回並寫下要補的資訊。');
         if (accept) Object.assign(item, { status: 'DONE', humanNote: String(note).slice(0, 2000), doneAt: now() });
         else {
           if (!String(note).trim()) throw new TaskError(400, 'NOTE_REQUIRED', '退回時寫下要修什麼，修改的 AI 會照這段做。');
           Object.assign(item, { status: 'REVIEW_FAIL', fixes: [...(item.fixes || []), String(note).trim()] });
           // 完全自動時後續項目可能已經用它做下去了，標成待核對。
-          for (const d of t.planning.workItems.filter(i => i.dependsOn?.includes(item.id) && i.status !== 'TODO')) d.recheck = `前置項目 ${item.id} 被退回，請重新核對`;
+          for (const d of t.planning.workItems.filter(i => i.dependsOn?.includes(item.id) && i.status !== 'TODO')) d.recheck = `前置項目 ${itemName(item.id)} 被退回，請重新核對`;
         }
       }
       if (t.planning.workItems.every(i => i.status === 'DONE')) {

@@ -214,6 +214,8 @@ test('standard profile: skeleton first, sensors, diary, learning loop, rules for
   assert.ok(skeleton.skeleton);
   assert.ok(rest.filter(i => i.owner === 'ai').every(i => i.dependsOn.includes('W0')), '其他 AI 項目等骨架完成');
   assert.equal(task.planning.outline.sensors.find(s => s.id === 'claim-sources').result, 'FAIL', '「無依據」的段落被抓出來');
+  assert.deepEqual(skeleton.acceptance, ['可以從頭到尾打開瀏覽', '段落順序與計畫主線一致']);
+  assert.equal(task.planning.learningTurns.at(-1).userInput, '依目前任務卡與素材擬計畫');
 
   await (await coach.draftOutline(task.id, '第二段要補數據來源')).done;
   task = await latest(store, task.id);
@@ -337,7 +339,7 @@ test('DONE without any file is treated as fake completion, and prompts carry the
   assert.match(prompts.B(task), /不要再問使用者資料在哪裡/);
   // 停下的原因直接寫在等你的那一行，不用打開紀錄
   assert.deepEqual(w1.blocked && { kind: w1.blocked.kind, reason: w1.blocked.reason, count: w1.blocked.count }, { kind: 'tool', reason: '回報完成但沒有產出檔案', count: 1 });
-  assert.match(coach.nextStep(task, {}).stop.label, /W1「產出 HTML」做不下去：回報完成但沒有產出檔案$/);
+  assert.match(coach.nextStep(task, {}).stop.label, /第 1 項「產出 HTML」做不下去：回報完成但沒有產出檔案$/);
 });
 
 test('blocked reasons, repeated stops, and review prompts that see the report but stay in scope', () => {
@@ -373,6 +375,41 @@ test('files already in the output folder are recorded as material with a SHA-256
   const task = await latest(store, created.task.id);
   assert.deepEqual(task.planning.baseline.map(b => b.file), ['README.md']);
   assert.match(prompts.A(task), /README\.md  [0-9a-f]{64}/);
+});
+
+test('review runs in a disposable copy and leaves the real outputs untouched', async () => {
+  const { store, coach } = await setup();
+  const created = await coach.create({ request: '我要做一份新品簡報給主管', profile: 'quick' });
+  await created.done;
+  let task = await latest(store, created.task.id);
+  await (await coach.answer(task.id, task.revision, 'k-c1', { message: '十頁' })).done;
+  await (await coach.draftOutline(task.id)).done;
+  task = await latest(store, task.id);
+  task = (await coach.approveOutline(task.id, task.revision, 'k-c2')).task;
+  await (await coach.execute(task.id, 'W1')).done;
+  const before = await readFile(path.join(task.allowedRoots[0], 'deck.html'), 'utf8');
+  const started = await coach.review(task.id, 'W1');
+  const copy = (await latest(store, task.id)).planning.learningTurns.at(-1).prompt;
+  assert.match(copy, /你在成果的暫存副本裡工作/);
+  await started.done;
+  await new Promise(r => setTimeout(r, 50));
+  assert.equal(await readFile(path.join(task.allowedRoots[0], 'deck.html'), 'utf8'), before);
+  assert.equal((await latest(store, task.id)).planning.workItems[0].status, 'REVIEWED');
+});
+
+test('a task can choose its own AI and model; runs and F use it, inherit goes back to settings', async () => {
+  const { store, coach } = await setup();
+  const created = await coach.create({ request: '我要做一份新品簡報給主管', profile: 'quick', agent: 'claude|opus-high' });
+  await created.done;
+  let task = await latest(store, created.task.id);
+  assert.deepEqual(task.planning.agents.A, { provider: 'claude', modelId: 'opus', effort: 'high' });
+  assert.match(task.planning.learningTurns[0].agent, /claude.*opus high/i);
+  assert.deepEqual(coach.agentFor('F', null, task), { provider: 'claude', modelId: 'opus', effort: 'high' });
+  task = (await coach.setAgents(task.id, task.revision, 'k-ag1', { all: 'inherit' })).task;
+  assert.equal(task.planning.agents, null);
+  assert.equal(coach.agentFor('A', null, task).provider, 'codex');
+  await assert.rejects(coach.setAgents(task.id, task.revision, 'k-ag2', { all: 'codex|no-such-model' }), { code: 'MODEL_INVALID' });
+  await assert.rejects(coach.create({ request: '再做一份', agent: 'nobody|x' }), { code: 'PROVIDER_INVALID' });
 });
 
 test('GitHub Copilot is limited to tool-free chat stages', () => {

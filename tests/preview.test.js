@@ -109,7 +109,9 @@ test('preview UI keeps artifact bytes out of the console DOM and preserves keybo
   new vm.Script(script);
   const preview = script.slice(script.indexOf('async function openPreview('), script.indexOf('// 行內表單取代 prompt()'));
   assert.match(preview, /setAttribute\('sandbox',ext==='html'\?'allow-scripts':''\)/);
-  assert.match(preview, /node\.src=url;content\.replaceChildren\(node\)/);
+  // 用已抓到的內容做 blob 網址，不讓 iframe 再對 API 發一次請求；內容不進主頁 DOM
+  assert.match(preview, /previewBlob=URL\.createObjectURL\(body\);\s*node\.src=previewBlob;content\.replaceChildren\(node\)/);
+  assert.match(preview, /http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; connect-src 'none'; form-action 'none'/);
   assert.match(preview, /catch\(error\)\{if\(dialog\.open&&previewReturn\?\.file===file&&previewReturn\?\.taskId===taskId&&previewReturn\?\.trigger===trigger\)/);
   assert.doesNotMatch(preview, /innerHTML|srcdoc|\.textContent\s*=\s*await response\.text/);
   assert.match(html, /id="preview-dialog"/);

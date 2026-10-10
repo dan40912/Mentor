@@ -34,10 +34,10 @@ export async function outputSensors(outDir, item, outline) {
     const text = (await Promise.all(html.map(f => readFile(f.full, 'utf8')))).join('\n');
     const visuals = (text.match(/<(img|svg|canvas|figure)\b/gi) || []).length;
     const planned = Number(outline.imageTotal ?? 0);
-    if (planned && !item.skeleton) results.push(sensor('visual-count', '圖片與圖表數量符合大綱', visuals >= planned ? 'PASS' : 'FAIL', `HTML 內有 ${visuals} 個圖像元素，大綱規劃 ${planned} 張`));
+    if (planned && !item.skeleton) results.push(sensor('visual-count', '圖片與圖表數量符合計畫', visuals >= planned ? 'PASS' : 'FAIL', `HTML 內有 ${visuals} 個圖像元素，計畫規劃 ${planned} 張`));
     const plain = text.replace(/<[^>]+>/g, ' ');
     const absent = (outline.sections || []).filter(s => s.title && !plain.includes(s.title));
-    if (!item.skeleton) results.push(sensor('upstream-coverage', '大綱每段都有出現', absent.length ? 'FAIL' : 'PASS',
+    if (!item.skeleton) results.push(sensor('upstream-coverage', '計畫每段都有出現', absent.length ? 'FAIL' : 'PASS',
       absent.length ? `找不到段落標題：${absent.map(s => `${s.no}. ${s.title}`).join('、')}` : `${outline.sections?.length || 0} 段標題都在 HTML 裡`));
   }
   return results;

@@ -4,6 +4,7 @@ import path from 'node:path';
 import { renameReplace } from './platform.js';
 import { pendingFeedback } from './feedback.js';
 import { stages } from './models.js';
+import { itemName } from './item-names.js';
 
 const stageName = id => stages.find(s => s.id === id)?.name || id;
 
@@ -66,9 +67,9 @@ function renderHuman(task) {
     `**成功標準**：${(p.card.success || []).join('；') || '未定'}`,
     `**未知**：${(p.card.unknowns || []).join('；') || '無'}`,
     '',
-    ...(p.outline ? [`## 大綱`, `**主線**：${p.outline.storyline}`, `**邏輯**：${(p.outline.logic || []).join(' → ')}`,
+    ...(p.outline ? [`## 成品架構`, `**主線**：${p.outline.storyline}`, `**邏輯**：${(p.outline.logic || []).join(' → ')}`,
       list((p.outline.sections || []).map(s => `${s.no}. ${s.title}｜${s.point}｜${s.visual?.type || 'none'} ×${s.visual?.count ?? 0}`)), `需要圖片與圖表：${p.outline.imageTotal ?? 0} 張`, ''] : []),
-    ...(p.workItems?.length ? [`## 工作項目`, list(p.workItems.map(w => `${w.status}｜${w.id} ${w.title}（${w.owner === 'human' ? '你' : w.executor || 'AI'}）`)), ''] : []),
+    ...(p.workItems?.length ? [`## 要做的事（共 ${p.workItems.length} 項）`, list(p.workItems.map(w => `${w.status}｜${itemName(w.id)} ${w.title}（${w.owner === 'human' ? '你' : w.executor || 'AI'}）`)), ''] : []),
     `## Grill 紀錄`,
     list(p.messages.filter(m => m.role === 'user').map(m => m.text.replace(/\s+/g, ' ').slice(0, 200))),
     ''
@@ -137,27 +138,27 @@ export function planningAction(task) {
   if (p.running?.stopping?.unconfirmed) return { kind: 'stopping', label: `尚未確認停止：${stageName(p.running.stage)}（${p.running.agent}）`, button: '查看狀態' };
   if (p.running?.stopping) return { kind: 'stopping', label: `正在停止${stageName(p.running.stage)}：${p.running.agent}`, button: '查看狀態' };
   if (p.running) return { kind: 'running', label: `${stageName(p.running.stage)}進行中：${p.running.agent}`, button: '查看進度' };
-  if (p.autopilot && !p.autopilot.waitingFor && !p.stopped) return { kind: 'auto', label: 'AI 正在自動進行下一步，不需要你', button: '查看進度' };
-  if (p.stopped) return { kind: 'stopped', label: `已停止${stageName(p.stopped.stage)}${p.stopped.itemId ? ` ${p.stopped.itemId}` : ''}，成果已保留`, button: '繼續任務' };
+  if (p.autopilot && !p.autopilot.waitingFor && !p.stopped) return { kind: 'auto', label: 'AI 自己在跑。需要你時會停下來叫你。', button: '查看進度' };
+  if (p.stopped) return { kind: 'stopped', label: `已停止${stageName(p.stopped.stage)}${p.stopped.itemId ? ` ${itemName(p.stopped.itemId)}` : ''}，成果已保留`, button: '繼續任務' };
   if (p.phase === 'grill') {
     const last = p.messages.filter(m => m.role !== 'system').at(-1);
     const turn = p.learningTurns?.at(-1);
     if (turn?.status === 'failed' || turn?.status === 'unknown' || last?.parseError) return { kind: 'retry', label: 'AI 沒有完成需求釐清，查看原因後重試', button: '查看與重試' };
-    if (p.readyForOutline) return { kind: 'grill', label: 'Grill 完成，可以擬定大綱', button: '擬定大綱' };
+    if (p.readyForOutline) return { kind: 'grill', label: '需求問清楚了，可以讓 AI 擬計畫', button: '讓 AI 擬計畫' };
     if (last?.role === 'ai' && last.questions?.length) return { kind: 'grill', label: `回答 AI 的 ${last.questions.length} 個問題`, button: '回答' };
     return { kind: 'grill', label: '補充需求，讓 AI 繼續問', button: '回答' };
   }
-  if (p.phase === 'outline') return { kind: 'outline', label: '確認大綱與工作拆分', button: '確認大綱' };
+  if (p.phase === 'outline') return { kind: 'outline', label: '看 AI 的計畫，沒問題就核准', button: '核准計畫' };
   if (p.phase === 'done') return { kind: 'none', label: '全部工作項目都已由你確認', button: '查看' };
   const items = p.workItems;
   const pick = (status, extra = () => true) => items.find(i => i.status === status && extra(i));
   let item;
-  if ((item = pick('REVIEW_FAIL'))) return { kind: 'item', id: item.id, label: `驗收沒過，交給修改：${item.title}`, button: '交給修改' };
+  if ((item = pick('REVIEW_FAIL'))) return { kind: 'item', id: item.id, label: `驗收沒過，讓 AI 照意見改：${item.title}`, button: '讓 AI 照意見改' };
   if ((item = pick('REVIEWED'))) return { kind: 'item', id: item.id, label: `確認驗收：${item.title}`, button: '確認驗收' };
   if ((item = pick('BLOCKED'))) return { kind: 'item', id: item.id, label: `AI 需要你補資訊：${item.title}`, button: '查看' };
   if ((item = pick('TODO', i => i.owner === 'human' && ready(items, i)))) return { kind: 'item', id: item.id, label: `輪到你：${item.title}`, button: '完成這項' };
-  if ((item = pick('AWAITING_REVIEW'))) return { kind: 'item', id: item.id, label: `送驗收：${item.title}`, button: '送驗收' };
-  if ((item = pick('TODO', i => i.owner === 'ai' && ready(items, i)))) return { kind: 'item', id: item.id, label: `交給 AI 執行：${item.title}`, button: '啟動執行' };
+  if ((item = pick('AWAITING_REVIEW'))) return { kind: 'item', id: item.id, label: `讓 AI 檢查：${item.title}`, button: '讓 AI 檢查' };
+  if ((item = pick('TODO', i => i.owner === 'ai' && ready(items, i)))) return { kind: 'item', id: item.id, label: `交給 AI 做：${item.title}`, button: '交給 AI 做' };
   return { kind: 'none', label: '等待前置項目完成', button: '查看' };
 }
 

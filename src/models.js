@@ -69,7 +69,7 @@ export function modelKey(saved) {
 export const stages = [
   { id: 'A', name: '任務制定', mode: 'chat', description: '把你的一句話整理成任務卡，指出需求缺了什麼。' },
   { id: 'B', name: 'Grill me', mode: 'chat', description: '反問你，直到目標、讀者、邏輯與素材講清楚。' },
-  { id: 'C', name: '擬定大綱', mode: 'read', description: '產出大綱、邏輯鏈、需要幾張圖，並拆成工作項目。' },
+  { id: 'C', name: '擬計畫', mode: 'read', description: '產出計畫、邏輯鏈、需要幾張圖，並拆成工作項目。' },
   { id: 'D', name: '執行（寫程式）', mode: 'write', description: '在產出資料夾內完成工作項目，附證據回報。' },
   { id: 'E', name: '驗收', mode: 'read', description: '逐條核對驗收條件，告訴你自己 review 要看哪裡。' },
   { id: 'F', name: '修改', mode: 'write', description: '依驗收意見修正；可沿用 D 的執行者。' }
@@ -95,7 +95,7 @@ export function resolveStage(settings, stageId) {
 
 // 每個流程都留學習紀錄；快速流程只縮短釐清與大綱。
 export const profiles = [
-  { id: 'quick', name: '快速', questions: 2, diary: true, skeleton: false, description: '小事。最多問 2 題，大綱精簡，不先做骨架，每步留一個學習重點。' },
+  { id: 'quick', name: '快速', questions: 2, diary: true, skeleton: false, description: '小事。最多問 2 題，計畫精簡，不先做骨架，每步留一個學習重點。' },
   { id: 'standard', name: '標準', questions: 3, diary: true, skeleton: true, description: '多數工作。每次問 3 題，先做骨架給你看，記學習日記。' },
   { id: 'thorough', name: '完整', questions: 3, diary: true, skeleton: true, evidence: true, description: '要上檯面的事。每段都要有依據與風險，先做骨架，記學習日記。' }
 ];

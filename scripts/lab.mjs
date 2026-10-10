@@ -15,7 +15,7 @@ const port = Number(flag('port', '4319'));
 const home = path.resolve(flag('home', path.join(appDir, '.lab-home')));
 const maxTouches = Number(flag('max-touches', '10'));
 const timeoutMs = Number(flag('timeout-min', '150')) * 60000;
-const caseFiles = argv.length ? argv.map(f => path.resolve(f)) : (await readdir(path.join(appDir, 'examples', 'lab'))).filter(f => f.endsWith('.md')).sort().map(f => path.join(appDir, 'examples', 'lab', f));
+const caseFiles = argv.length ? argv.map(f => path.resolve(f)) : (await readdir(path.join(appDir, 'examples', 'lab'))).filter(f => /^\d+-.*\.md$/.test(f)).sort().map(f => path.join(appDir, 'examples', 'lab', f));
 const origin = `http://127.0.0.1:${port}`;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const stamp = () => new Date().toISOString();

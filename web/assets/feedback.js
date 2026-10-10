@@ -9,13 +9,14 @@ function feedbackCard(t){
  f.scale.forEach((label,i)=>{const l=element('label'),r=element('input');r.type='radio';r.name=`fb-${t.id}`;r.value=String(i+1);const s=element('span');s.append(element('b',String(i+1)),element('small',label));l.append(r,s);scale.append(l);});
  const tags=element('fieldset',undefined,'fb-tags');tags.append(element('legend','哪些描述符合？可複選','small muted'));
  for(const tag of f.tags){const l=element('label'),c=element('input');c.type='checkbox';c.name=`fb-tag-${t.id}`;c.value=tag;l.append(c,element('span',tag));tags.append(l);}
- const note=element('textarea');note.maxLength=500;note.rows=2;note.placeholder='補一句（選填）：下次希望怎麼做？';note.setAttribute('aria-label','補充說明');
+ const note=element('textarea');note.maxLength=500;note.rows=2;note.placeholder='補一句（選填）：下次希望怎麼做？這裡只記錄，不會有人回覆。';note.setAttribute('aria-label','補充說明');
  const skip=focusKey(element('button','這次不評','btn subtle'),'feedback-skip');
  // 狀態從畫面讀：背景更新重繪後，restoreForm 只放回勾選，不會觸發 change。
- send.onclick=busy(send,async()=>{const score=Number(card.querySelector('.fb-scale input:checked')?.value||0);if(!score){tell('先選 1 到 5 分。');return;}const picked=[...card.querySelectorAll('.fb-tags input:checked')].map(c=>c.value);await coachAct(t,'feedback',{ref:f.ref,score,tags:picked,note:note.value});tell(score<=3?'已記下。下一個任務開工時，AI 會先看到這個方向。':'已記下，謝謝。');feedbackTrendKey='';});
+ send.onclick=busy(send,async()=>{const score=Number(card.querySelector('.fb-scale input:checked')?.value||0);if(!score){tell('先選 1 到 5 分。');return;}const picked=[...card.querySelectorAll('.fb-tags input:checked')].map(c=>c.value);await coachAct(t,'feedback',{ref:f.ref,score,tags:picked,note:note.value});tell(/[?？]/.test(note.value)?'已記下評分。你的補充裡有問題，但這裡不會有人回覆；請把問題貼到「追加指示」。':score<=3?'已記下。下一個任務開工時，AI 會先看到這個方向。':'已記下，謝謝。');feedbackTrendKey='';});
  skip.onclick=busy(skip,async()=>{await coachAct(t,'feedback',{ref:f.ref,skipped:true});tell('這次略過，不會再問同一題。');});
  const actions=element('div',undefined,'buttons');actions.append(send,skip);
- card.append(scale,tags,note,actions);
+ const hint=element('p','要問 AI 問題，請用任務頁下方的「追加指示」，那裡才會有回答。','small muted');
+ card.append(scale,tags,note,hint,actions);
  return card;
 }
 

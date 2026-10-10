@@ -184,12 +184,12 @@ export async function startServer(port = Number(flag('port') || process.env.PORT
         res.writeHead(200, {
           'Content-Type': 'text/html; charset=utf-8',
           'Cache-Control': 'no-store',
-          'Content-Security-Policy': "default-src 'self'; img-src 'self' data:; script-src 'self' 'unsafe-inline'; style-src 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'",
+          'Content-Security-Policy': "default-src 'self'; img-src 'self' data: blob:; frame-src 'self' blob:; script-src 'self' 'unsafe-inline'; style-src 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'",
           'Set-Cookie': `awc=${token}; HttpOnly; SameSite=Strict; Path=/`
         });
         return res.end(html);
       }
-      if (req.method === 'GET' && /^\/assets\/(mentor\.svg|openai\.svg|claude\.svg|copilot\.svg|conversation\.js|project\.js|control\.js|auto\.js|feedback\.js)$/.test(req.url)) {
+      if (req.method === 'GET' && /^\/assets\/(mentor\.svg|openai\.svg|claude\.svg|copilot\.svg|conversation\.js|project\.js|control\.js|auto\.js|feedback\.js|item-names\.js)$/.test(req.url)) {
         res.writeHead(200, { 'Content-Type': req.url.endsWith('.js') ? 'application/javascript; charset=utf-8' : req.url.endsWith('.svg') ? 'image/svg+xml' : 'image/png', 'Cache-Control': req.url.endsWith('.js') ? 'no-store' : 'max-age=86400' });
         return res.end(await readFile(path.join(webDir, 'assets', path.basename(req.url))));
       }
@@ -347,6 +347,7 @@ export async function startServer(port = Number(flag('port') || process.env.PORT
         trash: id => trash.trashTask(id, input),
         autopilot: (id, key) => coach.setAutopilot(id, input.revision, key, input),
         feedback: (id, key) => coach.feedback(id, input.revision, key, input),
+        agents: (id, key) => coach.setAgents(id, input.revision, key, input),
         'confirm-all': (id, key) => coach.confirmAll(id, input.revision, key)
       };
       if (taskRoute?.[1] && coachActions[taskRoute[2]]) {
@@ -355,7 +356,7 @@ export async function startServer(port = Number(flag('port') || process.env.PORT
         const result = await coachActions[action](id, key);
         // 開著「一路做到完」時，你做完任何一步，AI 會自己接著往下。
         // 評分只是記錄，不推動流程；否則停下時評分會讓 AI 重新判斷又停一次。
-        if (!['stop', 'cancel', 'trash', 'autopilot', 'feedback'].includes(action)) coach.resumeAuto(id);
+        if (!['stop', 'cancel', 'trash', 'autopilot', 'feedback', 'agents'].includes(action)) coach.resumeAuto(id);
         if (action === 'cancel' || action === 'stop') return send(202, { stopping: true, task: (await tasks.list()).find(t => t.id === id) || result.task });
         if (action === 'trash') return send(200, result);
         if (action === 'instruct' && input.dryRun) return send(200, result);

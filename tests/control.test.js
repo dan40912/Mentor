@@ -171,7 +171,7 @@ test('supplementary instructions route by state: answer, outline change, fix, re
   await (await coach.review(id, 'W1')).done;
   task = await latest(store, id);
   task = (await coach.confirm(id, task.revision, 'k-c1', { itemId: 'W1', accept: true })).task;
-  await assert.rejects(coach.instruct(id, task.revision, 'k-rp0', { text: '多一段競品', scope: 'outline' }), error => error.code === 'CONFIRM_IMPACT' && /重新擬定/.test(error.message) && /W1/.test(error.message));
+  await assert.rejects(coach.instruct(id, task.revision, 'k-rp0', { text: '多一段競品', scope: 'outline' }), error => error.code === 'CONFIRM_IMPACT' && /重新擬定/.test(error.message) && /第 1 項/.test(error.message));
   await (await coach.instruct(id, task.revision, 'k-rp', { text: '多一段競品', scope: 'outline', confirmImpact: true, reason: '主管要比較' })).done;
   task = await latest(store, id);
   assert.equal(task.planning.phase, 'outline', '改了核定大綱要重新確認');
@@ -368,7 +368,7 @@ test('full autopilot lets AI-passed items unlock the next ones and asks you once
   assert.match(task.planning.learningTurns.find(t => t.stage === 'D' && t.workItemId === 'W1').prompt, /已完成的其他項目與檔案：\n- 骨架版/);
   // 退回骨架時，已經用它做下去的 W1 標成待核對
   task = (await coach.confirm(id, task.revision, 'k-unlock-1', { itemId: 'W0', accept: false, note: '封面要換' })).task;
-  assert.match(task.planning.workItems.find(i => i.id === 'W1').recheck, /W0 被退回/);
+  assert.match(task.planning.workItems.find(i => i.id === 'W1').recheck, /骨架版 被退回/);
   await coach.setAutopilot(id, task.revision, 'k-unlock-2', { on: false });
   // 一般自動模式：W0 通過後就停下等你確認
   const plain = await coach.create({ request: '我要做一份新品簡報給主管十頁', profile: 'standard', autopilot: true });
