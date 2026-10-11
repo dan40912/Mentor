@@ -16,6 +16,7 @@ import { diagnose } from './agents.js';
 import { TaskStore, TaskError, buildBrief } from './tasks.js';
 import { summarize, MOMENTS } from './feedback.js';
 import { writeHandoff, previewHandoff } from './handoffs.js';
+import { readAttachment } from './attachments.js';
 
 const appDir = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const webDir = path.join(appDir, 'web');
@@ -63,7 +64,7 @@ function resolveStageInput(stageId, input) {
   if (!provider.runnable || !provider.modes?.includes(mode)) throw new Error(`${provider.name} 不能負責 ${stageId} 階段：這一階段需要${{ chat: '只對話', read: '唯讀資料夾', write: '寫產出資料夾' }[mode]}，這個 AI 沒有可呼叫的 CLI。`);
   return model;
 }
-let queue = Promise.resolve();
+
 
 async function atomicWrite(file, content) {
   const temporary = `${file}.${randomUUID()}.tmp`;
@@ -124,12 +125,13 @@ async function body(req) {
   return JSON.parse(text);
 }
 
-export async function createApplication(home = root, port = 4317) {
-  const root = path.resolve(home);
+export async function createRequestHandler({ root = appDir, port = 4317, runAgent } = {}) {
+  root = path.resolve(root);
   const memory = path.join(root, 'vault');
   const token = randomBytes(32).toString('hex');
   let settings = { revision: 1, stages: defaultStageSettings() };
   const diagnosis = {};
+  let queue = Promise.resolve();
   await mkdir(memory, { recursive: true });
   const canonicalRoot = await realpath(root);
   if (!((await realpath(memory)).startsWith(`${canonicalRoot}${path.sep}`))) {
@@ -157,18 +159,18 @@ export async function createApplication(home = root, port = 4317) {
   const memoryStore = new Memory(path.join(memory, 'memory'));
   const conversations = new Conversations(path.join(memory, 'conversations'));
   const projects = new Projects(path.join(memory, 'projects'));
-  const coach = new Coach(tasks, () => settings, root, memoryStore);
+  const coach = new Coach(tasks, () => settings, root, memoryStore, runAgent);
   await coach.recover();
   const trash = new Trash(memory, tasks, coach);
-  const server = http.createServer(async (req, res) => {
-    const boundPort = server.address()?.port ?? port;
-    const origin = `http://127.0.0.1:${boundPort}`;
+  const handler = async (req, res) => {
+    const requestPort = typeof port === 'function' ? port() : port;
+    const origin = `http://127.0.0.1:${requestPort}`;
     const send = (status, data) => {
       res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
       res.end(JSON.stringify(data));
     };
     // 用 localhost 開啟首頁時導到 127.0.0.1，cookie 與 CSRF 只綁一個來源。
-    if (req.method === 'GET' && req.url === '/' && req.headers.host === `localhost:${boundPort}`) {
+    if (req.method === 'GET' && req.url === '/' && req.headers.host === `localhost:${requestPort}`) {
       res.writeHead(302, { Location: `${origin}/` });
       return res.end();
     }
@@ -190,7 +192,7 @@ export async function createApplication(home = root, port = 4317) {
         });
         return res.end(html);
       }
-      if (req.method === 'GET' && /^\/assets\/(mentor\.svg|openai\.svg|claude\.svg|copilot\.svg|conversation\.js|project\.js|control\.js|auto\.js|feedback\.js|item-names\.js)$/.test(req.url)) {
+      if (req.method === 'GET' && /^\/assets\/(mentor\.svg|openai\.svg|claude\.svg|copilot\.svg|conversation\.js|project\.js|control\.js|auto\.js|feedback\.js|item-names\.js|upload\.js)$/.test(req.url)) {
         res.writeHead(200, { 'Content-Type': req.url.endsWith('.js') ? 'application/javascript; charset=utf-8' : req.url.endsWith('.svg') ? 'image/svg+xml' : 'image/png', 'Cache-Control': req.url.endsWith('.js') ? 'no-store' : 'max-age=86400' });
         return res.end(await readFile(path.join(webDir, 'assets', path.basename(req.url))));
       }
@@ -234,6 +236,12 @@ export async function createApplication(home = root, port = 4317) {
         if (id && action === 'diff') {
           const { task } = await tasks.get(id);
           return send(200, await itemDiff(task, new URLSearchParams(query || '').get('item')));
+        }
+        if (id && action === 'attachment') {
+          const { task } = await tasks.get(id);
+          const { attachment, content } = await readAttachment(task, new URLSearchParams(query || '').get('id'));
+          res.writeHead(200, { 'Content-Type': 'application/octet-stream', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Content-Disposition': `attachment; filename=attachment; filename*=UTF-8''${encodeURIComponent(attachment.name)}` });
+          return res.end(content);
         }
         if (id && ['preview', 'handoff-preview'].includes(action)) {
           const file = new URLSearchParams(query || '').get('file');
@@ -280,11 +288,19 @@ export async function createApplication(home = root, port = 4317) {
       if (!req.headers.cookie?.split('; ').includes(`awc=${token}`) || req.headers['x-csrf-token'] !== token) {
         return send(403, { code: 'CSRF_FAILED' });
       }
+      if (req.url.startsWith('/api/uploads?')) {
+        const params = new URLSearchParams(req.url.split('?')[1]);
+        return send(201, { attachment: await coach.attachments.stage(params.get('name'), req, params.has('batch') ? params.get('batch') : undefined, params.has('index') ? Number(params.get('index')) : undefined) });
+      }
       const input = await body(req);
       if (taskRoute?.[1] && taskRoute[2] === 'handoff-prompt') {
         const { task } = await tasks.get(taskRoute[1]);
         if (input.revision !== task.revision) throw new TaskError(409, 'REVISION_CONFLICT', '任務版本已更新。', { revision: task.revision });
         return send(200, await writeHandoff(root, task));
+      }
+      if (req.url === '/api/uploads/batches') {
+        if (input.taskId != null) await coach.latest(input.taskId);
+        return send(201, coach.attachments.batch(input.names, input.taskId));
       }
       if (projectRoute) {
         if (!projectRoute[1]) return send(201, { project: await projects.create(input) });
@@ -342,6 +358,7 @@ export async function createApplication(home = root, port = 4317) {
         return send(202, { task: result.task });
       }
       const coachActions = {
+        card: (id, key) => coach.saveCard(id, input.revision, key, input),
         retry: (id, key) => coach.retry(id, input.revision, key, input.provider || null),
         answer: (id, key) => coach.answer(id, input.revision, key, input),
         outline: id => coach.draftOutline(id, input.feedback),
@@ -408,18 +425,30 @@ export async function createApplication(home = root, port = 4317) {
       console.error(error);
       send(400, { code: 'REQUEST_FAILED', message: error.message, nextStep: '檢查輸入；保存失敗時查看終端錯誤。' });
     }
-  });
-  // 服務結束時一併停掉它啟動的 CLI，不留在背景繼續跑、繼續寫檔。
+  };
+  return { handler, coach };
+}
+
+// 測試用：不監聽埠，回傳可直接呼叫 request listener 的 server。
+export async function createApplication(home = root, port = 4317) {
+  const app = await createRequestHandler({ root: home, port });
+  const server = http.createServer(app.handler);
+  const { coach } = app;
   server.stopAgents = () => { for (const child of coach.children.values()) killTree(child, 'SIGTERM'); return coach.children.size; };
   return server;
 }
 
 export async function startServer(port = Number(flag('port') || process.env.PORT || 4317)) {
-  const server = await createApplication(root, port);
+  let server;
+  const app = await createRequestHandler({ root: flag('home') || process.env.MENTOR_HOME || appDir, port: () => server.address().port });
+  server = http.createServer(app.handler);
   await new Promise((resolve, reject) => {
     server.once('error', reject);
     server.listen(port, '127.0.0.1', resolve);
   });
+  // 服務結束時一併停掉它啟動的 CLI，不留在背景繼續跑、繼續寫檔。
+  const { coach } = app;
+  server.stopAgents = () => { for (const child of coach.children.values()) killTree(child, 'SIGTERM'); return coach.children.size; };
   return server;
 }
 

@@ -33,7 +33,7 @@ const taskAt = (phase = 'execute', status = 'TODO') => ({ id: 'TASK-instructions
   planning: { phase, workItems: [work('W1', 'DONE'), work('W2', status)] } });
 function setup(task, act = async () => {}, storage = new Map()) {
   let form;
-  const ctx = vm.createContext({ element, composerDrafts: {},
+  const ctx = vm.createContext({ element, taskAttachmentPicker: () => ({ host: element('div'), picker: { ids: async () => [], lock() {}, consume() {} } }), composerDrafts: {},
     localStorage: { getItem: key => storage.get(key), setItem: (key, value) => storage.set(key, value), removeItem: key => storage.delete(key) },
     focusKey: (n, key) => { n.dataset.focus = key; return n; },
     itemStatus: {}, stageLabel: () => '執行', agentOf: () => 'AI', tell() {}, coachAct: act,
@@ -116,7 +116,7 @@ test('21–23：範圍、原因與四種送出原文；payload scope 及後端 i
     const plan = coach.plan(task, { text: view.area.value, scope: value });
     assert.equal(plan.label, button);assert.equal(plan.route, route);assert.equal(plan.itemId, itemId);
     await view.form.requestSubmit();
-    assert.deepEqual(calls.at(-1), { action: 'instruct', text: '結論先寫', scope: value, reason: '主管要看', confirmImpact: false });
+    assert.deepEqual(calls.at(-1), { action: 'instruct', text: '結論先寫', scope: value, reason: '主管要看', confirmImpact: false, attachmentIds: [] });
   }
 });
 

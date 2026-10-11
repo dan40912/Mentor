@@ -579,6 +579,24 @@ dialog.sheet [data-anchor],dialog.sheet [data-item]{scroll-margin-top:0}
 @media(max-width:700px){[data-expand]{display:none}}
 [data-expand] .collapse-icon,[data-expand][aria-pressed="true"] .expand-icon{display:none}
 [data-expand][aria-pressed="true"] .collapse-icon{display:inline}
+/* 新任務附件入口固定可見，沿用介面色彩與原生檔案選擇器。 */
+.attach{border:1.5px dashed var(--border-default);border-radius:var(--radius-container);padding:12px 14px;margin:var(--space-m) 0;background:var(--glass);transition:border-color .15s,background .15s}
+.attach.is-over{border-color:var(--content-highlight);background:var(--highlight-wash)}
+.attach-bar{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px}
+.attach-pick{font-weight:600}
+.attach-drop{font-size:13px;color:var(--content-secondary,var(--muted))}
+.attach-rule{flex-basis:100%;font-size:12px;color:var(--muted);line-height:1.5}
+.attach-list{list-style:none;padding:0;margin:8px 0 0;display:flex;flex-direction:column;gap:4px}
+.attach-list:empty{display:none}
+.attach-list li{display:flex;align-items:center;gap:6px;font-size:13px;line-height:1.5;padding:4px 8px;border-radius:var(--radius-button);background:var(--bg-subtle);overflow-wrap:anywhere}
+.attach-list li.is-ok::before{content:'✓';color:var(--status-success,#2e7d32);font-weight:700}
+.attach-list li.is-bad{background:var(--bg-warning-subtle)}
+.attach-list li.is-bad::before{content:'!';color:var(--status-warning);font-weight:700}
+.attach-list li small{color:var(--muted)}
+.attach-remove{margin-left:auto;border:0;background:none;color:var(--muted);font-size:16px;line-height:1;cursor:pointer;padding:2px 6px;border-radius:var(--radius-button)}
+.attach-remove:hover{background:var(--bg-warning-subtle);color:var(--content-primary)}
+.attach-saved h3{font-size:14px;margin:0 0 4px}
+.attach-saved{margin:var(--space-m) 0}
 </style>
 </head>
 <body>
@@ -664,7 +682,7 @@ dialog.sheet [data-anchor],dialog.sheet [data-item]{scroll-margin-top:0}
 </div>
 <dialog id="task-dialog" class="sheet" aria-labelledby="task-title"><div class="dialog-inner"><div class="dialog-heading"><div class="sheet-title"><span id="task-holder"></span><h2 id="task-title" tabindex="-1">任務詳情</h2></div><div class="sheet-track" id="task-track"></div><div class="sheet-actions"><button class="btn subtle small-btn" type="button" data-expand="task-dialog" aria-label="展開任務頁" aria-pressed="false"><svg class="expand-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/></svg><svg class="collapse-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8h5V3m13 5h-5V3M8 21v-5H3m13 5v-5h5"/></svg> <span data-expand-label>展開</span></button><span id="task-menu-slot"></span><button class="close" aria-label="關閉任務詳情" data-close="task-dialog"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div></div><div id="task-detail"></div></div></dialog>
 <dialog id="preview-dialog" aria-labelledby="preview-title"><div class="dialog-inner"><div class="dialog-heading"><h2 id="preview-title">預覽成果</h2><div class="buttons"><button class="btn subtle small-btn" type="button" data-expand="preview-dialog" aria-label="展開成果預覽" aria-pressed="false"><svg class="expand-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/></svg><svg class="collapse-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8h5V3m13 5h-5V3M8 21v-5H3m13 5v-5h5"/></svg> <span data-expand-label>展開</span></button><button class="close" type="button" aria-label="關閉成果預覽" data-close="preview-dialog">×</button></div></div><p id="preview-status" role="status"></p><div id="preview-modes" role="group" aria-label="預覽模式" hidden><button class="btn subtle small-btn" type="button" data-preview-mode="desktop" aria-pressed="true">桌面</button><button class="btn subtle small-btn" type="button" data-preview-mode="mobile" aria-pressed="false">手機（390px）</button><button class="btn subtle small-btn" type="button" id="preview-source" aria-pressed="false" hidden>原始碼</button></div><div id="preview-content"></div></div></dialog>
-<dialog id="draft-dialog" aria-labelledby="draft-title"><div class="dialog-inner"><div class="dialog-heading"><h2 id="draft-title">新任務</h2><button class="close" aria-label="關閉新任務" data-close="draft-dialog">×</button></div><p class="muted">用一兩句話說你想完成什麼。AI 會先整理成任務卡，再反問你，直到講清楚才擬計畫。</p><form id="draft-form"><input type="hidden" name="project"><p id="draft-project" class="notice" hidden></p><label class="field"><span>你想完成什麼？</span><textarea name="request" required minlength="4" maxlength="6000" placeholder="例如：下週要向主管報告新功能規劃，需要一份 HTML 簡報"></textarea></label><fieldset class="profiles" id="profile-picker"><legend>選擇工作流程</legend></fieldset><fieldset class="auto-choice"><legend class="visually-hidden">執行方式</legend><label class="check-line"><input type="checkbox" name="autopilot" checked><span><strong>建立後交給 AI 一路做到完</strong><small>AI 會自己跑到需要你的地方才停下來：回答問題、確認成果、你負責的項目、額度或錯誤。隨時可以按「停止這次執行」。</small></span></label><label class="check-line"><input type="checkbox" name="full"><span><strong>完全自動</strong><small>計畫不用你核准，每一項 AI 自己檢查過就做下一項。全部做完，你再一次看。計畫錯了後面會白跑，建議只用在小任務。</small></span></label></fieldset><details><summary>進階：產出資料夾</summary><label class="field" style="margin-top:12px"><span>產出資料夾（絕對路徑，可空白）</span><input name="outputDir" autocomplete="off" placeholder="空白時放在 outputs/任務 ID"><small>執行與修改的 AI 只能在這個資料夾裡寫檔。</small></label></details><label class="field" style="margin-top:16px"><span>這個任務用的 AI</span><select name="agent" id="new-task-agent"></select><small>預設沿用「角色與設定」。選一個模型，這個任務的每個階段都用它；之後可在任務頁更換。</small></label><div class="buttons" style="margin-top:16px"><button class="btn primary" type="submit">交給 AI 教練</button><span class="small muted" id="new-task-agents"></span></div></form></div></dialog>
+<dialog id="draft-dialog" aria-labelledby="draft-title"><div class="dialog-inner"><div class="dialog-heading"><h2 id="draft-title">新任務</h2><button class="close" aria-label="關閉新任務" data-close="draft-dialog">×</button></div><p class="muted">用一兩句話說你想完成什麼。AI 會先整理成任務卡，再反問你，直到講清楚才擬計畫。</p><form id="draft-form"><input type="hidden" name="project"><p id="draft-project" class="notice" hidden></p><label class="field"><span>你想完成什麼？</span><textarea name="request" required minlength="4" maxlength="6000" placeholder="例如：下週要向主管報告新功能規劃，需要一份 HTML 簡報"></textarea></label><section id="draft-attachments" aria-label="加入附件（選填）"></section><fieldset class="profiles" id="profile-picker"><legend>選擇工作流程</legend></fieldset><fieldset class="auto-choice"><legend class="visually-hidden">執行方式</legend><label class="check-line"><input type="checkbox" name="autopilot" checked><span><strong>建立後交給 AI 一路做到完</strong><small>AI 會自己跑到需要你的地方才停下來：回答問題、確認成果、你負責的項目、額度或錯誤。隨時可以按「停止這次執行」。</small></span></label><label class="check-line"><input type="checkbox" name="full"><span><strong>完全自動</strong><small>計畫不用你核准，每一項 AI 自己檢查過就做下一項。全部做完，你再一次看。計畫錯了後面會白跑，建議只用在小任務。</small></span></label></fieldset><details><summary>進階：產出資料夾</summary><label class="field" style="margin-top:12px"><span>產出資料夾（絕對路徑，可空白）</span><input name="outputDir" autocomplete="off" placeholder="空白時放在 outputs/任務 ID"><small>執行與修改的 AI 只能在這個資料夾裡寫檔。</small></label></details><label class="field" style="margin-top:16px"><span>這個任務用的 AI</span><select name="agent" id="new-task-agent"></select><small>預設沿用「角色與設定」。選一個模型，這個任務的每個階段都用它；之後可在任務頁更換。</small></label><div class="buttons" style="margin-top:16px"><button class="btn primary" type="submit">交給 AI 教練</button><span class="small muted" id="new-task-agents"></span></div></form></div></dialog>
 <div id="message" role="status" aria-live="polite"></div>
 <script src="/assets/item-names.js"></script>
 <script src="/assets/project.js"></script>
@@ -672,6 +690,7 @@ dialog.sheet [data-anchor],dialog.sheet [data-item]{scroll-margin-top:0}
 <script src="/assets/control.js"></script>
 <script src="/assets/auto.js"></script>
 <script src="/assets/feedback.js"></script>
+<script src="/assets/upload.js"></script>
 <script>
 const $=selector=>document.querySelector(selector);
 const names={overview:'工作總覽',workspaces:'工作區與 Session',handoff:'交接中心',knowledge:'工作記憶',settings:'角色與設定',journeys:'專案歷程',conversations:'對話紀錄',trash:'回收桶'};
@@ -707,8 +726,8 @@ function refreshSession(){
  })().finally(()=>{sessionRefresh=null;});
  return sessionRefresh;
 }
-async function request(url,data,headers={}){
- const options={credentials:'same-origin',cache:'no-store',...(data?{method:'POST',headers:{...headers,'Content-Type':'application/json','X-CSRF-Token':state?.csrfToken},body:JSON.stringify(data)}:{})};
+async function request(url,data,headers={},raw=false){
+ const options={credentials:'same-origin',cache:'no-store',...(data?{method:'POST',headers:{...headers,'Content-Type':raw?'application/octet-stream':'application/json','X-CSRF-Token':state?.csrfToken},body:raw?data:JSON.stringify(data)}:{})};
  for(let attempt=0;attempt<2;attempt++){
   const response=await fetch(url,options).catch(()=>{throw offline();});
   let result;try{result=await response.json();}catch{throw new Error('服務未回傳有效資料，請確認後端已啟動。');}
@@ -976,10 +995,10 @@ let pollTimer=null;
 function ensurePolling(){const busy=tasks.some(t=>t.planning?.running||t.planning?.autopilot);if(busy&&!pollTimer)pollTimer=setInterval(async()=>{try{const before=JSON.stringify(tasks.map(t=>[t.id,t.revision]));tasks=(await request('/api/tasks')).tasks;if(JSON.stringify(tasks.map(t=>[t.id,t.revision]))!==before){renderOverview();const openId=$('#task-dialog').open?$('#task-dialog').dataset.task:null;if(openId){if(userIsEditing())showPendingRefresh(openId);else openTask(openId,{background:true});}const done=tasks.find(t=>t.planning&&!t.planning.running&&t.id===$('#task-dialog').dataset.task);if(done){const last=done.planning.messages.at(-1);if(last?.role==='system')tell(last.text.split('\n')[0]);}}if(!tasks.some(t=>t.planning?.running||t.planning?.autopilot)){clearInterval(pollTimer);pollTimer=null;}}catch(error){tell(`更新進度失敗：${error.message}`);}},2000);}
 setInterval(()=>{for(const el of document.querySelectorAll('[data-since]')){const s=Math.max(0,Math.round((Date.now()-Date.parse(el.dataset.since))/1000));el.textContent=s<60?`${s} 秒`:`${Math.floor(s/60)} 分 ${s%60} 秒`;}},1000);
 async function coachAct(t,action,data={}){const res=await act(t.id,action,data);ensurePolling();return res;}
-function bubble(m){
+function bubble(m,t){
  const wrap=element('div',undefined,`msg ${m.role}`);
  if(m.role==='system'){wrap.append(element('p',m.text,'notice'));return wrap;}
- if(m.role==='user'){wrap.append(element('div',m.text,'bubble user-bubble'));return wrap;}
+ if(m.role==='user'){wrap.append(element('div',m.text,'bubble user-bubble'));const files=(m.attachmentIds||[]).map(id=>t?.attachments?.find(a=>a.id===id)?.name).filter(Boolean);if(files.length)wrap.append(element('p',`📎 ${files.join('、')}`,'small muted msg-files'));return wrap;}
  const head=element('div',undefined,'msg-head');const avatar=element('img');avatar.src='/assets/mentor.svg';avatar.alt='';avatar.width=24;avatar.height=24;head.append(avatar,element('span',`${stageLabel(m.stage)} · ${m.agent||''}`,'small muted'));
  const body=element('div',undefined,'bubble ai-bubble');
  if(m.text)body.append(element('p',m.text));
@@ -996,7 +1015,7 @@ function stepper(t){
  for(const [id,name,phase] of steps){const li=element('li');const k=phaseOrder.indexOf(phase);const state_=p.running?.stage===id?'now':(k<idx||p.phase==='done'||(id==='A'&&p.messages.some(m=>m.stage==='A'&&m.role==='ai')))?'done':k===idx?'now':'';if(state_)li.className=state_;li.append(element('strong',`${id} ${name}`),element('small',agentOf(id)));box.append(li);}
  return box;
 }
-function cardPanel(card){const box=element('aside',undefined,'task-card');box.append(element('div','任務卡','eyebrow'),element('h4',card.title||'整理中'),definition([['目標',card.goal||'—'],['讀者',card.audience||'未定'],['產出',card.deliverable||'未定'],['成功標準',(card.success||[]).join('\n')||'未定'],['限制',(card.constraints||[]).join('\n')||'—'],['還不知道',(card.unknowns||[]).join('\n')||'—']]));return box;}
+function cardPanel(card,t){const box=element('aside',undefined,'task-card');box.append(element('div','任務卡','eyebrow'),element('h4',card.title||'整理中'),definition([['目標',card.goal||'—'],['讀者',card.audience||'未定'],['產出',card.deliverable||'未定'],['成功標準',(card.success||[]).join('\n')||'未定'],['限制',(card.constraints||[]).join('\n')||'—'],['還不知道',(card.unknowns||[]).join('\n')||'—']]));if(t){const edit=element('details');edit.open=cardDrafts.has(t.id);edit.append(element('summary','編輯任務卡與加入附件'),cardEditor(t));box.append(edit);}return box;}
 const headingName={interpretations:'詮釋',deviations:'偏離',tradeoffs:'取捨',openQuestions:'未決問題'};
 function sensorList(list){const ul=element('ul',undefined,'sensors');for(const x of list||[]){const li=element('li');li.append(element('span',x.result,`badge ${results[x.result]?.[1]||'gray'}`),element('strong',x.name),element('small',x.detail));ul.append(li);}return ul;}
 function learningPanel(t){
@@ -1028,7 +1047,7 @@ function renderPlanning(t,detail){
  if(p.stopped||p.phase!=='grill')detail.append(instructionBox(t));
  if(p.phase==='grill'&&!p.stopped){
   const grid=element('div',undefined,'coach-grid');const chat=element('section',undefined,'chat');chat.setAttribute('aria-label','和 AI 教練的對話');chat.dataset.anchor='grill';
-  for(const m of p.messages)chat.append(bubble(m));
+  for(const m of p.messages)chat.append(bubble(m,t));
   const failed=t.nextAction?.kind==='retry';
   if(failed){const notice=element('div',undefined,'notice');notice.dataset.anchor='retry';const last=p.learningTurns?.at(-1);const why=last?.error||'AI 沒有回傳可用的結果。';notice.append(element('strong','AI 尚未完成需求釐清'),element('p',`${why}原始回覆已保留，不會自動換模型。`));const current=p.learningTurns?.at(-1)?.provider;const buttons=element('div',undefined,'buttons');const retry=focusKey(element('button','用同一個 AI 重試','btn primary'),'retry');retry.onclick=busy(retry,async()=>{await coachAct(t,'retry');tell('已重新啟動需求釐清。');});buttons.append(retry);
    // 修復：只換這一次的 AI，不改角色設定。內容過濾這類問題換一個 AI 通常就過了。
@@ -1038,7 +1057,7 @@ function renderPlanning(t,detail){
   outline.onclick=busy(outline,async()=>{await coachAct(t,'outline');tell(`${agentOf('C')} 開始擬計畫。`);});
   if(p.readyForOutline&&!p.running)outline.title='AI 認為資訊夠了';
   if(!failed)chat.append(instructionBox(t,{extraButtons:[outline]}));
-  grid.append(chat,cardPanel(p.card));detail.append(grid);const learn=learningPanel(t);if(learn)detail.append(learn);detail.append(auditPanel(t));return;
+  grid.append(chat,cardPanel(p.card,t));detail.append(grid);const learn=learningPanel(t);if(learn)detail.append(learn);detail.append(auditPanel(t));return;
  }
  if(p.outline){
   const o=p.outline;const box=section('成品架構');box.dataset.anchor='outline';
@@ -1085,14 +1104,14 @@ function renderPlanning(t,detail){
   detail.append(board);
  }
  const learn=learningPanel(t);if(learn)detail.append(learn);
- const more=element('details');more.append(element('summary','Grill 對話與任務卡'));const grid=element('div',undefined,'coach-grid');const chat=element('section',undefined,'chat');for(const m of p.messages)chat.append(bubble(m));grid.append(chat,cardPanel(p.card));more.append(grid);detail.append(more,auditPanel(t));
+ const more=element('details');more.append(element('summary','Grill 對話與任務卡'));const grid=element('div',undefined,'coach-grid');const chat=element('section',undefined,'chat');for(const m of p.messages)chat.append(bubble(m,t));grid.append(chat,cardPanel(p.card,t));more.append(grid);detail.append(more,auditPanel(t));
 }
 // 使用者正在輸入或展開行內表單時，不重建面板，改提示「有更新」
-function userIsEditing(){const detail=$('#task-detail'),a=document.activeElement;if(detail.querySelector('.inline-note,.trash-confirm,.impact:not([hidden])'))return true;if(a&&detail.contains(a)&&/^(TEXTAREA|INPUT|SELECT)$/.test(a.tagName)&&!a.closest('.instruct'))return true;return [...detail.querySelectorAll('textarea')].some(x=>x.value.trim()&&!x.closest('.composer')&&!x.matches('[aria-label="AI 回報內容"]'));}
+function userIsEditing(){const detail=$('#task-detail'),a=document.activeElement;if(detail.querySelector('.inline-note,.trash-confirm,.impact:not([hidden])'))return true;if(a&&detail.contains(a)&&/^(TEXTAREA|INPUT|SELECT)$/.test(a.tagName)&&!a.closest('.instruct'))return true;return [...detail.querySelectorAll('textarea')].some(x=>x.value.trim()&&!x.closest('.composer')&&!x.closest('.card-editor')&&!x.matches('[aria-label="AI 回報內容"]'));}
 function showPendingRefresh(id){const detail=$('#task-detail');if(detail.querySelector('.pending-refresh'))return;const bar=element('div',undefined,'pending-refresh');bar.setAttribute('role','status');bar.append(element('span','AI 更新了這個任務。你正在輸入，畫面先不動。'));const b=element('button','更新畫面','btn');b.onclick=()=>openTask(id);bar.append(b);detail.prepend(bar);}
 // 重建前記住選取與輸入，重建後放回
 function snapshotForm(root){const keyOf=el=>[el.closest('[data-item]')?.dataset.item,el.closest('[data-decision]')?.dataset.decision,el.closest('.inline-note')?'note:'+(el.closest('.inline-note').querySelector('[data-focus]')?.dataset.focus||''):'',el.closest('[data-anchor]')?.dataset.anchor,el.dataset.focus||el.name||el.getAttribute('aria-label'),/radio|checkbox/.test(el.type)?el.value:''].join('|');const map=new Map();for(const el of root.querySelectorAll('input,textarea,select'))map.set(keyOf(el),/radio|checkbox/.test(el.type)?el.checked:el.value);const notes=[...root.querySelectorAll('.inline-note')].map(f=>({trigger:f.querySelector('[data-focus]')?.dataset.focus,text:f.querySelector('textarea')?.value||''})).filter(n=>n.trigger);return {keyOf,map,notes};}
-function restoreForm(root,snap){if(!snap)return;for(const n of snap.notes){const trigger=root.querySelector(`[data-focus="${n.trigger}"]`);if(trigger&&!trigger.disabled&&trigger.dataset.opensNote){const before=new Set(root.querySelectorAll('.inline-note'));trigger.click();const form=[...root.querySelectorAll('.inline-note')].find(f=>!before.has(f));const area=form?.querySelector('textarea');if(area)area.value=n.text;}}for(const el of root.querySelectorAll('input,textarea,select')){if(el.closest('.instruct'))continue;const k=snap.keyOf(el);if(!snap.map.has(k))continue;const v=snap.map.get(k);if(/radio|checkbox/.test(el.type))el.checked=v;else if(el.tagName==='SELECT'){if([...el.options].some(o=>o.value===v))el.value=v;}else if(!el.value)el.value=v;}}
+function restoreForm(root,snap){if(!snap)return;for(const n of snap.notes){const trigger=root.querySelector(`[data-focus="${n.trigger}"]`);if(trigger&&!trigger.disabled&&trigger.dataset.opensNote){const before=new Set(root.querySelectorAll('.inline-note'));trigger.click();const form=[...root.querySelectorAll('.inline-note')].find(f=>!before.has(f));const area=form?.querySelector('textarea');if(area)area.value=n.text;}}for(const el of root.querySelectorAll('input,textarea,select')){if(el.closest('.instruct,.card-editor'))continue;const k=snap.keyOf(el);if(!snap.map.has(k))continue;const v=snap.map.get(k);if(/radio|checkbox/.test(el.type))el.checked=v;else if(el.tagName==='SELECT'){if([...el.options].some(o=>o.value===v))el.value=v;}else if(!el.value)el.value=v;}}
 function openTask(id,{background=false}={}){
  const t=tasks.find(x=>x.id===id);if(!t)return;
  const dialog=$('#task-dialog'),detail=$('#task-detail'),snap=dialog.open&&dialog.dataset.task===id?snapshotForm(detail):null,scroll=dialog.open?dialog.scrollTop:0,focused=restoreFocus||document.activeElement?.closest?.('[data-focus]')?.dataset.focus,focusInSheet=dialog.contains(document.activeElement)&&document.activeElement!==dialog,caret=document.activeElement?.closest?.('.instruct')?[document.activeElement.selectionStart,document.activeElement.selectionEnd]:null;restoreFocus=null;
@@ -1106,6 +1125,7 @@ function openTask(id,{background=false}={}){
  const open=t.decisions.filter(d=>d.status!=='DECIDED');const [label]=statuses[t.status]||[t.status];
  const facts=definition(t.planning?[['狀態',`${label} · 第 ${t.revision} 版 · 最後更新 ${when(t.updatedAt)}`],['目前成果',t.current.summary],['產出資料夾',t.allowedRoots[0]]]:[['狀態',`${label} · 第 ${t.revision} 版 · 最後更新 ${when(t.updatedAt)}`],['目標',t.goal],['目前成果',t.current.summary],['卡點',open.length?open.map(d=>d.question).join('\n'):'沒有待決策'],...t.decisions.filter(d=>d.status==='DECIDED').map(d=>['已確認決策',`${d.options.find(o=>o.id===d.choice)?.label}（${when(d.decidedAt)}）${d.note?`\n${d.note}`:''}`]),['AI 的唯一下一步',t.next]]);
  detail.append(facts);
+ if(t.attachments?.length)detail.append(attachmentList(t));
  if(t.planning)renderPlanning(t,detail);
  for(const d of open){
   const box=section(d.status==='WAITING'?'決策卡 · 等待回覆':'決策卡');box.dataset.anchor='decision';const card=element('form',undefined,'decision');card.dataset.decision=d.id;
@@ -1237,7 +1257,8 @@ $('#preview-modes').addEventListener('click',event=>{const mode=event.target.clo
 document.querySelectorAll('[data-close]').forEach(button=>button.onclick=()=>button.dataset.close==='task-dialog'?closeSheet():document.getElementById(button.dataset.close).close());
 $('#demo').onchange=renderOverview;$('#filter').onchange=renderOverview;$('#show-all').onclick=()=>{expanded=!expanded;renderOverview();};$('#new-task').onclick=()=>{$('#draft-form').elements.project.value='';$('#draft-project').hidden=true;const box=$('#profile-picker');if(state&&box.children.length<=1){for(const p of state.profiles){const label=element('label',undefined,'option'),radio=element('input');radio.type='radio';radio.name='profile';radio.value=p.id;radio.checked=p.id==='standard';const text=element('div');text.append(element('strong',p.name),element('small',p.description));label.append(radio,text);box.append(label);}}if(state){options($('#new-task-agent'),agentChoices());$('#new-task-agent').value='inherit';const show=()=>{const v=$('#new-task-agent').value;$('#new-task-agents').textContent=v==='inherit'?`A ${agentOf('A')} · B ${agentOf('B')}`:`全部階段：${$('#new-task-agent').selectedOptions[0].textContent}`;};$('#new-task-agent').onchange=show;show();}$('#draft-dialog').showModal();$('#draft-form textarea').focus();};
 $('#refresh').onclick=async()=>{if(!confirm('重新整理會重載角色設定。尚未保存的角色選擇將被取代；交接文字會保留。'))return;await init();};
-$('#draft-form').onsubmit=event=>{event.preventDefault();if(!state)return tell('請先恢復後端連線。');const form=event.currentTarget,button=form.querySelector('button[type=submit]');const values=Object.fromEntries(new FormData(form));busy(button,async()=>{const result=await request('/api/tasks',values);tasks=(await request('/api/tasks')).tasks;renderOverview();ensurePolling();$('#draft-dialog').close();form.reset();openTask(result.task.id);tell(`${agentOfTask(result.task,'A')} 正在整理任務卡，接著會開始反問你。`);})();};
+const draftAttachments=attachmentPicker($('#draft-attachments'),async (file,batch,index)=>request(`/api/uploads?name=${encodeURIComponent(file.name)}&batch=${encodeURIComponent(batch)}&index=${index}`,await file.arrayBuffer(),{},true),names=>request('/api/uploads/batches',{names}));
+$('#draft-form').onsubmit=event=>{event.preventDefault();if(!state)return tell('請先恢復後端連線。');const form=event.currentTarget,button=form.querySelector('button[type=submit]');const values=Object.fromEntries(new FormData(form));busy(button,async()=>{draftAttachments.lock(true);try{values.attachmentIds=await draftAttachments.ids();const result=await request('/api/tasks',values);draftAttachments.clear();tasks=(await request('/api/tasks')).tasks;renderOverview();ensurePolling();$('#draft-dialog').close();form.reset();openTask(result.task.id);tell(`${agentOfTask(result.task,'A')} 正在整理任務卡，接著會開始反問你。`);}finally{draftAttachments.lock(false);}})();};
 $('#settings').onsubmit=event=>{event.preventDefault();if(!state)return tell('請先恢復後端連線。');const form=event.currentTarget;submit(form,async()=>{const stages={};for(const stage of state.stages)stages[stage.id]={provider:form.elements[`${stage.id}-provider`].value,modelKey:form.elements[`${stage.id}-model`].value};const result=await request('/api/settings',{revision:state.settings.revision,stages});state.settings=result.settings;renderSettings();$('#plan-status').textContent='指派已保存，下一次執行生效。';tell('指派已保存。下一次執行就會用新的 AI。');});};
 $('#handoff').onsubmit=event=>{event.preventDefault();if(!state)return tell('請先恢復後端連線。');const form=event.currentTarget;submit(form,async()=>{const input=Object.fromEntries(new FormData(form)),result=await request('/api/handoffs',input);renderHandoff(input,result);tell('交接 Markdown 已保存，尚未啟動執行。');});};
 $('#copy-handoff').onclick=async()=>{if(!lastHandoff)return;try{await navigator.clipboard.writeText(lastHandoff.content);tell('已複製交接；尚未啟動執行。');}catch(error){tell(`無法複製：${error.message}。請下載 Markdown。`);}};

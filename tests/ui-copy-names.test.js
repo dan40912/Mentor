@@ -29,7 +29,7 @@ const task = (phase, items = []) => ({ id: 'TASK-test', status: 'READY', plannin
   phase, workItems: items, messages: [], card: {}, outline: { storyline: '主線', sections: [], coaching: '檢查來源' }
 } });
 function context(extra = {}) {
-  const ctx = vm.createContext({ element: node, section: title => node('section', title),
+  const ctx = vm.createContext({ element: node, taskAttachmentPicker: () => ({ host: node('div'), picker: { ids: async () => [], lock() {}, consume() {} } }), section: title => node('section', title),
     focusKey: b => b, busy: (b, fn) => fn, state: { profiles: [], providers: [], stages },
     agentOfTask: () => 'AI', agentOf: () => 'AI', stageLabel: id => stages.find(s => s.id === id)?.name,
     agentChoices: () => [], agentValue: () => 'inherit', options() {},

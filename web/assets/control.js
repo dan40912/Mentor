@@ -46,6 +46,7 @@ function instructionBox(t,{extraButtons=[]}={}){
  const suggestions=mode==='execute'?(current?.status==='BLOCKED'?['資訊都在任務卡，照現有內容做完，缺的標成假設']:['照驗收意見修改','換個做法再試一次','這項我自己做']):{outline:['段落太多，併成 3 段','每段補上資料來源'],done:['再做一份英文版']}[mode]||[];
  if(suggestions.length){const chips=element('div',undefined,'buttons instruct-suggestions');for(const text of suggestions){const chip=element('button',text,'btn subtle');chip.type='button';chip.onclick=()=>{area.value=text;area.oninput();area.focus();};chips.append(chip);}form.append(chips);}
  form.append(area);
+ const {host:attachmentHost,picker:attachments}=taskAttachmentPicker(t.id,'instruction');form.append(attachmentHost);
  // 套用範圍：執行階段才需要選；接續固定套用在中斷的步驟。
  let scope=null;
  if(mode==='stopped')form.append(element('p',`套用於：中斷的${stageLabel(p.stopped.stage)}${p.stopped.itemId?` ${itemName(p.stopped.itemId)}`:''}`,'small muted'));
@@ -76,12 +77,13 @@ function instructionBox(t,{extraButtons=[]}={}){
   if(p.running)return;
   const text=area.value;if(mode!=='stopped'&&!text.trim()){error.textContent=mode==='grill'?'先寫下回答。':'先寫下補充指示。';error.hidden=false;area.focus();return;}
   // 送出前先清草稿避免重建面板時又帶回；失敗時放回並把焦點留在輸入區。
-  saveDraft(t.id,'');
-  try{await coachAct(t,'instruct',payload(confirm));done(text);}
+  attachments.lock(true);area.disabled=true;if(reason)reason.disabled=true;if(scope)scope.disabled=true;
+  try{const data=payload(confirm);data.attachmentIds=await attachments.ids();saveDraft(t.id,'');await coachAct(t,'instruct',data);attachments.consume(data.attachmentIds);done(text);}
   catch(e){saveDraft(t.id,text);const box=document.getElementById(id);if(box&&!box.value)box.value=text;
    const form2=box?.closest('form')||form;const imp=form2.querySelector('.impact'),err=form2.querySelector('.field-error');
    if(e.code==='CONFIRM_IMPACT'){showImpact(imp,e.message,box);return;}
    err.textContent=`沒有送出：${e.message}`;err.hidden=false;box?.focus();}
+  finally{attachments.lock(false);area.disabled=false;if(reason)reason.disabled=false;if(scope)scope.disabled=false;}
  }
  function showImpact(box,message,areaNow){const owner=box.closest('form'),sendNow=owner?.querySelector('[data-focus="send-instruct"]');if(sendNow){sendNow.classList.remove('primary');sendNow.hidden=true;}box.replaceChildren();box.hidden=false;box.append(element('strong','這樣改會動到這些地方'),element('p',message));const ok=focusKey(element('button','知道了，送出','btn primary'),'impact-ok'),cancel=element('button','取消','btn subtle');ok.type='button';cancel.type='button';ok.onclick=busy(ok,()=>submitWith(true,ok));cancel.onclick=()=>{box.hidden=true;box.replaceChildren();if(sendNow){sendNow.hidden=false;if(primary)sendNow.classList.add('primary');}(areaNow||area).focus();};const r=element('div',undefined,'buttons');r.append(ok,cancel);box.append(r);ok.focus();}
  form.onsubmit=e=>{e.preventDefault();if(send.disabled)return;return busy(send,()=>submitWith(false,send))();};

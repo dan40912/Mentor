@@ -1,3 +1,4 @@
+import { Attachments, attachmentContext } from './attachments.js';
 import { mkdir, realpath, readFile, stat, appendFile, readdir, cp, rm, mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { randomUUID } from 'node:crypto';
@@ -79,7 +80,7 @@ ${task.planning.request}
   B: task => {
     const { profile, rules, diary, diaryField } = context(task);
     return `你是 Mentor的「Grill me」角色。${VOICE}
-產出資料夾路徑與檔案清單已附在下方，不要再問使用者資料在哪裡。
+產出資料夾路徑與檔案清單已附在下方，不要再問使用者資料在哪裡。需要使用者提供檔案時，請他在回答框下方按「📎 加入檔案」或把檔案拖進來，不要叫他自己把檔案放進資料夾。
 工作流程：${profile.name}。目標：用反問把任務問清楚，直到可以擬定大綱。一次最多問 ${profile.questions} 題，每題附上「為什麼要問」。優先問會改變方向的事：
 讀者是誰、看完要做什麼決定、一句話主張、證據與資料來源、篇幅、哪些地方需要圖片或圖表、時程與限制。${profile.evidence ? '\n這是要上檯面的工作：一定要問到每個關鍵數字的來源與口徑，以及最可能被質疑的地方。' : ''}
 挑戰模糊或矛盾的回答；使用者說不知道時，給一個預設值並標成假設，寫進 constraints 或 unknowns。
@@ -199,7 +200,9 @@ export function parseExecution(text) {
 }
 
 export class Coach {
-  constructor(store, settings, root, memory) {
+  constructor(store, settings, root, memory, agentRunner = runAgent) {
+    this.runAgent = agentRunner;
+    this.attachments = new Attachments(root);
     Object.assign(this, { store, settings, root, memory, children: new Map(), drivers: new Set(), overrides: new Map(), cancelled: new Set(), pending: new Map(), retries: new Map() });
   }
 
@@ -474,7 +477,7 @@ export class Coach {
   async listing(dir) {
     try {
       const names = (await readdir(dir)).filter(n => !n.startsWith('.')).slice(0, 40);
-      const rows = await Promise.all(names.map(async n => { const s = await stat(path.join(dir, n)); return `- ${n}${s.isDirectory() ? '/' : `（${Math.round(s.size / 1024)} KB）`}`; }));
+      const rows = await Promise.all(names.map(async n => { const s = await stat(path.join(dir, n)); return `- ${n}${s.isDirectory() ? '/' : `（${s.size < 1024 ? `${s.size} bytes` : `${Math.round(s.size / 1024)} KB`}）`}`; }));
       return rows.join('\n') || '- （空資料夾）';
     } catch { return '- （無法讀取）'; }
   }
@@ -511,7 +514,8 @@ export class Coach {
     const resuming = stopped && stopped.stage === stageId && (stopped.itemId || null) === (metadata.workItemId || null);
     const resumeNote = resuming ? `\n\n【接續說明】上一次「${stageName(stageId)}」在執行中被使用者停止，沒有完成。${stopped.changed?.length ? `中斷期間有變動的檔案：${stopped.changed.join('、')}。這些檔案可能只寫了一半，不能直接當成完成。` : ''}請先核對產出資料夾現有檔案與任務卡最新版本，沿用已確認的成果，再把這一步做完。` : '';
     const instructionNote = metadata.instruction ? `\n\n【使用者最新補充指示（優先於先前內容，原文）】\n${metadata.instruction}` : '';
-    const prompt = `${buildPrompt(task)}${resumeNote}${instructionNote}\n\n${LEARNING}`;
+    const attached = await attachmentContext(task, { provider: agent.provider, mode });
+    const prompt = `${await buildPrompt(task)}${attached.text}${resumeNote}${instructionNote}\n\n${LEARNING}`;
     const lastReply = task.planning.messages.filter(m => m.role === 'user' && m.stage === stageId).at(-1);
     const item = metadata.workItemId && task.planning.workItems.find(w => w.id === metadata.workItemId);
     const userInput = metadata.userInput ?? lastReply?.text ?? (item ? `${stageName(stageId)}：${item.title}${stageId === 'F' ? `\n修正意見：${(item.fixes || []).join('\n')}` : ''}` : `${stageName(stageId)}：依目前任務卡接續`);
@@ -531,7 +535,7 @@ export class Coach {
      try {
       let result, failure;
       try {
-        result = await runAgent({ ...agent, mode, cwd, prompt, onSpawn: child => { this.children.set(id, child); if (this.cancelled.has(id)) child.kill('SIGTERM'); } });
+        result = await this.runAgent({ ...agent, mode, cwd, prompt, images: attached.images, onSpawn: child => { this.children.set(id, child); if (this.cancelled.has(id)) child.kill('SIGTERM'); } });
       } catch (error) {
         failure = this.cancelled.has(id) ? new AgentError('AGENT_CANCELLED', '你已停止這次執行。') : error;
       } finally {
@@ -541,7 +545,7 @@ export class Coach {
       task = await this.latest(id);
       if (failure) await this.audit(id, failure.code === 'AGENT_CANCELLED' ? 'STAGE_STOPPED' : 'STAGE_FAILED', { stage: stageId, agent: agentLabel(agent), code: failure.code, message: failure.message });
       const changed = failure?.code === 'AGENT_CANCELLED' && mode === 'write' ? await this.changedSince(cwd, task.planning.running?.startedAt || now()) : [];
-      return this.store.mutate(id, 'latest', null, async t => {
+      return await this.store.mutate(id, 'latest', null, async t => {
         const running = t.planning.running;
         t.planning.running = null;
         const turn = t.planning.learningTurns.find(entry => entry.id === turnId);
@@ -612,7 +616,7 @@ export class Coach {
     }, 'agents', { all }).then(async r => { await this.audit(id, 'AGENTS_SET', { all: all || 'inherit' }); return r; });
   }
 
-  async create({ request, outputDir, profile = 'standard', project = '', autopilot = false, full = false, agent = null }) {
+  async create({ request, outputDir, profile = 'standard', project = '', autopilot = false, full = false, agent = null, attachmentIds = [] }) {
     const chosen = Coach.parseAgents(agent);
     if (!['quick', 'standard', 'thorough'].includes(profile)) throw new TaskError(400, 'PROFILE_INVALID', '工作流程只能是快速、標準或完整。');
     if (typeof request !== 'string' || request.trim().length < 4 || request.length > 6000) throw new TaskError(400, 'REQUEST_INVALID', '請用一兩句話描述想完成的事。');
@@ -623,23 +627,25 @@ export class Coach {
     if (!path.isAbsolute(out)) throw new TaskError(400, 'OUTPUT_INVALID', '產出資料夾需要是絕對路徑。');
     await mkdir(out, { recursive: true });
     const real = await realpath(out);
-    const baseline = [];
-    for (const name of (await readdir(real)).filter(n => !n.startsWith('.')).slice(0, 40)) {
-      const full = path.join(real, name);
-      const info = await stat(full);
-      if (info.isFile() && info.size <= 50 * 1024 * 1024) baseline.push({ file: name, sha: sha256(await readFile(full)) });
-    }
-    const task = {
-      id, revision: 1, status: 'BLOCKED', updatedAt: now(), prelude: `\n# ${request.trim().slice(0, 40)}\n\n> Mentor建立的任務。人工筆記寫在最下方。\n\n`, notes: '\n\n## 人工筆記\n',
-      title: request.trim().slice(0, 30), project: project || '未分類', goal: request.trim(),
-      workspace: { label: path.basename(real), root: real }, allowedRoots: [real], gitBaseline: await gitHead(real),
-      scope: { allowed: ['只在產出資料夾內建立或修改檔案'], locked: [], forbidden: ['對外發布、上傳或寄送', '修改產出資料夾以外的檔案'] },
-      current: { summary: '剛建立，正在整理任務卡。', artifact: null, sources: [] },
-      decisions: [], checks: [], facts: [], learnings: [], parked: [], reports: [],
-      next: '先完成需求釐清，再讓 AI 擬計畫。',
-      planning: { phase: 'grill', profile, projectLocked: Boolean(project), projectBrief: await new Projects(path.join(this.root,'vault','projects')).context(project || '未分類'), rules: await this.memory.rules(project || '未分類'), diary: [], request: request.trim(), card: { title: '', project: project || '未分類', goal: request.trim(), audience: '', deliverable: '', success: [], constraints: [], unknowns: [] }, messages: [{ id: randomUUID(), role: 'user', stage: 'A', text: request.trim(), at: now() }], outline: null, workItems: [], running: null, readyForOutline: false, baseline, agents: chosen ? Object.fromEntries(stages.map(s => [s.id, chosen])) : null, feedback: [], feedbackSince: now(), feedbackBrief: feedbackBrief(await this.store.list(), project || '未分類') }
-    };
-    await this.store.create(task);
+    await this.attachments.archive(attachmentIds, real, id, async attachments => {
+      const baseline = [];
+      for (const name of (await readdir(real)).filter(n => !n.startsWith('.')).slice(0, 40)) {
+        const full = path.join(real, name);
+        const info = await stat(full);
+        if (info.isFile() && info.size <= 50 * 1024 * 1024) baseline.push({ file: name, sha: sha256(await readFile(full)) });
+      }
+      const task = {
+        attachments, id, revision: 1, status: 'BLOCKED', updatedAt: now(), prelude: `\n# ${request.trim().slice(0, 40)}\n\n> Mentor建立的任務。人工筆記寫在最下方。\n\n`, notes: '\n\n## 人工筆記\n',
+        title: request.trim().slice(0, 30), project: project || '未分類', goal: request.trim(),
+        workspace: { label: path.basename(real), root: real }, allowedRoots: [real], gitBaseline: await gitHead(real),
+        scope: { allowed: ['只在產出資料夾內建立或修改檔案'], locked: [], forbidden: ['對外發布、上傳或寄送', '修改產出資料夾以外的檔案'] },
+        current: { summary: '剛建立，正在整理任務卡。', artifact: null, sources: [] },
+        decisions: [], checks: [], facts: [], learnings: [], parked: [], reports: [],
+        next: '先完成需求釐清，再讓 AI 擬計畫。',
+        planning: { phase: 'grill', profile, projectLocked: Boolean(project), projectBrief: await new Projects(path.join(this.root,'vault','projects')).context(project || '未分類'), rules: await this.memory.rules(project || '未分類'), diary: [], request: request.trim(), card: { title: '', project: project || '未分類', goal: request.trim(), audience: '', deliverable: '', success: [], constraints: [], unknowns: [] }, messages: [{ id: randomUUID(), role: 'user', stage: 'A', text: request.trim(), at: now() }], outline: null, workItems: [], running: null, readyForOutline: false, baseline, agents: chosen ? Object.fromEntries(stages.map(s => [s.id, chosen])) : null, feedback: [], feedbackSince: now(), feedbackBrief: feedbackBrief(await this.store.list(), project || '未分類') }
+      };
+      await this.store.create(task);
+    });
     await this.audit(id, 'TASK_CREATED', { request: request.trim(), profile, outputDir: real });
     const started = await this.formulate(id);
     if (autopilot) {
@@ -704,11 +710,37 @@ export class Coach {
     return this.grill(id, provider);
   }
 
-  async answer(id, revision, key, { message }) {
+  async mutateAttachments(id, revision, key, ids, change, action, payload) {
+    if (!Array.isArray(ids) || ids.some(x => typeof x !== 'string') || new Set(ids).size !== ids.length) throw new TaskError(400, 'ATTACHMENT_BATCH_INVALID', '附件識別格式不正確或重複。');
+    const task = await this.latest(id);
+    const fresh = ids.filter(x => !task.attachments?.some(a => a.id === x));
+    let result;
+    await this.attachments.archive(fresh, task.allowedRoots[0], id, async added => {
+      result = await this.store.mutate(id, revision, key, async t => {
+        if (t.planning?.running || this.pending.has(id)) throw new TaskError(409, 'AGENT_BUSY', 'AI 還在執行，請停止後再送出。');
+        if (t.trashed) throw new TaskError(409, 'TASK_TRASHED', '任務在回收桶，請先還原。');
+        const changed = await change(t);
+        (t.attachments ||= []).push(...added);
+        return changed;
+      }, action, { ...payload, attachmentIds: ids });
+    });
+    return result;
+  }
+
+  async saveCard(id, revision, key, { card, attachmentIds = [] }) {
+    if (!card || ['title', 'goal', 'audience', 'deliverable'].some(k => typeof card[k] !== 'string' || card[k].length > 6000) || !card.title.trim() || !card.goal.trim() || ['success', 'constraints', 'unknowns'].some(k => !Array.isArray(card[k]) || card[k].some(v => typeof v !== 'string' || v.length > 6000))) throw new TaskError(400, 'CARD_INVALID', '請填寫標題、目標，並確認任務卡欄位格式。');
+    return this.mutateAttachments(id, revision, key, attachmentIds, t => {
+      t.planning.card = { ...t.planning.card, ...Object.fromEntries(['title', 'goal', 'audience', 'deliverable', 'success', 'constraints', 'unknowns'].map(k => [k, card[k]])) };
+      t.title = card.title; t.goal = card.goal;
+      return { status: planningStatus(t) };
+    }, 'card', { card });
+  }
+
+  async answer(id, revision, key, { message, attachmentIds = [] }) {
     if (typeof message !== 'string' || !message.trim()) throw new TaskError(400, 'MESSAGE_REQUIRED', '請先寫下回答。');
-    await this.store.mutate(id, revision, key, t => {
+    await this.mutateAttachments(id, revision, key, attachmentIds, t => {
       if (t.planning?.phase !== 'grill') throw new TaskError(409, 'NOT_GRILLING', '這個任務已經過了 Grill 階段。');
-      t.planning.messages.push({ id: randomUUID(), role: 'user', stage: 'B', text: message.trim().slice(0, 6000), at: now() });
+      t.planning.messages.push({ id: randomUUID(), role: 'user', stage: 'B', text: message.trim().slice(0, 6000), attachmentIds, at: now() });
       t.planning.readyForOutline = false;
       return { status: 'RUNNING' };
     }, 'answer', { message });
@@ -936,7 +968,7 @@ export class Coach {
     return { route: 'fix', itemId: target.id, label: '請 AI 照這樣改', impact: dependents.length ? `會修改 ${itemName(target.id)} 並重新驗收；依賴它的 ${itemNames(dependents)} 標為待核對。` : null };
   }
 
-  async instruct(id, revision, key, { text = '', scope = 'current', reason = '', confirmImpact = false, dryRun = false } = {}) {
+  async instruct(id, revision, key, { text = '', scope = 'current', reason = '', confirmImpact = false, dryRun = false, attachmentIds = [] } = {}) {
     if (typeof text !== 'string' || text.length > 6000) throw new TaskError(400, 'TEXT_TOO_LONG', '補充指示最多 6,000 字。');
     if (typeof reason !== 'string' || reason.length > 500) throw new TaskError(400, 'REASON_TOO_LONG', '修改原因最多 500 字。');
     text = text.trim(); reason = reason.trim();
@@ -946,16 +978,16 @@ export class Coach {
     if (dryRun) return { plan };
     if (plan.impact && !confirmImpact) throw new TaskError(409, 'CONFIRM_IMPACT', plan.impact, { plan });
     if (plan.route === 'answer') {
-      const result = await this.answer(id, revision, key, { message: reason ? `${text}\n（修改原因：${reason}）` : text });
+      const result = await this.answer(id, revision, key, { message: reason ? `${text}\n（修改原因：${reason}）` : text, attachmentIds });
       await this.audit(id, 'INSTRUCTION', { route: plan.route, scope, text, reason, impact: null });
       return result;
     }
     const stopped = task.planning.stopped;
-    await this.store.mutate(id, revision, key, t => {
+    await this.mutateAttachments(id, revision, key, attachmentIds, t => {
       // 再檢查一次，避免兩個請求之間狀態已變。
       const again = this.plan(t, { text, scope });
       if (again.route !== plan.route) throw new TaskError(409, 'STATE_CHANGED', '任務狀態已改變，請重新整理後再送出。');
-      (t.planning.instructions ||= []).push({ id: randomUUID().slice(0, 8), at: now(), route: plan.route, scope, itemId: plan.itemId || stopped?.itemId || null, text, reason, impact: plan.impact });
+      (t.planning.instructions ||= []).push({ id: randomUUID().slice(0, 8), at: now(), route: plan.route, scope, itemId: plan.itemId || stopped?.itemId || null, text, reason, attachmentIds, impact: plan.impact });
       if (text && plan.route !== 'outline' && plan.route !== 'replan') t.planning.messages.push({ id: randomUUID(), role: 'user', stage: plan.route === 'resume' ? stopped.stage : plan.route === 'execute' || plan.route === 'round' ? 'D' : 'F', text, reason: reason || undefined, at: now() });
       if (plan.route === 'resume' && text && stopped.itemId) {
         const item = this.item(t, stopped.itemId);
@@ -976,7 +1008,7 @@ export class Coach {
       }
       return { status: planningStatus(t) };
     }, 'instruct', { text, scope, reason, route: plan.route });
-    await this.audit(id, 'INSTRUCTION', { route: plan.route, scope, text, reason, impact: plan.impact });
+    await this.audit(id, 'INSTRUCTION', { route: plan.route, scope, text, reason, attachmentIds, impact: plan.impact });
     if (plan.route === 'resume') {
       const extra = stopped.stage === 'C' ? { feedback: text, replan: stopped.replan, instruction: text } : { instruction: text };
       return this.run(id, stopped.stage, stopped.itemId, extra);

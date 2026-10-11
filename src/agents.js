@@ -18,11 +18,13 @@ const bin = provider => ({ codex: process.env.AWC_CODEX_BIN || 'codex', claude: 
 // Copilot 的全部內建工具；對話模式全部排除，讀檔會被擋下（已實測）
 const COPILOT_TOOLS = 'view,create,edit,glob,grep,bash,read_bash,write_bash,stop_bash,list_bash,web_fetch,fetch_copilot_cli_documentation,search_code_subagent,skill,run_dynamic_workflow,dynamic_workflows_manage,sql,session_store_sql,read_agent,list_agents,write_agent,task';
 
-export function buildArgs({ provider, modelId, effort, mode, cwd, outputFile }) {
+export function buildArgs({ provider, modelId, effort, mode, cwd, outputFile, images = [] }) {
   if (provider === 'codex') {
     const args = ['exec', '--ephemeral', '--skip-git-repo-check', '-s', mode === 'write' ? 'workspace-write' : 'read-only', '-C', cwd, '-o', outputFile];
     if (modelId) args.push('-m', modelId);
     if (effort) args.push('-c', `model_reasoning_effort=${effort}`);
+    // 用 = 寫法：--image 可接多個值，分開寫會把後面的 '-' 當成圖片。
+    for (const image of images) args.push(`--image=${image}`);
     return [...args, '-'];
   }
   if (provider === 'claude') {
@@ -58,11 +60,11 @@ export function classify(output) {
 // 時間上限依工作性質：寫檔可能要讀大量資料，給 30 分鐘；唯讀驗收 15 分鐘；純對話 10 分鐘
 export const TIMEOUTS = { chat: 600000, read: 900000, write: 1800000 };
 
-export async function runAgent({ provider, modelId = null, effort = null, mode = 'chat', cwd, prompt, timeoutMs = TIMEOUTS[mode] || 600000, onSpawn }) {
+export async function runAgent({ provider, modelId = null, effort = null, mode = 'chat', cwd, prompt, images = [], timeoutMs = TIMEOUTS[mode] || 600000, onSpawn }) {
   const scratch = await mkdtemp(path.join(tmpdir(), 'awc-agent-'));
   const outputFile = path.join(scratch, 'last.txt');
   const workdir = mode === 'chat' ? scratch : cwd;
-  const args = buildArgs({ provider, modelId, effort, mode, cwd: workdir, outputFile });
+  const args = buildArgs({ provider, modelId, effort, mode, cwd: workdir, outputFile, images });
   try {
     const { code, signal, stdout, stderr } = await new Promise((resolve, reject) => {
       const plan = spawnPlan(bin(provider), args);
@@ -95,9 +97,31 @@ export function extractJson(text) {
   const fenced = [...text.matchAll(/```(?:json)?\s*\n([\s\S]*?)\n```/g)].map(match => match[1]);
   const candidates = fenced.length ? fenced.reverse() : [text.slice(text.indexOf('{'), text.lastIndexOf('}') + 1)];
   for (const candidate of candidates) {
-    try { const value = JSON.parse(candidate); if (value && typeof value === 'object') return value; } catch {}
+    const value = parseLoose(candidate);
+    if (value) return value;
   }
   return null;
+}
+
+// 模型常把巢狀物件多關一個 }，讓根物件提早結束、後面還接著 ,"learning":{…}。
+// 只修這一種形狀：前段與後段各自是合法物件時合併；其他錯誤照樣當成解析失敗。
+function parseLoose(candidate, depthLimit = 3) {
+  try { const value = JSON.parse(candidate); return value && typeof value === 'object' ? value : null; } catch {}
+  if (!depthLimit) return null;
+  let depth = 0, inString = false, end = -1;
+  for (let i = 0; i < candidate.length; i++) {
+    const ch = candidate[i];
+    if (inString) { if (ch === '\\') i++; else if (ch === '"') inString = false; continue; }
+    if (ch === '"') inString = true;
+    else if (ch === '{' || ch === '[') depth++;
+    else if (ch === '}' || ch === ']') { depth--; if (depth === 0) { end = i; break; } }
+  }
+  const rest = end < 0 ? '' : candidate.slice(end + 1).trim();
+  if (!rest.startsWith(',')) return null;
+  let head;
+  try { head = JSON.parse(candidate.slice(0, end + 1)); } catch { return null; }
+  const tail = parseLoose(`{${rest.slice(1)}`, depthLimit - 1);
+  return head && typeof head === 'object' && !Array.isArray(head) && tail ? { ...head, ...tail } : null;
 }
 
 export async function diagnose(provider, model) {
