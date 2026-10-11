@@ -517,6 +517,8 @@ export class Coach {
     const userInput = metadata.userInput ?? lastReply?.text ?? (item ? `${stageName(stageId)}：${item.title}${stageId === 'F' ? `\n修正意見：${(item.fixes || []).join('\n')}` : ''}` : `${stageName(stageId)}：依目前任務卡接續`);
     const inputKind = metadata.inputKind || (lastReply ? 'user' : stageId === 'B' ? 'automatic' : 'action');
     const turnId = randomUUID();
+    // 上一次執行剛結束時重按停止會留下標記；此時沒有執行中的 CLI，標記只可能屬於舊的執行。
+    this.cancelled.delete(id);
     const started = await this.store.mutate(id, task.revision, null, t => {
       const startedAt = now();
       (t.planning.learningTurns ||= []).push({ id: turnId, stage: stageId, provider: agent.provider, modelId: agent.modelId, effort: agent.effort, agent: agentLabel(agent), startedAt, status: 'running', prompt, userInput, inputKind, workItemId: metadata.workItemId || null, beforeRevision: task.revision });

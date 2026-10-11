@@ -16,6 +16,8 @@ if (mode === 'slow' || mode === 'slow-login' || mode === 'hang') {
     process.on('SIGTERM', () => {});
     const { spawn } = await import('node:child_process');
     spawn(process.execPath, ['-e', `setTimeout(() => {}, ${Number(hangMs || process.env.FAKE_HANG_MS || 1500)})`], { stdio: ['ignore', 'inherit', 'inherit'] });
+    // 測試等到這行才送停止，避免 SIGTERM 早於忽略設定送達。
+    process.stderr.write('HANG_READY\n');
   }
   await new Promise(resolve => setTimeout(resolve, 60000));
 }
