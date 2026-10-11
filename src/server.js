@@ -13,16 +13,13 @@ import { Coach } from './coach.js';
 import { diagnose } from './agents.js';
 import { TaskStore, TaskError, buildBrief } from './tasks.js';
 import { summarize, MOMENTS } from './feedback.js';
+import { writeHandoff, previewHandoff } from './handoffs.js';
 
 const appDir = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const webDir = path.join(appDir, 'web');
 // 使用者資料（vault、outputs、設定）放在 MENTOR_HOME，預設是 repo 根目錄。
 const flag = name => { const i = process.argv.indexOf(`--${name}`); return i > 0 ? process.argv[i + 1] : undefined; };
 const root = path.resolve(flag('home') || process.env.MENTOR_HOME || appDir);
-const memory = path.join(root, 'vault');
-const token = randomBytes(32).toString('hex');
-let settings = { revision: 1, stages: defaultStageSettings() };
-const diagnosis = {};
 const previewTypes = { '.html': ['text/html; charset=utf-8', 5 * 1024 * 1024], '.md': ['text/plain; charset=utf-8', 5 * 1024 * 1024], '.png': ['image/png', 20 * 1024 * 1024], '.jpg': ['image/jpeg', 20 * 1024 * 1024], '.jpeg': ['image/jpeg', 20 * 1024 * 1024], '.webp': ['image/webp', 20 * 1024 * 1024] };
 const inside = (parent, child) => child.startsWith(`${parent}${path.sep}`);
 
@@ -128,7 +125,12 @@ async function body(req) {
   return JSON.parse(text);
 }
 
-export async function startServer(port = Number(flag('port') || process.env.PORT || 4317)) {
+export async function createApplication(home = root, port = 4317) {
+  const root = path.resolve(home);
+  const memory = path.join(root, 'vault');
+  const token = randomBytes(32).toString('hex');
+  let settings = { revision: 1, stages: defaultStageSettings() };
+  const diagnosis = {};
   await mkdir(memory, { recursive: true });
   const canonicalRoot = await realpath(root);
   if (!((await realpath(memory)).startsWith(`${canonicalRoot}${path.sep}`))) {
@@ -160,14 +162,14 @@ export async function startServer(port = Number(flag('port') || process.env.PORT
   await coach.recover();
   const trash = new Trash(memory, tasks, coach);
   const server = http.createServer(async (req, res) => {
-    const origin = `http://127.0.0.1:${server.address().port}`;
+    const boundPort = server.address()?.port ?? port;
+    const origin = `http://127.0.0.1:${boundPort}`;
     const send = (status, data) => {
       res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
       res.end(JSON.stringify(data));
     };
-    const port = server.address().port;
     // 用 localhost 開啟首頁時導到 127.0.0.1，cookie 與 CSRF 只綁一個來源。
-    if (req.method === 'GET' && req.url === '/' && req.headers.host === `localhost:${port}`) {
+    if (req.method === 'GET' && req.url === '/' && req.headers.host === `localhost:${boundPort}`) {
       res.writeHead(302, { Location: `${origin}/` });
       return res.end();
     }
@@ -230,9 +232,11 @@ export async function startServer(port = Number(flag('port') || process.env.PORT
         if (!id && !action) return send(200, { tasks: await tasks.list() });
         if (id && action === 'events') return send(200, { events: await coach.events(id) });
         if (id && action === 'conversation') return send(200, await conversations.read((await tasks.get(id)).task));
-        if (id && action === 'preview') {
+        if (id && ['preview', 'handoff-preview'].includes(action)) {
           const file = new URLSearchParams(query || '').get('file');
-          const preview = await previewArtifact(tasks, root, id, file);
+          const preview = action === 'handoff-preview'
+            ? await previewHandoff(root, (await tasks.get(id)).task, file)
+            : await previewArtifact(tasks, root, id, file);
           res.writeHead(200, { 'Content-Type': preview.mime, 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Content-Disposition': 'inline', 'Content-Security-Policy': preview.html ? "sandbox allow-scripts; default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; connect-src 'none'; form-action 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; frame-ancestors 'self'" : "default-src 'none'; style-src 'unsafe-inline'; sandbox; frame-ancestors 'self'" });
           return res.end(preview.content);
         }
@@ -274,6 +278,11 @@ export async function startServer(port = Number(flag('port') || process.env.PORT
         return send(403, { code: 'CSRF_FAILED' });
       }
       const input = await body(req);
+      if (taskRoute?.[1] && taskRoute[2] === 'handoff-prompt') {
+        const { task } = await tasks.get(taskRoute[1]);
+        if (input.revision !== task.revision) throw new TaskError(409, 'REVISION_CONFLICT', '任務版本已更新。', { revision: task.revision });
+        return send(200, await writeHandoff(root, task));
+      }
       if (projectRoute) {
         if (!projectRoute[1]) return send(201, { project: await projects.create(input) });
         if (projectRoute[2] === 'save') return send(200, await projects.save(decodeURIComponent(projectRoute[1]), input));
@@ -397,12 +406,17 @@ export async function startServer(port = Number(flag('port') || process.env.PORT
       send(400, { code: 'REQUEST_FAILED', message: error.message, nextStep: '檢查輸入；保存失敗時查看終端錯誤。' });
     }
   });
+  // 服務結束時一併停掉它啟動的 CLI，不留在背景繼續跑、繼續寫檔。
+  server.stopAgents = () => { for (const child of coach.children.values()) killTree(child, 'SIGTERM'); return coach.children.size; };
+  return server;
+}
+
+export async function startServer(port = Number(flag('port') || process.env.PORT || 4317)) {
+  const server = await createApplication(root, port);
   await new Promise((resolve, reject) => {
     server.once('error', reject);
     server.listen(port, '127.0.0.1', resolve);
   });
-  // 服務結束時一併停掉它啟動的 CLI，不留在背景繼續跑、繼續寫檔。
-  server.stopAgents = () => { for (const child of coach.children.values()) killTree(child, 'SIGTERM'); return coach.children.size; };
   return server;
 }
 
