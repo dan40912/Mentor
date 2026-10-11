@@ -894,12 +894,12 @@ function toggleMarkdownSource(){
  button.setAttribute('aria-pressed',String(source));
  $('#preview-content .markdown-preview').innerHTML=markdownPreviewBody(previewMarkdown,source);
 }
-async function openPreview(taskId,file,trigger){
+async function openPreview(taskId,file,trigger,action='preview'){
  const dialog=$('#preview-dialog'),content=$('#preview-content'),status=$('#preview-status'),modes=$('#preview-modes');
  previewMarkdown=null;$('#preview-source').hidden=true;$('#preview-source').setAttribute('aria-pressed','false');for(const button of modes.querySelectorAll('[data-preview-mode]'))button.hidden=false;
  previewReturn={taskId,file,trigger};$('#preview-title').textContent=`預覽成果：${file}`;content.replaceChildren();content.classList.remove('mobile');modes.hidden=true;modes.querySelector('[data-preview-mode="desktop"]').setAttribute('aria-pressed','true');modes.querySelector('[data-preview-mode="mobile"]').setAttribute('aria-pressed','false');status.textContent='載入中…';
  dialog.showModal();dialog.querySelector('[data-close]').focus();
- const url=`/api/tasks/${encodeURIComponent(taskId)}/preview?file=${encodeURIComponent(file)}`;
+ const url=`/api/tasks/${encodeURIComponent(taskId)}/${action}?file=${encodeURIComponent(file)}`;
  try{
   await refreshSession();
   const response=await fetch(url,{credentials:'same-origin',cache:'no-store'});
@@ -1145,14 +1145,24 @@ function openTask(id,{background=false}={}){
  // 先把接手包載好，點擊時在同一個使用者手勢內寫入剪貼簿
  let cached=null,seq=0;const brief=async()=>{const who=receiver.value;if(cached?.receiver===who)return cached;const mine=++seq;const r=await request(`/api/tasks/${t.id}/brief?for=${who}`);if(mine!==seq||who!==receiver.value)return null;pre.textContent=r.text;cached=r;return r;};
  receiver.onchange=()=>{cached=null;status.textContent='';brief().catch(()=>{});};receiver.dataset.focus='receiver';queueMicrotask(()=>brief().catch(()=>{}));
- const writeClipboard=async text=>{try{await navigator.clipboard.writeText(text);return true;}catch{const area=element('textarea');area.value=text;area.setAttribute('readonly','');area.style.cssText='position:fixed;opacity:0;pointer-events:none';dialog.append(area);area.select();const ok=document.execCommand('copy');area.remove();return ok;}};
+ const writeClipboard=async text=>{try{await navigator.clipboard.writeText(text);return true;}catch{const area=element('textarea');area.value=text;area.setAttribute('readonly','');area.style.cssText='position:fixed;opacity:0;pointer-events:none';dialog.append(area);try{area.select();return document.execCommand('copy');}catch{return false;}finally{area.remove();}}};
  copy.onclick=async()=>{const r=(cached?.receiver===receiver.value&&cached)||await brief().catch(error=>{tell(`未完成：${error.message}`);return null;});if(!r||r.receiver!==receiver.value)return tell('接手 AI 剛換過，請再按一次複製。');if(await writeClipboard(r.text))status.textContent=`✓ 已複製 ${r.chars.toLocaleString()} 字元 · revision ${t.revision}`;else{preview.open=true;status.textContent='無法寫入剪貼簿，請從預覽手動複製或下載。';}};
  save.onclick=busy(save,async()=>{const r=await brief();if(!r||r.receiver!==receiver.value)throw new Error('接手 AI 剛換過，請再按一次下載。');download(`${t.id}-r${t.revision}-brief.md`,r.text);status.textContent='已下載。';});
  
- const row=element('div',undefined,'buttons');row.append(receiver,copy,save,status);
+ const handoffCopy=focusKey(element('button','複製交接提示','btn'),'handoff-copy'),handoffOpen=element('button','開啟 MD','btn'),handoffFallback=element('details'),handoffText=element('pre','','contract');
+ handoffOpen.hidden=true;handoffFallback.hidden=true;handoffFallback.append(element('summary','手動複製交接提示'),handoffText);
+ handoffCopy.onclick=busy(handoffCopy,async()=>{
+  status.textContent='正在保存交接檔與複製提示…';handoffOpen.hidden=true;handoffOpen.onclick=null;handoffFallback.hidden=true;handoffText.textContent='';
+  try{
+   const r=await request(`/api/tasks/${t.id}/handoff-prompt`,{revision:t.revision});handoffOpen.hidden=false;handoffOpen.onclick=()=>openPreview(t.id,r.path,handoffOpen,'handoff-preview');handoffText.textContent=r.prompt;
+   if(await writeClipboard(r.prompt)){status.textContent=`✓ 已複製交接提示 · 檔案已存到 ${r.path}`;}
+   else{handoffFallback.hidden=false;handoffFallback.open=true;status.textContent=`無法寫入剪貼簿，請從下方手動複製交接提示 · 檔案已存到 ${r.path}`;}
+  }catch(error){status.textContent=`未完成：${error.message}`;throw error;}
+ });
+ const row=element('div',undefined,'buttons');row.append(receiver,copy,handoffCopy,save,handoffOpen,status);
  const report=element('textarea');report.placeholder='把 AI 的回報整段貼在這裡（需包含 TASK_ID、BASE_REVISION、STATUS）';report.setAttribute('aria-label','AI 回報內容');report.value=reportDrafts[t.id]||'';report.oninput=()=>{reportDrafts[t.id]=report.value;};
  const send=focusKey(element('button','送出回報','btn'),'send');send.onclick=busy(send,async()=>{if(!report.value.trim()){report.focus();throw new Error('請先貼上回報。');}const text=report.value;delete reportDrafts[t.id];try{await act(t.id,'report',{text});}catch(error){reportDrafts[t.id]=text;report.value=text;throw error;}const st=tasks.find(x=>x.id===t.id).reports.at(-1).status;tell(st==='DONE'?'回報已保存。AI 說完成不等於完成，檢查已重設，等你驗收。':`回報已保存（${reportText[st]||st}）。任務維持阻擋，下一步已更新。`);});
- box.append(element('p','接手包包含邊界、已確認決策、待決策、口徑與回報格式，不含整段聊天。複製不代表 AI 已開始執行。','small muted'),row,preview,element('h4','貼回 AI 回報','small'),report,send);hand.append(box);if(!t.planning)detail.append(hand);
+ box.append(element('p','接手包包含邊界、已確認決策、待決策、口徑與回報格式，不含整段聊天。複製不代表 AI 已開始執行。','small muted'),row,preview,handoffFallback,element('h4','貼回 AI 回報','small'),report,send);hand.append(box);if(t.planning){receiver.hidden=true;copy.hidden=true;save.hidden=true;preview.hidden=true;report.hidden=true;send.hidden=true;box.querySelector('h4').hidden=true;box.querySelector('p').textContent='將目前任務與完整對話存成本地交接檔，再把提示貼給自己的 AI。';}detail.append(hand);
  if(t.reports.length){const reps=section('AI 回報紀錄');for(const r of [...t.reports].reverse()){const item=element('div',undefined,'check-item');const info=element('div');info.append(element('strong',r.file),element('p',`基於 revision ${r.baseRevision} · 收到於 ${when(r.receivedAt)}${r.artifact?` · 新成果檔 ${r.artifact.split('/').pop()}`:''}`,'small muted'));item.append(element('span',reportText[r.status]||r.status,`badge ${r.status==='DONE'?'pass':r.status==='BLOCKED'?'amber':'blue'}`),info,element('span'));reps.append(item);}detail.append(reps);}
  const more=element('details');more.append(element('summary','口徑、邊界、來源與學習卡'));
  const factsBox=section('事實與口徑');factsBox.append(definition(t.facts.map(f=>[f.label,`${f.value}\n${f.verified?'已核對':'未獨立核對'} · 來源 ${f.source}`])));
