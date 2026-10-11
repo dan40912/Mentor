@@ -50,7 +50,7 @@ function drawJourneyRecords(p,box){
   const files=new Set((t.planning?.workItems||[]).flatMap(w=>(w.outputs||[]).map(o=>o.file)));
   const root=t.allowedRoots?.[0],artifact=t.current?.artifact;
   if(root&&artifact?.startsWith(root+'/'))files.add(artifact.slice(root.length+1));
-  const previewFiles=[...files].filter(file=>/\.(html|md|png|jpe?g|webp)$/i.test(file));
+  const previewFiles=[...files].filter(file=>/\.(html|md|txt|log|csv|json|js|mjs|cjs|ts|css|yml|yaml|sh|py|png|jpe?g|webp)$/i.test(file));
   if(previewFiles.length){const outputs=element('div',undefined,'buttons');outputs.append(element('span','成果檔案','small muted'));for(const file of previewFiles){const preview=element('button',file,'btn subtle');preview.onclick=()=>openPreview(t.id,file,preview);outputs.append(preview);}card.append(outputs);}
   list.append(card);
  }

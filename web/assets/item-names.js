@@ -12,6 +12,15 @@
     }
     return ids.map(itemName).join('、');
   }
+  function itemTitle(id, title) {
+    const name = itemName(id);
+    return title.startsWith(name) ? title : `${name} ${title}`;
+  }
+  function stopLabel(label) {
+    return label.replace(/^[WR]\d+\b/, itemName);
+  }
+  globalThis.itemTitle = itemTitle;
+  globalThis.stopLabel = stopLabel;
   globalThis.itemName = itemName;
   globalThis.itemNames = itemNames;
 })();

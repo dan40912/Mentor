@@ -39,7 +39,7 @@ function instructionBox(t,{extraButtons=[]}={}){
  const form=element('form',undefined,'composer instruct');form.dataset.anchor=mode==='stopped'?'stopped':'instruct';form.noValidate=true;
  const id=`instruct-${t.id}`,label=element('label',{stopped:'繼續前要交代什麼？（可以空白）',grill:'你的回答',outline:'計畫哪裡要改？',execute:'想調整什麼？',done:'還想再做什麼？'}[mode]||'補充指示','instruct-label');label.htmlFor=id;
  const area=focusKey(element('textarea'),'composer');area.id=id;area.maxLength=6000;area.value=loadDraft(t.id);
- const executeExample=current?`例如：『${itemName(current.id)} ${current.title}』的結論放最前面`:'例如：結論放最前面。';
+ const executeExample=current?`例如：『${itemTitle(current.id,current.title)}』的結論放最前面`:'例如：結論放最前面。';
  area.placeholder={stopped:'例如：繼續前要補充的資訊。空白也可以直接繼續。',grill:'回答上面的問題；不知道就說不知道，AI 會先給預設值。',outline:'例如：第 3 段刪掉；結論移到最前面。',execute:executeExample,done:'例如：再做一份英文版。會建立新一輪，不覆寫已完成的紀錄。'}[mode];
  const count=element('span','','small muted counter');const hint=element('span','','small muted');hint.id=`${id}-hint`;area.setAttribute('aria-describedby',hint.id);
  form.append(label);
@@ -51,7 +51,7 @@ function instructionBox(t,{extraButtons=[]}={}){
  if(mode==='stopped')form.append(element('p',`套用於：中斷的${stageLabel(p.stopped.stage)}${p.stopped.itemId?` ${itemName(p.stopped.itemId)}`:''}`,'small muted'));
  if(mode==='execute'){
   const cur=current;scope=element('select');scope.className='btn';scope.id=`${id}-scope`;
-  options(scope,[['current',`正在做的：${cur?`${itemName(cur.id)} ${cur.title}`:''}`],...items.map(w=>[w.id,`${itemName(w.id)} ${w.title}（${itemStatus[w.status]?.[0]||w.status}）`]),['outline','重排整個計畫（排好後你要再核准一次）']]);
+  options(scope,[['current',`正在做的：${cur?`${itemTitle(cur.id,cur.title)}`:''}`],...items.map(w=>[w.id,`${itemTitle(w.id,w.title)}（${itemStatus[w.status]?.[0]||w.status}）`]),['outline','重排整個計畫（排好後你要再核准一次）']]);
   scope.value=instructDrafts.scope[t.id]||'current';scope.onchange=()=>{instructDrafts.scope[t.id]=scope.value;sync();};
   const row=element('label',undefined,'instruct-field');row.htmlFor=scope.id;row.append(element('span','要改哪裡','small'),scope);form.append(row);
  }

@@ -3,7 +3,8 @@
 function feedbackCard(t){
  const f=t.feedbackPrompt;if(!f)return null;
  const card=focusKey(element('section',undefined,'feedback-card'),'feedback');card.setAttribute('aria-label','回饋表單');
- const head=element('div');head.append(element('div',{confirm:'回饋 · 確認成果',park:'回饋 · 這次停下',done:'回饋 · 任務總評'}[f.moment]+' · 約 20 秒','eyebrow'),element('strong',f.question),element('p',f.about,'small muted'));card.append(head);
+ const about=f.about.replace(/\b[WR]\d+\b/g,itemName);
+ const head=element('div');head.append(element('div',{confirm:'回饋 · 確認成果',park:'回饋 · 這次停下',done:'回饋 · 任務總評'}[f.moment]+' · 約 20 秒','eyebrow'),element('strong',f.question),element('p',about,'small muted'));card.append(head);
  const scale=element('fieldset',undefined,'fb-scale');scale.append(element('legend','評分（1 最差，5 最好）','visually-hidden'));
  const send=focusKey(element('button','送出回饋','btn primary'),'feedback-send');
  f.scale.forEach((label,i)=>{const l=element('label'),r=element('input');r.type='radio';r.name=`fb-${t.id}`;r.value=String(i+1);const s=element('span');s.append(element('b',String(i+1)),element('small',label));l.append(r,s);scale.append(l);});

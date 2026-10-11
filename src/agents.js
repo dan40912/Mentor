@@ -48,10 +48,10 @@ export function buildArgs({ provider, modelId, effort, mode, cwd, outputFile }) 
 }
 
 export function classify(output) {
-  if (/not logged in|please run \/login|unauthorized|401/i.test(output)) return ['AGENT_NOT_LOGGED_IN', 'CLI 尚未登入。請在終端機執行該 CLI 並完成登入。'];
+  if (/rate.?limit|usage limit|session limit|quota|insufficient_quota|429/i.test(output)) return ['AGENT_QUOTA', '這個 AI 的額度用完或被限流。可以在設定把此階段換給另一個 AI。'];
+  if (/not logged in|please run \/login|\bunauthorized\b|\b401\s+Unauthorized\b|\b(?:status|HTTP)\s*[:=]?\s*401\b/i.test(output)) return ['AGENT_NOT_LOGGED_IN', 'CLI 尚未登入。請在終端機執行該 CLI 並完成登入。'];
   if (/content filtering/i.test(output)) return ['AGENT_FILTERED', 'AI 回覆被內容過濾擋下，沒有收到可用結果。可以重試，或在角色與設定選擇另一個 AI。'];
   if (/model .*not supported|unknown model|invalid model|model_not_found|is not available/i.test(output)) return ['AGENT_MODEL_UNSUPPORTED', '這個帳號不支援所選模型，請在設定換一個模型。'];
-  if (/rate.?limit|usage limit|session limit|quota|insufficient_quota|429/i.test(output)) return ['AGENT_QUOTA', '這個 AI 的額度用完或被限流。可以在設定把此階段換給另一個 AI。'];
   return ['AGENT_FAILED', 'AI 執行失敗，原因未能辨識。'];
 }
 
@@ -64,7 +64,7 @@ export async function runAgent({ provider, modelId = null, effort = null, mode =
   const workdir = mode === 'chat' ? scratch : cwd;
   const args = buildArgs({ provider, modelId, effort, mode, cwd: workdir, outputFile });
   try {
-    const { code, stdout, stderr } = await new Promise((resolve, reject) => {
+    const { code, signal, stdout, stderr } = await new Promise((resolve, reject) => {
       const plan = spawnPlan(bin(provider), args);
       const child = spawn(plan.command, plan.args, { ...plan.options, cwd: workdir, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true, env: { ...process.env, NO_COLOR: '1' } });
       onSpawn?.(child);
@@ -73,9 +73,10 @@ export async function runAgent({ provider, modelId = null, effort = null, mode =
       child.stdout.on('data', chunk => { stdout += chunk; if (stdout.length > 2_000_000) stdout = stdout.slice(-1_000_000); });
       child.stderr.on('data', chunk => { stderr += chunk; if (stderr.length > 200_000) stderr = stderr.slice(-100_000); });
       child.on('error', error => { clearTimeout(timer); reject(error.code === 'ENOENT' || error.code === 'EINVAL' ? new AgentError('AGENT_NOT_INSTALLED', `找不到 ${bin(provider)} 指令。`) : error); });
-      child.on('close', code => { clearTimeout(timer); resolve({ code, stdout, stderr }); });
+      child.on('close', (code, signal) => { clearTimeout(timer); resolve({ code, signal, stdout, stderr }); });
       child.stdin.end(prompt);
     });
+    if (signal) throw new AgentError('AGENT_INTERRUPTED', 'CLI 被訊號中斷，結果未知。請核對產出後再接續。', signal);
     let text = stdout.trim();
     if (provider === 'codex') text = (await readFile(outputFile, 'utf8').catch(() => '')).trim();
     const filtered = /^The model returned no content because the response was blocked by content filtering\.?$/i.test(text);

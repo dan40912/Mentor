@@ -9,6 +9,7 @@ import { HEADINGS } from './memory.js';
 import { outlineSensors, outputSensors } from './sensors.js';
 import { Projects } from './projects.js';
 import { killTree } from './platform.js';
+import { gitHead } from './git-diff.js';
 import { itemName, itemNames } from './item-names.js';
 import { validateFeedback, feedbackBrief } from './feedback.js';
 
@@ -101,6 +102,7 @@ ${transcript(task.planning.messages)}
     return `你是 Mentor的「擬定大綱」角色。${VOICE}
 工作流程：${profile.name}（${profile.description}）
 依任務卡與 Grill 對話，產出大綱並拆成工作項目。你可以唯讀目前資料夾的檔案，大綱每段的 evidence 要寫出實際依據的檔名與位置。
+本階段只讀檔案，不寫檔；執行階段會在產出資料夾寫檔。工作項目的 detail 與驗收條件（acceptance）只描述要做的工作與成果，不加入本階段的權限限制，不要寫「目前不執行」或「需要可寫環境」。
 - storyline：一句話主線。logic：因果鏈，每一步一句，讓第一次聽的人也懂前因後果。
 - sections：逐段（簡報就是逐頁），每段寫重點、evidence（依據或資料來源；沒有依據就寫「無依據」，不要編）${profile.evidence ? '、risk（最可能被質疑的地方）' : ''}，以及需要的視覺：type 是 image、chart、diagram、screenshot、none 之一，count 是張數。${profile.id === 'quick' ? '段落精簡，只留必要的。' : ''}
 - imageTotal：全部需要的圖片與圖表張數加總。
@@ -551,7 +553,7 @@ export class Coach {
           return { status: planningStatus(t), extra: { stopped: true, error: { code: 'AGENT_CANCELLED', message: failure.message } } };
         }
         if (failure) {
-          Object.assign(turn, { status: 'failed', error: failure.message, errorCode: failure.code || 'AGENT_FAILED' });
+          Object.assign(turn, { status: failure.code === 'AGENT_INTERRUPTED' ? 'unknown' : 'failed', error: failure.message, errorCode: failure.code || 'AGENT_FAILED' });
           if (failure.code === 'AGENT_FILTERED') turn.response = failure.detail;
           t.planning.messages.push({ id: randomUUID(), role: 'system', stage: stageId, text: `${stageName(stageId)}沒有完成（${agentLabel(agent)}）：${failure.message}${failure.detail ? `\n${failure.detail.slice(-400)}` : ''}`, at: now() });
           return { status: planningStatus(t), extra: { error: { code: failure.code || 'AGENT_FAILED', message: failure.message } } };
@@ -628,7 +630,7 @@ export class Coach {
     const task = {
       id, revision: 1, status: 'BLOCKED', updatedAt: now(), prelude: `\n# ${request.trim().slice(0, 40)}\n\n> Mentor建立的任務。人工筆記寫在最下方。\n\n`, notes: '\n\n## 人工筆記\n',
       title: request.trim().slice(0, 30), project: project || '未分類', goal: request.trim(),
-      workspace: { label: path.basename(real), root: real }, allowedRoots: [real],
+      workspace: { label: path.basename(real), root: real }, allowedRoots: [real], gitBaseline: await gitHead(real),
       scope: { allowed: ['只在產出資料夾內建立或修改檔案'], locked: [], forbidden: ['對外發布、上傳或寄送', '修改產出資料夾以外的檔案'] },
       current: { summary: '剛建立，正在整理任務卡。', artifact: null, sources: [] },
       decisions: [], checks: [], facts: [], learnings: [], parked: [], reports: [],

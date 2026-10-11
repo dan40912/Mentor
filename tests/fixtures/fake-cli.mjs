@@ -9,7 +9,8 @@ const out = args.includes('-o') ? args[args.indexOf('-o') + 1] : null;
 const fromFile = () => { try { return readFileSync(process.env.FAKE_MODE_FILE, 'utf8').trim(); } catch { return ''; } };
 const [mode, hangMs] = ((process.env.FAKE_MODE_FILE && fromFile()) || process.env.FAKE_MODE || 'ok').split(':');
 // slow：先寫一半的檔案再等很久，用來測停止；hang：忽略 SIGTERM，且讓孫程序握住輸出，模擬無法確認結束。
-if (mode === 'slow' || mode === 'hang') {
+if (mode === 'slow' || mode === 'slow-login' || mode === 'hang') {
+  if (mode === 'slow-login') process.stderr.write('HTTP 401 Unauthorized · Please run /login\n');
   if (prompt.includes('「執行」')) writeFileSync('partial.html', '<h1>寫到一半');
   if (mode === 'hang') {
     process.on('SIGTERM', () => {});

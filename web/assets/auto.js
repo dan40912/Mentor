@@ -15,7 +15,7 @@ function decorateOneThing(t,{one,oneText,jump}){
   one.classList.add('is-auto');eyebrow.textContent=`AI 自動進行中 · ${step}`;label.textContent='AI 自己在跑。需要你時會停下來叫你。';actions.append(off());one.append(actions);return;
  }
  if(ap&&wait){
-  one.classList.add('is-parked');eyebrow.textContent=`需要你看一下 · ${step}`;label.textContent=wait.label;
+  one.classList.add('is-parked');eyebrow.textContent=`需要你看一下 · ${step}`;label.textContent=stopLabel(wait.label);
   if(wait.kind==='error'){
    const go=focusKey(element('button',`去處理：${t.nextAction.button}`,'btn'),'jump');go.onclick=()=>jumpToNext(t);actions.append(go);
    const stage=state.stages.find(s=>s.id===wait.stage),current=p.learningTurns?.at(-1)?.provider;
@@ -29,6 +29,7 @@ function decorateOneThing(t,{one,oneText,jump}){
    if(wait.kind==='confirm'&&reviewed.length){go.className='btn';const all=focusKey(element('button','確認通過，讓 AI 繼續','btn primary'),'confirm-all');all.onclick=busy(all,async()=>{await coachAct(t,'confirm-all');tell(`已確認 ${reviewed.length} 項。AI 會接著做下一步。`);});actions.prepend(all);}
    actions.append(off());one.append(actions,element('p',{answer:'你回答後，AI 會自己接著往下做。',approve:'看過成品架構和要做的事，沒問題就按核准，AI 會一路做到驗收完。',confirm:'確認後，AI 會自己接著做剩下的項目。',human:'你完成這一項後，AI 會自己接著往下做。','fix-limit':'看過驗收意見後，可以寫修改指示，AI 會繼續。','needs-info':wait.blocked==='tool'?'AI 的環境做不到這件事。可以改驗收標準、自己完成這部分，或寫指示讓它換個方法。':'補上資訊後，AI 會繼續。',wait:'前置項目完成後會繼續。'}[wait.kind]||'','auto-note'));
   }
+  if(wait.kind==='confirm')appendConfirmArtifacts(t,one,(p.workItems||[]).filter(i=>i.owner==='ai'&&i.status==='REVIEWED'));
   if(!ap.full)one.append(fullChoice(true));
   return;
  }
@@ -41,5 +42,26 @@ function decorateOneThing(t,{one,oneText,jump}){
   if(reviewed.length>1){const all=focusKey(element('button',`確認全部通過（${reviewed.length} 項）`,'btn'),'confirm-all');all.onclick=busy(all,async()=>{await coachAct(t,'confirm-all');tell(`已確認 ${reviewed.length} 項。`);});actions.append(all);}
   actions.append(runAuto('這步之後交給 AI 跑完',false));}
  one.append(actions,fullChoice(),element('p','AI 會自己跑到需要你的地方才停下來，並說明為什麼停。隨時可以停止。','auto-note'));
+ if(!aiStep&&reviewed.length)appendConfirmArtifacts(t,one,reviewed);
+}
+function appendConfirmArtifacts(task,one,items){
+ if(!items.length)return;
+ const list=element('div',undefined,'confirm-artifacts');
+ for(const item of items){
+  const row=element('div',undefined,'outputs');row.append(element('strong',itemTitle(item.id,item.title||'')));
+  const files=[...new Set((item.outputs||[]).map(output=>output.file))];
+  for(const file of files){
+   const button=element('button',file,'file-chip preview-link');button.type='button';button.title=`預覽 ${file}`;button.dataset.previewFile=file;button.dataset.previewItem=item.id;
+   button.onclick=()=>openPreview(task.id,file,button);row.append(button);
+  }
+  if(!files.length)row.append(element('span','尚未登記產出檔案','small muted'));
+  const diff=diffButton(task,item);
+  if(diff){
+   const count=element('span',files.length?'改動檔案數：讀取中…':'改動 0 個檔案','small muted');count.setAttribute('aria-live','polite');row.append(count,diff);
+   if(files.length)request(`/api/tasks/${encodeURIComponent(task.id)}/diff?item=${encodeURIComponent(item.id)}`).then(result=>{count.textContent=`改動 ${result.changedFileCount} 個檔案`;}).catch(error=>{count.textContent=`改動檔案數無法讀取：${error.message}`;});
+  }
+  list.append(row);
+ }
+ one.append(list);
 }
 function jumpToNext(t){const detail=$('#task-detail');const target=(t.nextAction.kind==='item'&&detail.querySelector(`[data-item="${t.nextAction.id}"]`))||detail.querySelector(`[data-anchor="${t.nextAction.kind}"]`)||detail.querySelector('.control-bar')||detail.querySelector('[data-anchor=handoff]');target?.scrollIntoView({block:'start',behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth'});const one=detail.querySelector('.one-thing');if(['grill','outline'].includes(t.nextAction.kind)&&!t.planning?.readyForOutline||t.nextAction.kind==='stopped'){const box=detail.querySelector('.instruct textarea');if(box){box.scrollIntoView({block:'center',behavior:'auto'});box.focus({preventScroll:true});return;}}const buttons=[...detail.querySelectorAll('button:not(:disabled)')].filter(b=>!one.contains(b));(buttons.find(b=>target?.contains(b)&&b.textContent.startsWith(t.nextAction.button))||buttons.find(b=>b.textContent.startsWith(t.nextAction.button))||target?.querySelector('.btn.primary:not(:disabled)')||target?.querySelector('textarea,input,button'))?.focus({preventScroll:true});}

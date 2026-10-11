@@ -9,6 +9,7 @@ import { Memory } from '../src/memory.js';
 import { defaultStageSettings } from '../src/models.js';
 
 const root = new URL('../', import.meta.url);
+const sharedNames = await readFile(new URL('../web/assets/item-names.js', import.meta.url), 'utf8');
 const autoSource = await readFile(new URL('web/assets/auto.js', root), 'utf8');
 const html = await readFile(new URL('web/index.html', root), 'utf8');
 // 載入正式 busy，讓測試涵蓋防止連點與失敗後可重試的行為。
@@ -41,7 +42,7 @@ function card(task, coachAct) {
     $: () => detail, matchMedia: () => ({ matches: true }), task,
     one, jump, oneText: { querySelector: selector => selector === '.eyebrow' ? eyebrow : label }
   });
-  vm.runInContext(`${busySource}\n${autoSource}\ndecorateOneThing(task,{one,oneText,jump});`, context);
+  vm.runInContext(`${busySource}\n${sharedNames}\n${autoSource}\ndecorateOneThing(task,{one,oneText,jump});`, context);
   return { buttons: one.children[0].children, positioned, jump, label };
 }
 

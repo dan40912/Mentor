@@ -53,7 +53,9 @@ test('stop during A is confirmed only after the CLI exits, then resume redoes A 
   assert.equal(planningAction(stopping.task).kind, 'stopping');
   // 重複按停止不會再送訊號或出錯
   assert.equal((await coach.stop(id)).stopping, true);
-  await assert.rejects(coach.instruct(id, stopping.task.revision, 'k-busy', { text: '先寫的補充' }), { code: 'AGENT_BUSY' });
+  assert.throws(() => coach.plan(stopping.task, { text: '先寫的補充' }), { code: 'AGENT_STOPPING' });
+  // instruct 可能先遇到 pending 鎖，或讀到正在停止；兩個階段都必須阻擋寫入。
+  await assert.rejects(coach.instruct(id, stopping.task.revision, 'k-busy', { text: '先寫的補充' }), error => ['AGENT_BUSY', 'AGENT_STOPPING'].includes(error.code));
   await created.done;
   let task = await latest(store, id);
   assert.equal(task.planning.running, null);

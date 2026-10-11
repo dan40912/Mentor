@@ -137,12 +137,12 @@ test('規格 5、25：停點、impact、R1 顯示採名稱，route/phase/id/依�
 test('控制列、範圍選單、進度卡與模型資料使用新名稱，選單 value 保持 raw id', () => {
   assert.match(control, /itemName\(p.running.workItemId\)/);
   assert.match(control, /itemName\(p.stopped.itemId\)/);
-  assert.match(control, /\[w.id,`\$\{itemName\(w.id\)\}/);
+  assert.match(control, /\[w.id,`\$\{itemTitle\(w.id,w.title\)\}/);
   assert.match(html, /element\('span',itemName\(i.id\),'chip-id'\)/);
-  assert.match(html, /\$\{itemName\(item.id\)\} \$\{item.title\}/);
+  assert.match(html, /itemTitle\(item.id,item.title\)/);
   assert.equal(stages.find(s => s.id === 'C').name, '擬計畫');assert.equal(stages.find(s => s.id === 'C').mode, 'read');
   assert.doesNotMatch(profiles.find(p => p.id === 'quick').description, /大綱/);
-  assert.match(auto, /label.textContent=wait.label/);
+  assert.match(auto, /label.textContent=stopLabel\(wait.label\)/);
 });
 
 
@@ -174,5 +174,74 @@ test('taskAgent 在驗收按鈕改名後仍顯示 E 階段的模型指派', () =
   for (const [status, stage] of [['TODO', 'D'], ['AWAITING_REVIEW', 'E'], ['REVIEW_FAIL', 'E']]) {
     const t = task('execute', [work('W1', status)]);t.nextAction = planningAction(t);
     assert.equal(ctx.taskAgent(t).id, stage);
+  }
+});
+
+// ui-fullscreen-plan.md 6～9：執行正式渲染函式，檢查顯示與原始資料兩端。
+test('全螢幕規格 6：四個入口共用去重規則，一般標題保留名稱，原資料不變', () => {
+  const trackView = html.slice(html.indexOf('function track(t,'), html.indexOf('function avatar('));
+  for (const [id, name] of [['W0', '骨架版'], ['W1', '第 1 項'], ['R1', '第 2 輪']]) {
+    for (const title of [name, `${name}：完成版`, '補齊來源']) {
+      const expected = title.startsWith(name) ? title : `${name} ${title}`;
+      const t = task('execute', [{ ...work(id), title }]);t.nextAction = planningAction(t);
+      const before = structuredClone(t);
+      const ctx = context({ composerDrafts: {}, localStorage: { getItem: () => null },
+        options: (select, values) => { for (const [value, label] of values) { const option = node('option', label);option.value = value;select.append(option); } }
+      });
+      vm.runInContext(`${control}\n${render}\n${track}\n${trackView}`, ctx);
+      // 卡片（renderPlanning）
+      const detail = node('div');ctx.renderPlanning(t, detail);
+      assert.ok(all(detail).some(n => n.tag === 'strong' && n.textContent === expected));
+      // 補充指示範例及套用範圍選單（包括 current 與 raw id 選項）
+      const form = ctx.instructionBox(t);
+      assert.equal(all(form).find(n => n.tag === 'textarea').placeholder, `例如：『${expected}』的結論放最前面`);
+      const choices = all(form).filter(n => n.tag === 'option');
+      assert.equal(choices.find(n => n.value === 'current').textContent, `正在做的：${expected}`);
+      assert.equal(choices.find(n => n.value === id).textContent, `${expected}（TODO）`);
+      // 頂部標籤：名稱固定獨立一欄，只有標題欄會截斷；tooltip 保留完整文字。
+      const top = ctx.track(t, 'you');
+      const chip = all(top).find(n => n.className.startsWith('chip-todo'));
+      assert.equal(chip.children[0].textContent, name);
+      assert.equal(chip.children[1].textContent, expected.slice(name.length).trimStart());
+      assert.equal(chip.title, `${expected}｜待開始`);
+      assert.deepEqual(t, before);
+    }
+  }
+});
+
+test('全螢幕規格 7～8：驗收提示更新，頂部編號不折行不收縮，標題可截斷', () => {
+  const ctx = context();vm.runInContext(render, ctx);
+  const w = { ...work('W1'), review: { agent: 'Claude', coaching: '檢查來源' } };
+  const t = task('execute', [w]);t.nextAction = planningAction(t);
+  const detail = node('div');ctx.renderPlanning(t, detail);
+  assert.ok(texts(detail).includes('自己檢查時看這裡（Claude）'));
+  assert.ok(!texts(detail).some(text => text.includes('你自己 review 時看這裡')));
+  const rule = selector => html.slice(html.indexOf(`${selector}{`) + selector.length + 1).split('}')[0];
+  assert.match(rule('.item-chips .chip-id'), /white-space:nowrap/);
+  assert.match(rule('.item-chips .chip-id'), /flex-shrink:0/);
+  for (const css of ['min-width:0', 'overflow:hidden', 'text-overflow:ellipsis', 'white-space:nowrap']) {
+    assert.ok(rule('.item-chips .chip-title').includes(css), css);
+  }
+});
+
+test('全螢幕規格 9：所有停點入口轉換開頭 W0、W1、R1，原始任務資料不變', () => {
+  const boardSource = html.match(/const park=t.planning\?\.autopilot\?\.waitingFor;.*?card.append\(next\);/)[0];
+  for (const [label, expected] of [
+    ['W0「骨架版」需要資訊', '骨架版「骨架版」需要資訊'],
+    ['W1：確認成果', '第 1 項：確認成果'], ['R1 等你確認', '第 2 輪 等你確認'],
+    ['第 1 項：確認成果', '第 1 項：確認成果'], ['看 AI 的計畫，沒問題就核准', '看 AI 的計畫，沒問題就核准'],
+    ['請確認 W1', '請確認 W1'], ['W1abc 保持文字', 'W1abc 保持文字'],
+    ['W12 等你確認 R1', '第 12 項 等你確認 R1']
+  ]) {
+    const t = task('execute');t.nextAction = { kind: 'item', button: '確認成果' };
+    t.planning.autopilot = { full: true, waitingFor: { kind: 'wait', label } };
+    const before = structuredClone(t), card = node('div'), one = node('div'), caption = node('strong');
+    const ctx = context({ t, card, one, caption, trackOf: () => ({ nodes: [{ name: '執行', state: 'now' }] }),
+      oneText: { querySelector: () => caption }, jump: node('button') });
+    vm.runInContext(`${auto}\ndecorateOneThing(t,{one,oneText,jump});`, ctx);
+    assert.equal(caption.textContent, expected); // 任務頁的現在要做的一件事
+    vm.runInContext(boardSource, ctx);
+    assert.equal(card.children[0].textContent, `自動停住，等你：${expected}`); // 任務看板
+    assert.deepEqual(t, before);
   }
 });

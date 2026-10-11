@@ -10,6 +10,8 @@ import { Trash } from './trash.js';
 import { Conversations } from './conversations.js';
 import { Projects } from './projects.js';
 import { Coach } from './coach.js';
+import { gitHead, itemDiff } from './git-diff.js';
+import { artifactPath, validateArtifactName } from './artifact-path.js';
 import { diagnose } from './agents.js';
 import { TaskStore, TaskError, buildBrief } from './tasks.js';
 import { summarize, MOMENTS } from './feedback.js';
@@ -23,28 +25,25 @@ const memory = path.join(root, 'vault');
 const token = randomBytes(32).toString('hex');
 let settings = { revision: 1, stages: defaultStageSettings() };
 const diagnosis = {};
+const textPreviewExtensions = ['.txt', '.log', '.csv', '.json', '.js', '.mjs', '.cjs', '.ts', '.css', '.yml', '.yaml', '.sh', '.py'];
 const previewTypes = { '.html': ['text/html; charset=utf-8', 5 * 1024 * 1024], '.md': ['text/plain; charset=utf-8', 5 * 1024 * 1024], '.png': ['image/png', 20 * 1024 * 1024], '.jpg': ['image/jpeg', 20 * 1024 * 1024], '.jpeg': ['image/jpeg', 20 * 1024 * 1024], '.webp': ['image/webp', 20 * 1024 * 1024] };
-const inside = (parent, child) => child.startsWith(`${parent}${path.sep}`);
+for (const ext of textPreviewExtensions) previewTypes[ext] = ['text/plain; charset=utf-8', 2 * 1024 * 1024];
+
 
 export async function previewArtifact(tasks, projectRoot, id, file) {
-  if (typeof file !== 'string' || !file || file.includes('\0') || path.isAbsolute(file) || file.split(/[\\/]/).includes('..') || file.includes('\\')) throw new TaskError(400, 'PREVIEW_NAME_INVALID', '成果檔名格式不正確。');
+  validateArtifactName(file);
   const { task } = await tasks.get(id);
   if (!task.planning?.workItems?.some(item => item.outputs?.some(output => output.file === file))) throw new TaskError(404, 'PREVIEW_NOT_REGISTERED', '這份成果尚未登記在任務中。');
   const type = previewTypes[path.extname(file).toLowerCase()];
-  if (!type) throw new TaskError(415, 'PREVIEW_TYPE_UNSUPPORTED', '目前只支援 HTML、Markdown、PNG、JPEG 與 WebP。');
-  const canonicalRoot = await realpath(projectRoot);
-  const taskDir = path.join(canonicalRoot, 'outputs', id);
-  let canonicalDir, resolved;
-  try { canonicalDir = await realpath(taskDir); resolved = await realpath(path.join(task.allowedRoots[0], file)); }
-  catch (error) { if (error.code === 'ENOENT') throw new TaskError(404, 'PREVIEW_MISSING', '成果檔已不存在，請回任務核對檔名與產出。'); throw error; }
-  if (canonicalDir !== taskDir || !inside(canonicalRoot, canonicalDir) || !inside(canonicalDir, resolved) || !inside(canonicalRoot, resolved) || !inside(await realpath(task.allowedRoots[0]), resolved)) throw new TaskError(403, 'PREVIEW_OUTSIDE_TASK', '成果檔超出此任務的產出範圍。');
+  if (!type) throw new TaskError(415, 'PREVIEW_TYPE_UNSUPPORTED', '目前只支援 HTML、Markdown、指定文字檔、PNG、JPEG 與 WebP。');
+  const resolved = await artifactPath(task.allowedRoots[0], file);
   const info = await stat(resolved);
   if (!info.isFile()) throw new TaskError(415, 'PREVIEW_TYPE_UNSUPPORTED', '只能預覽一般檔案。');
   if (info.size > type[1]) throw new TaskError(413, 'PREVIEW_TOO_LARGE', '成果檔超過預覽大小上限。');
   const content = await readFile(resolved);
   if (content.length > type[1]) throw new TaskError(413, 'PREVIEW_TOO_LARGE', '成果檔超過預覽大小上限。');
   const ext = path.extname(file).toLowerCase();
-  if (['.html', '.md'].includes(ext)) {
+  if (['.html', '.md', ...textPreviewExtensions].includes(ext)) {
     try { new TextDecoder('utf-8', { fatal: true }).decode(content); }
     catch { throw new TaskError(415, 'PREVIEW_TYPE_UNSUPPORTED', '文字檔不是有效的 UTF-8。'); }
   }
@@ -227,9 +226,13 @@ export async function startServer(port = Number(flag('port') || process.env.PORT
       if (req.method === 'GET' && taskRoute) {
         if (!req.headers.cookie?.split('; ').includes(`awc=${token}`)) return send(403, { code: 'SESSION_REQUIRED' });
         const [, id, action, query] = taskRoute;
-        if (!id && !action) return send(200, { tasks: await tasks.list() });
+        if (!id && !action) return send(200, { tasks: await Promise.all((await tasks.list()).map(async task => ({ ...task, gitAvailable: !task.error && Boolean(await gitHead(task.allowedRoots?.[0])) }))) });
         if (id && action === 'events') return send(200, { events: await coach.events(id) });
         if (id && action === 'conversation') return send(200, await conversations.read((await tasks.get(id)).task));
+        if (id && action === 'diff') {
+          const { task } = await tasks.get(id);
+          return send(200, await itemDiff(task, new URLSearchParams(query || '').get('item')));
+        }
         if (id && action === 'preview') {
           const file = new URLSearchParams(query || '').get('file');
           const preview = await previewArtifact(tasks, root, id, file);
