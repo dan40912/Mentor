@@ -13,16 +13,13 @@ import { Coach } from './coach.js';
 import { diagnose } from './agents.js';
 import { TaskStore, TaskError, buildBrief } from './tasks.js';
 import { summarize, MOMENTS } from './feedback.js';
+import { readAttachment } from './attachments.js';
 
 const appDir = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const webDir = path.join(appDir, 'web');
 // 使用者資料（vault、outputs、設定）放在 MENTOR_HOME，預設是 repo 根目錄。
 const flag = name => { const i = process.argv.indexOf(`--${name}`); return i > 0 ? process.argv[i + 1] : undefined; };
-const root = path.resolve(flag('home') || process.env.MENTOR_HOME || appDir);
-const memory = path.join(root, 'vault');
-const token = randomBytes(32).toString('hex');
-let settings = { revision: 1, stages: defaultStageSettings() };
-const diagnosis = {};
+
 const previewTypes = { '.html': ['text/html; charset=utf-8', 5 * 1024 * 1024], '.md': ['text/plain; charset=utf-8', 5 * 1024 * 1024], '.png': ['image/png', 20 * 1024 * 1024], '.jpg': ['image/jpeg', 20 * 1024 * 1024], '.jpeg': ['image/jpeg', 20 * 1024 * 1024], '.webp': ['image/webp', 20 * 1024 * 1024] };
 const inside = (parent, child) => child.startsWith(`${parent}${path.sep}`);
 
@@ -67,7 +64,7 @@ function resolveStageInput(stageId, input) {
   if (!provider.runnable || !provider.modes?.includes(mode)) throw new Error(`${provider.name} 不能負責 ${stageId} 階段：這一階段需要${{ chat: '只對話', read: '唯讀資料夾', write: '寫產出資料夾' }[mode]}，這個 AI 沒有可呼叫的 CLI。`);
   return model;
 }
-let queue = Promise.resolve();
+
 
 async function atomicWrite(file, content) {
   const temporary = `${file}.${randomUUID()}.tmp`;
@@ -128,7 +125,13 @@ async function body(req) {
   return JSON.parse(text);
 }
 
-export async function startServer(port = Number(flag('port') || process.env.PORT || 4317)) {
+export async function createRequestHandler({ root = appDir, port = 4317, runAgent } = {}) {
+  root = path.resolve(root);
+  const memory = path.join(root, 'vault');
+  const token = randomBytes(32).toString('hex');
+  let settings = { revision: 1, stages: defaultStageSettings() };
+  const diagnosis = {};
+  let queue = Promise.resolve();
   await mkdir(memory, { recursive: true });
   const canonicalRoot = await realpath(root);
   if (!((await realpath(memory)).startsWith(`${canonicalRoot}${path.sep}`))) {
@@ -156,18 +159,18 @@ export async function startServer(port = Number(flag('port') || process.env.PORT
   const memoryStore = new Memory(path.join(memory, 'memory'));
   const conversations = new Conversations(path.join(memory, 'conversations'));
   const projects = new Projects(path.join(memory, 'projects'));
-  const coach = new Coach(tasks, () => settings, root, memoryStore);
+  const coach = new Coach(tasks, () => settings, root, memoryStore, runAgent);
   await coach.recover();
   const trash = new Trash(memory, tasks, coach);
-  const server = http.createServer(async (req, res) => {
-    const origin = `http://127.0.0.1:${server.address().port}`;
+  const handler = async (req, res) => {
+    const requestPort = typeof port === 'function' ? port() : port;
+    const origin = `http://127.0.0.1:${requestPort}`;
     const send = (status, data) => {
       res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
       res.end(JSON.stringify(data));
     };
-    const port = server.address().port;
     // 用 localhost 開啟首頁時導到 127.0.0.1，cookie 與 CSRF 只綁一個來源。
-    if (req.method === 'GET' && req.url === '/' && req.headers.host === `localhost:${port}`) {
+    if (req.method === 'GET' && req.url === '/' && req.headers.host === `localhost:${requestPort}`) {
       res.writeHead(302, { Location: `${origin}/` });
       return res.end();
     }
@@ -189,7 +192,7 @@ export async function startServer(port = Number(flag('port') || process.env.PORT
         });
         return res.end(html);
       }
-      if (req.method === 'GET' && /^\/assets\/(mentor\.svg|openai\.svg|claude\.svg|copilot\.svg|conversation\.js|project\.js|control\.js|auto\.js|feedback\.js)$/.test(req.url)) {
+      if (req.method === 'GET' && /^\/assets\/(mentor\.svg|openai\.svg|claude\.svg|copilot\.svg|conversation\.js|project\.js|control\.js|auto\.js|feedback\.js|upload\.js)$/.test(req.url)) {
         res.writeHead(200, { 'Content-Type': req.url.endsWith('.js') ? 'application/javascript; charset=utf-8' : req.url.endsWith('.svg') ? 'image/svg+xml' : 'image/png', 'Cache-Control': req.url.endsWith('.js') ? 'no-store' : 'max-age=86400' });
         return res.end(await readFile(path.join(webDir, 'assets', path.basename(req.url))));
       }
@@ -230,6 +233,12 @@ export async function startServer(port = Number(flag('port') || process.env.PORT
         if (!id && !action) return send(200, { tasks: await tasks.list() });
         if (id && action === 'events') return send(200, { events: await coach.events(id) });
         if (id && action === 'conversation') return send(200, await conversations.read((await tasks.get(id)).task));
+        if (id && action === 'attachment') {
+          const { task } = await tasks.get(id);
+          const { attachment, content } = await readAttachment(task, new URLSearchParams(query || '').get('id'));
+          res.writeHead(200, { 'Content-Type': 'application/octet-stream', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Content-Disposition': `attachment; filename=attachment; filename*=UTF-8''${encodeURIComponent(attachment.name)}` });
+          return res.end(content);
+        }
         if (id && action === 'preview') {
           const file = new URLSearchParams(query || '').get('file');
           const preview = await previewArtifact(tasks, root, id, file);
@@ -273,7 +282,15 @@ export async function startServer(port = Number(flag('port') || process.env.PORT
       if (!req.headers.cookie?.split('; ').includes(`awc=${token}`) || req.headers['x-csrf-token'] !== token) {
         return send(403, { code: 'CSRF_FAILED' });
       }
+      if (req.url.startsWith('/api/uploads?')) {
+        const params = new URLSearchParams(req.url.split('?')[1]);
+        return send(201, { attachment: await coach.attachments.stage(params.get('name'), req, params.has('batch') ? params.get('batch') : undefined, params.has('index') ? Number(params.get('index')) : undefined) });
+      }
       const input = await body(req);
+      if (req.url === '/api/uploads/batches') {
+        if (input.taskId != null) await coach.latest(input.taskId);
+        return send(201, coach.attachments.batch(input.names, input.taskId));
+      }
       if (projectRoute) {
         if (!projectRoute[1]) return send(201, { project: await projects.create(input) });
         if (projectRoute[2] === 'save') return send(200, await projects.save(decodeURIComponent(projectRoute[1]), input));
@@ -330,6 +347,7 @@ export async function startServer(port = Number(flag('port') || process.env.PORT
         return send(202, { task: result.task });
       }
       const coachActions = {
+        card: (id, key) => coach.saveCard(id, input.revision, key, input),
         retry: (id, key) => coach.retry(id, input.revision, key, input.provider || null),
         answer: (id, key) => coach.answer(id, input.revision, key, input),
         outline: id => coach.draftOutline(id, input.feedback),
@@ -395,13 +413,20 @@ export async function startServer(port = Number(flag('port') || process.env.PORT
       console.error(error);
       send(400, { code: 'REQUEST_FAILED', message: error.message, nextStep: '檢查輸入；保存失敗時查看終端錯誤。' });
     }
-  });
+  };
+  return { handler, coach };
+}
+
+export async function startServer(port = Number(flag('port') || process.env.PORT || 4317)) {
+  let server;
+  const app = await createRequestHandler({ root: flag('home') || process.env.MENTOR_HOME || appDir, port: () => server.address().port });
+  server = http.createServer(app.handler);
   await new Promise((resolve, reject) => {
     server.once('error', reject);
     server.listen(port, '127.0.0.1', resolve);
   });
   // 服務結束時一併停掉它啟動的 CLI，不留在背景繼續跑、繼續寫檔。
-  server.stopAgents = () => { for (const child of coach.children.values()) killTree(child, 'SIGTERM'); return coach.children.size; };
+  server.stopAgents = () => { for (const child of app.coach.children.values()) killTree(child, 'SIGTERM'); return app.coach.children.size; };
   return server;
 }
 
