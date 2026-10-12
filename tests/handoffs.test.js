@@ -8,9 +8,10 @@ import { demoTask } from './fixtures/demo-task.js';
 import { serializeTask, buildBrief } from '../src/tasks.js';
 import { application } from './helpers/application.js';
 import { writeHandoff } from '../src/handoffs.js';
+import { requestApp } from './fixtures/request.js';
 
 const html = await readFile(new URL('../web/index.html', import.meta.url), 'utf8');
-const source = html.slice(html.indexOf(" const hand=section('交給 AI 接手')"), html.indexOf(' if(t.reports.length)', html.indexOf(" const hand=section('交給 AI 接手')")));
+const source = html.slice(html.indexOf(" const box=sharePanel;"), html.indexOf(' if(t.reports.length)', html.indexOf(" const box=sharePanel;")));
 const helpers = ['busy', 'options', 'focusKey'].map(name => html.split('\n').find(line => line.startsWith(`function ${name}(`))).join('\n');
 const all = node => [node, ...node.children.flatMap(all)];
 function element(tag, textContent = '', className = '') {
@@ -21,14 +22,14 @@ function element(tag, textContent = '', className = '') {
   };
 }
 function view(task, request, clipboard, execCommand = () => false) {
-  const detail = element('div'), dialog = element('dialog'), previews = [], errors = [];
-  const context = vm.createContext({ t: task, request, element, section: title => element('section', title), detail, dialog,
+  const detail = element('div'), dialog = element('dialog'), sharePanel = element('div'), previews = [], errors = [];
+  const context = vm.createContext({ t: task, request, element, section: title => element('section', title), detail, dialog, sharePanel,
     navigator: { clipboard: { writeText: clipboard } }, document: { execCommand },
     queueMicrotask, reportDrafts: {}, tell: text => errors.push(text), download() {}, restoreFocus: null,
-    openPreview: (...args) => previews.push(args), act() {}, tasks: [task], reportText: {} });
+    openPreview: (...args) => previews.push(args), act: async (...args) => { if (task.failReport) throw Error('回報失敗');task.reportCall = args;task.reports = [{ status: 'DONE' }]; }, tasks: [task], reportText: {} });
   vm.runInContext(helpers + '\n' + source, context);
-  const find = text => all(detail).find(n => n.textContent === text);
-  return { detail, dialog, find, previews, errors };
+  const find = text => [...all(detail), ...all(sharePanel)].find(n => n.textContent === text);
+  return { detail, dialog, sharePanel, find, previews, errors, context };
 }
 
 async function setup(t) {
@@ -55,9 +56,8 @@ test('planning 按鈕 → 正式 POST → 絕對 MD → 受限預覽；同 revis
     assert.equal(response.status, 200);
     return response.json();
   }, async text => copied.push(text));
-  const row = all(ui.detail).find(n => n.className === 'buttons');
-  const briefIndex = row.children.findIndex(n => n.textContent === '複製接手包');
-  assert.equal(row.children[briefIndex + 1].textContent, '複製交接提示');
+  const row = all(ui.sharePanel).find(n => n.className === 'buttons');
+  assert.deepEqual(row.children.slice(0, 2).map(n => n.textContent), ['複製交接提示', '開啟 MD']);
   assert.equal(ui.find('複製接手包').hidden, true);
   assert.notEqual(ui.find('複製交接提示').hidden, true);
   await ui.find('複製交接提示').onclick();
@@ -116,7 +116,7 @@ test('舊複製接手包保持 buildBrief 行為；新提示沿用剪貼簿退�
   assert.ok(copied[0].startsWith('# 接手包：'));assert.match(copied[0], /接手者: codex/);
   const failed = view(task, async (url, input) => input ? (await post(input)).json() : buildBrief(task, 'codex'), async () => { throw new Error('denied'); });
   await failed.find('複製交接提示').onclick();
-  const fallback = all(failed.detail).find(n => n.tag === 'details' && n.children[0].textContent === '手動複製交接提示');
+  const fallback = all(failed.sharePanel).find(n => n.tag === 'details' && n.children[0].textContent === '手動複製交接提示');
   assert.equal(fallback.open, true);assert.equal(fallback.hidden, false);assert.match(fallback.children[1].textContent, /完整讀取本地檔案/);
   assert.notEqual(failed.find('開啟 MD').hidden, true);
 });
@@ -130,7 +130,7 @@ test('交接按鈕請求與複製期間防重按，API 失敗清除舊成功狀�
     return new Promise((resolve, reject) => { resolveRequest = resolve; rejectRequest = reject; });
   }, () => { copies++; return new Promise(resolve => { resolveCopy = resolve; }); });
   const button = ui.find('複製交接提示'), open = ui.find('開啟 MD');
-  const status = all(ui.detail).find(n => n.role === 'status');
+  const status = all(ui.sharePanel).find(n => n.role === 'status');
   const pending = button.onclick();
   assert.equal(button.disabled, true);
   assert.equal(button['aria-busy'], 'true');
@@ -145,13 +145,13 @@ test('交接按鈕請求與複製期間防重按，API 失敗清除舊成功狀�
   assert.equal(calls, 1);
   resolveCopy();await pending;
   assert.equal(status.textContent, `✓ 已複製交接提示 · 檔案已存到 ${result.path}`);
-  assert.equal(open.hidden, false);
+  assert.notEqual(open.hidden, true);
   assert.equal(button.disabled, false);
   assert.equal(button['aria-busy'], undefined);
   assert.equal(button.textContent, '複製交接提示');
   const failing = button.onclick();
-  assert.equal(open.hidden, true);
-  assert.equal(open.onclick, null);
+  assert.equal(open.disabled, true);
+  assert.equal(typeof open.onclick, 'function');
   rejectRequest(new Error('任務版本已更新'));
   await failing;
   assert.equal(status.textContent, '未完成：任務版本已更新');
@@ -179,8 +179,8 @@ test('交接提示沿用 writeClipboard：execCommand 成功或兩種方式失�
     assert.equal(area.value, result.prompt);
     assert.equal(area.selected, true);
     assert.equal(area.removed, true);
-    const fallback = all(ui.detail).find(n => n.tag === 'details' && n.children[0].textContent === '手動複製交接提示');
-    const status = all(ui.detail).find(n => n.role === 'status');
+    const fallback = all(ui.sharePanel).find(n => n.tag === 'details' && n.children[0].textContent === '手動複製交接提示');
+    const status = all(ui.sharePanel).find(n => n.role === 'status');
     assert.equal(fallback.children[1].textContent, result.prompt);
     assert.equal(fallback.hidden, mode === 'success');
     if (mode === 'success') assert.equal(status.textContent, `✓ 已複製交接提示 · 檔案已存到 ${result.path}`);
@@ -188,7 +188,7 @@ test('交接提示沿用 writeClipboard：execCommand 成功或兩種方式失�
       assert.equal(fallback.open, true);
       assert.equal(status.textContent, `無法寫入剪貼簿，請從下方手動複製交接提示 · 檔案已存到 ${result.path}`);
     }
-    assert.equal(ui.find('開啟 MD').hidden, false);
+    assert.notEqual(ui.find('開啟 MD').hidden, true);
     assert.equal(ui.find('複製交接提示').disabled, false);
     assert.deepEqual(ui.errors, []);
   }
@@ -330,3 +330,111 @@ test('交接寫入拒絕越界目錄與 symlink（含斷鏈），保留目標內
   await assert.rejects(writeHandoff(home, task), { status: 403, code: 'HANDOFF_OUTSIDE' });
   assert.deepEqual(await readdir(outside), ['sentinel.md']);
 });
+
+
+test('標題列依序同列等高置中，分享面板錨定分享按鈕並保留收合規則', () => {
+  const markup = html.match(/<dialog id="task-dialog"[\s\S]*?<\/dialog>/)[0];
+  assert.match(markup, /class="sheet-actions"><button[^>]+data-expand="task-dialog"[\s\S]*?<\/button><div class="task-share-tools"><button id="task-share-toggle"[\s\S]*?<\/button><div id="task-share-panel"[^>]*><\/div><\/div><span id="task-menu-slot"><\/span><button class="close"/);
+  assert.match(markup, /aria-expanded="false" aria-controls="task-share-panel"/);
+  assert.match(markup, /id="task-share-panel" class="handoff-box" hidden/);
+  assert.match(html, /\.sheet-actions\{display:flex;flex-wrap:nowrap;align-items:center;gap:var\(--space-s\);--task-action-height:32px\}/);
+  assert.match(html, /#task-dialog \.sheet-actions>\.btn,#task-dialog \.task-share-tools>\.btn,#task-dialog \.sheet-actions>\.close,#task-menu-slot summary\{[^}]*align-items:center;justify-content:center;height:var\(--task-action-height\);min-height:var\(--task-action-height\)/);
+  assert.match(html, /@media\(max-width:700px\)\{\.sheet-actions\{--task-action-height:44px\}/);
+  assert.match(html, /\.task-share-tools\{display:flex;align-items:center;position:relative;flex:none\}/);
+  assert.match(html, /#task-share-panel\{position:absolute;top:100%;right:0;/);
+  const sharePanel = element('div'), shareToggle = element('button'), dialog = { open: false };
+  const source = html.slice(html.indexOf(" const shareToggle=$('#task-share-toggle')"), html.indexOf(' if(t.error){detail.append', html.indexOf(" const shareToggle=$('#task-share-toggle')")));
+  const ctx = vm.createContext({ $: selector => selector === '#task-share-toggle' ? shareToggle : sharePanel, id: 'A', t: {}, dialog });
+  vm.runInContext(source, ctx);assert.equal(sharePanel.hidden, true);
+  shareToggle.onclick();assert.equal(sharePanel.hidden, false);assert.equal(shareToggle['aria-expanded'], 'true');
+  dialog.open = true;vm.runInContext(source, vm.createContext({ $: selector => selector === '#task-share-toggle' ? shareToggle : sharePanel, id: 'A', t: {}, dialog }));
+  assert.equal(sharePanel.hidden, false);
+  shareToggle.onclick();assert.equal(sharePanel.hidden, true);assert.equal(shareToggle['aria-expanded'], 'false');
+  shareToggle.onclick();assert.equal(sharePanel.hidden, false);
+  vm.runInContext(source, vm.createContext({ $: selector => selector === '#task-share-toggle' ? shareToggle : sharePanel, id: 'B', t: {}, dialog }));
+  assert.equal(sharePanel.hidden, true);assert.equal(shareToggle['aria-expanded'], 'false');
+  shareToggle.onclick();dialog.open=false;
+  vm.runInContext('{'+source+'}', ctx);assert.equal(sharePanel.hidden, true);assert.equal(shareToggle['aria-expanded'], 'false');
+});
+
+test('開啟 MD 可直接保存並預覽；一般任務接手包是次要操作，回報留在底部且能送出', async () => {
+  const task = demoTask();delete task.planning;
+  const calls = [], result = { path: '/workspace/handoff.md', prompt: '交接提示' };
+  const ui = view(task, async (url, input) => { calls.push([url, input]);return input ? result : { receiver: 'codex', text: '接手包' }; }, async () => {});
+  assert.notEqual(ui.find('開啟 MD').hidden, true);await ui.find('開啟 MD').onclick();
+  assert.deepEqual(ui.previews[0].slice(0, 2), [task.id, result.path]);
+  assert.equal(calls.find(([, input]) => input)[1].revision, task.revision);
+  assert.equal(ui.find('複製接手包').className, 'btn subtle');
+  assert.ok(all(ui.sharePanel).includes(ui.find('複製交接提示')));
+  assert.ok(!all(ui.detail).some(n => n.textContent === '交給 AI 接手'));
+  const report = all(ui.detail).find(n => n.tag === 'textarea');
+  assert.ok(ui.find('貼回 AI 回報'));assert.ok(report);assert.ok(!all(ui.sharePanel).includes(report));
+  report.value = 'TASK_ID: demo';report.oninput();await ui.find('送出回報').onclick();
+  assert.equal(task.reportCall[1], 'report');assert.equal(task.reportCall[2].text, 'TASK_ID: demo');
+  task.failReport = true;report.value = '保留回報';report.oninput();await ui.find('送出回報').onclick();
+  assert.equal(report.value, '保留回報');assert.equal(ui.context.reportDrafts[task.id], '保留回報');
+  assert.match(ui.errors.at(-1), /回報失敗/);
+  assert.match(html, /snapshotForm\(dialog\)/);assert.match(html, /restoreForm\(dialog,snap\)/);
+  const planning = view(demoTask(), async () => ({}), async () => {});
+  assert.ok(!all(planning.detail).some(n => n.tag === 'textarea'));
+  assert.equal(planning.find('複製接手包').hidden, true);
+});
+
+const shareStages = [
+  ['A', '制定', 'grill'], ['B', '釐清', 'grill'], ['C', '計畫', 'outline'],
+  ['D', '執行', 'execute'], ['E', '驗收', 'execute']
+];
+for (const [stage, label, phase] of shareStages) for (const running of [false, true]) {
+  test(`${label}${running ? ' AI 執行中' : ''}：分享可操作，requestApp 保存非空任務／revision 交接 MD`, async t => {
+    const home = await realpath(await mkdtemp(path.join(process.cwd(), 'tests/.share-stage-')));
+    t.after(() => rm(home, { recursive: true, force: true }));
+    await mkdir(path.join(home, 'vault'));
+    const task = demoTask(`TASK-share-${stage}-${running ? 'running' : 'idle'}`, home);
+    task.revision = 7;
+    task.title = `${label}分享測試`;
+    task.planning.phase = phase;
+    task.planning.card.title = stage === 'A' ? '' : task.title;
+    task.planning.workItems = phase === 'execute' ? [{ id: 'W1', title: '測試項目', status: stage === 'E' ? 'AWAITING_REVIEW' : 'TODO', outputs: [] }] : [];
+    task.planning.running = running ? { stage, agent: 'Codex', turnId: `turn-${stage}`, workItemId: phase === 'execute' ? 'W1' : null } : null;
+    task.status = running ? 'RUNNING' : 'READY';
+    task.current.summary = `${label}階段${running ? ' AI 執行中' : '等待接續'}`;
+    const app = await requestApp(home);
+    // 服務啟動後放入執行中任務，避免被重啟復原流程當成舊的中斷任務。
+    await writeFile(path.join(home, 'vault', `${task.id}.md`), serializeTask(task));
+    const cookie = (await app.fetch('/')).headers.get('set-cookie').split(';')[0];
+    const { csrfToken } = await (await app.fetch('/api/session', { headers: { cookie } })).json();
+    const headers = { cookie, 'x-csrf-token': csrfToken, 'content-type': 'application/json' };
+    const copied = [], posts = [];
+    const ui = view(task, async (url, input) => {
+      const response = await app.fetch(url, { method: input ? 'POST' : 'GET', headers, body: input ? JSON.stringify(input) : undefined });
+      assert.equal(response.status, 200);
+      if (input) posts.push(input);
+      return response.json();
+    }, async text => copied.push(text));
+    const shareToggle = element('button'), dialog = { open: true };
+    const toggleSource = html.slice(html.indexOf(" const shareToggle=$('#task-share-toggle')"), html.indexOf(' if(t.error){detail.append', html.indexOf(" const shareToggle=$('#task-share-toggle')")));
+    // 執行真正的入口邏輯及面板操作，包含尚未制定好任務卡的 A 階段。
+    vm.runInContext(toggleSource, vm.createContext({
+      $: selector => selector === '#task-share-toggle' ? shareToggle : ui.sharePanel, id: task.id, t: task, dialog
+    }));
+    vm.runInContext('{'+source+'}', ui.context);
+    assert.equal(shareToggle.hidden, false);assert.notEqual(shareToggle.disabled, true);
+    shareToggle.onclick();assert.equal(ui.sharePanel.hidden, false);assert.equal(shareToggle['aria-expanded'], 'true');
+    for (const text of ['複製交接提示', '開啟 MD']) {
+      const button = ui.find(text);assert.ok(button);assert.notEqual(button.hidden, true);assert.notEqual(button.disabled, true);
+      await button.onclick();assert.notEqual(button.disabled, true);
+    }
+    assert.equal(ui.errors.length, 0);assert.equal(posts.length, 2);
+    assert.ok(posts.every(input => input.revision === 7));
+    assert.match(copied[0], new RegExp(`${task.id}，revision 7`));
+    const [, file, , kind] = ui.previews[0];assert.equal(kind, 'handoff-preview');
+    const markdown = await readFile(file, 'utf8');
+    assert.ok(markdown.trim().length > 0);
+    assert.ok(markdown.includes(task.title));assert.ok(markdown.includes(`TASK_ID: ${task.id}`));
+    assert.match(markdown, /BASE_REVISION: 7/);assert.ok(markdown.includes(task.current.summary));
+    const preview = await app.fetch(`/api/tasks/${task.id}/handoff-preview?file=${encodeURIComponent(file)}`, { headers });
+    assert.equal(preview.status, 200);assert.ok((await preview.text()).includes(task.title));
+    assert.equal(await readFile(path.join(home, 'vault', `${task.id}.md`), 'utf8'), serializeTask(task));
+    shareToggle.onclick();assert.equal(ui.sharePanel.hidden, true);assert.equal(shareToggle['aria-expanded'], 'false');
+  });
+}

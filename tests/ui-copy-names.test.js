@@ -37,6 +37,8 @@ function context(extra = {}) {
     auditPanel: () => node('details'), itemStatus: {}, visualIcon: {}, tell() {},
     ...extra });
   vm.runInContext(shared, ctx);
+  vm.runInContext(html.slice(html.indexOf('function diffButton('),html.indexOf('async function openDiff(')),ctx);
+  vm.runInContext(html.slice(html.indexOf('function reviewButton('), html.indexOf('function openReview(')), ctx);
   return ctx;
 }
 
@@ -243,5 +245,19 @@ test('全螢幕規格 9：所有停點入口轉換開頭 W0、W1、R1，原始�
     vm.runInContext(boardSource, ctx);
     assert.equal(card.children[0].textContent, `自動停住，等你：${expected}`); // 任務看板
     assert.deepEqual(t, before);
+  }
+});
+
+
+test('實際工作項目卡的驗收按鈕傳入該任務與工作項目，無成果也有入口', async () => {
+  const calls = [], ctx = context({ openReview: (...args) => calls.push(args) });
+  vm.runInContext(render, ctx);
+  const t = task('execute', [work('W1'), work('W2')]);t.nextAction = planningAction(t);
+  const detail = node('div');ctx.renderPlanning(t, detail);
+  const buttons = all(detail).filter(n => n.tag === 'button' && n.textContent === '驗收');
+  assert.equal(buttons.length, 2);
+  for (const [i, button] of buttons.entries()) {
+    await button.onclick();
+    assert.deepEqual(calls[i], [t.id, `W${i + 1}`, button]);
   }
 });

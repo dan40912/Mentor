@@ -1,3 +1,5 @@
+import { normalizePreview, normalizeChanges } from './review-settings.js';
+import { normalizeTestCommand } from './test-command.js';
 import { Attachments, attachmentContext } from './attachments.js';
 import { mkdir, realpath, readFile, stat, appendFile, readdir, cp, rm, mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -7,10 +9,10 @@ import { runAgent, extractJson, AgentError } from './agents.js';
 import { stages, resolveStage, profileOf, providers, resolveModel } from './models.js';
 import { TaskError, sha256, planningStatus, planningAction, ready } from './tasks.js';
 import { HEADINGS } from './memory.js';
-import { outlineSensors, outputSensors } from './sensors.js';
+import { outlineSensors, outputSensors, testCommandSensor } from './sensors.js';
 import { Projects } from './projects.js';
 import { killTree } from './platform.js';
-import { gitHead } from './git-diff.js';
+import { gitHead, itemChanges } from './git-diff.js';
 import { itemName, itemNames } from './item-names.js';
 import { validateFeedback, feedbackBrief } from './feedback.js';
 
@@ -58,6 +60,16 @@ function context(task) {
 - 改局部時保留主張、已確認邊界與未要求修改的內容；完成後分開回報指定改動、取捨、證據與未完成。
 ${p.projectLocked ? `- 專案已由使用者選定：${task.project}，不可換成另一個專案。` : ''}`;
   return { profile, rules: rules + folder + baseline + alignment, diary: profile.diary ? `\n${DIARY}` : '', diaryField: profile.diary ? `,${diaryShape}` : '' };
+}
+
+// 只使用此工作項目最後一次執行保存的測試 sensor；不把缺少結果當成通過。
+function testEvidence(item) {
+  const result = (item.sensors || []).find(s => s.id === 'test-command');
+  if (!result) return 'Mentor 測試結果：未執行（尚無保存的測試結果），不可視為 PASS。';
+  return `Mentor 測試結果（執行回合 ${result.attempt ?? '未知'}，${result.stage || '未知階段'}）：${result.result}
+指令：${result.command || '（未設定）'}
+${result.detail}
+結果只代表這個執行回合；SKIP 表示未執行，FAIL 表示失敗，都不可視為 PASS。`;
 }
 
 export const prompts = {
@@ -134,6 +146,10 @@ ${transcript(task.planning.messages)}
 成果要寫成檔案；只在回覆裡描述、沒有產出檔案，不算完成。
 資訊不足時不要猜，回報 NEEDS_INPUT 並寫出缺什麼。${rules}
 
+測試由 Mentor server 在執行 AI 的沙箱外、產出資料夾內執行，以 Mentor 保存的測試結果為準。沙箱內因監聽被拒（例如 listen EPERM／EACCES）造成的測試失敗不算阻擋，不要因此回報 BLOCKED。
+可在最後 JSON 提供 testCommand（例如 "npm test"）；省略就沿用任務卡，空字串表示不執行。
+${testEvidence(item)}
+
 任務卡：
 ${cardText(task.planning.card)}
 
@@ -155,7 +171,10 @@ ${item.fixes?.length ? `\n上一輪驗收或使用者要求修正（原文）：
 STATUS: DONE | BLOCKED | NEEDS_INPUT
 FILES: 相對路徑, 相對路徑
 證據：逐條對應驗收條件，寫出檔名與位置
-未完成：${diary ? `\n${diary}\n最後附上一個 \`\`\`json 區塊：{${diaryField.slice(1)}}` : ''}`;
+未完成：
+最後的 JSON 區塊必須包含 changes（每點 where、what、howToCheck，path 可省略）；沒有改動用空陣列，不編造驗收結果。
+程式成果另提供 preview：{"url":"http://127.0.0.1:4330/","command":"node src/server.js --port 4330"}；只允許 HTTP／HTTPS 的 localhost 或 127.0.0.1。command 僅作文字保存，Mentor 不執行。非程式成果可省略 preview；path 可用成果相對檔名或本機預覽路徑。
+JSON 範例：{"changes":[{"where":"搜尋頁","what":"加入搜尋欄","howToCheck":"輸入關鍵字確認結果","path":"result.html"}]}${diary ? `\n${diary}\n最後附上一個 \`\`\`json 區塊：{"changes":[],${diaryField.slice(1)}}（preview 如適用放在同一區塊）` : ''}`;
   },
 
   E: (task, item, { copy = false } = {}) => {
@@ -173,7 +192,8 @@ ${cardText(task.planning.card)}
 說明：${item.detail}
 檔案：${(item.outputs || []).map(o => o.file).join('、') || '（執行者沒有列出檔案，請自行查看資料夾）'}
 自動檢查（確定性感測器，供參考）：
-${(item.sensors || []).map(s => `- ${s.result}｜${s.name}：${s.detail}`).join('\n') || '- 無'}
+${(item.sensors || []).filter(s => s.id !== 'test-command').map(s => `- ${s.result}｜${s.name}：${s.detail}`).join('\n') || '- 無'}
+${testEvidence(item)}
 驗收條件：
 ${item.acceptance.map((a, i) => `${i + 1}. ${a}`).join('\n')}
 ${item.log?.length ? `\n執行者最後一次回報（自述，不算證據，只用來知道去哪裡找）：\n${item.log.at(-1).text.slice(-1500)}\n` : ''}
@@ -187,7 +207,7 @@ ${item.instructions?.length ? `\n使用者補充指示（原文，請逐條核�
 // 升級前建立的任務從現在開始收回饋，之前完成的項目不補問。
 const startFeedback = p => { if (!Array.isArray(p.feedback)) Object.assign(p, { feedback: [], feedbackSince: now() }); };
 
-export function parseExecution(text) {
+export function parseExecution(text, currentPreview) {
   const status = text.match(/^STATUS:\s*(DONE|BLOCKED|NEEDS_INPUT)\s*$/m)?.[1];
   // 模型常把檔名包成 `a.html` 或 [a.html](/abs/a.html:12)；取出真正的路徑，去掉行號。
   const files = (text.match(/^FILES:\s*(.*)$/m)?.[1] || '').split(/[,，、]/)
@@ -196,12 +216,21 @@ export function parseExecution(text) {
   // 「未完成」那一段就是停下的原因，直接給人看，不用打開紀錄。
   const after = text.match(/^未完成：([\s\S]*)$/m)?.[1] || '';
   const missing = after.split('```')[0].trim().split(/\n\s*\n/)[0].replace(/\s+/g, ' ').trim();
-  return { status: status || 'NEEDS_INPUT', files, parsed: Boolean(status), missing: /^(無|none)?$/i.test(missing) ? '' : missing.slice(0, 300) };
+  const json = extractJson(text);
+  let preview, testCommand, changes = [], metadataError = '';
+  try {
+    if (json && Object.hasOwn(json, 'preview')) preview = normalizePreview(json.preview);
+    if (json && Object.hasOwn(json, 'changes')) changes = normalizeChanges(json.changes, preview ?? currentPreview);
+    if (json && Object.hasOwn(json, 'testCommand')) testCommand = normalizeTestCommand(json.testCommand);
+    if (!json && /```json/.test(text)) throw new TaskError(400, 'REVIEW_SETTINGS_INVALID', '回報 JSON 無法解析。');
+  } catch (error) { metadataError = error.message; preview = undefined; testCommand = undefined; changes = []; }
+  return { preview, testCommand, changes, metadataError, status: status || 'NEEDS_INPUT', files, parsed: Boolean(status), missing: /^(無|none)?$/i.test(missing) ? '' : missing.slice(0, 300) };
 }
 
 export class Coach {
-  constructor(store, settings, root, memory, agentRunner = runAgent) {
+  constructor(store, settings, root, memory, agentRunner = runAgent, executeFile) {
     this.runAgent = agentRunner;
+    this.executeFile = executeFile;
     this.attachments = new Attachments(root);
     Object.assign(this, { store, settings, root, memory, children: new Map(), drivers: new Set(), overrides: new Map(), cancelled: new Set(), pending: new Map(), retries: new Map() });
   }
@@ -533,9 +562,10 @@ export class Coach {
     await this.audit(id, 'STAGE_STARTED', { stage: stageId, agent: agentLabel(agent), turnId, prompt });
     const done = (async () => {
      try {
-      let result, failure;
+      let result, failure, prepared;
       try {
         result = await this.runAgent({ ...agent, mode, cwd, prompt, images: attached.images, onSpawn: child => { this.children.set(id, child); if (this.cancelled.has(id)) child.kill('SIGTERM'); } });
+        if (metadata.beforeApply) prepared = await metadata.beforeApply(result.text, await this.latest(id));
       } catch (error) {
         failure = this.cancelled.has(id) ? new AgentError('AGENT_CANCELLED', '你已停止這次執行。') : error;
       } finally {
@@ -567,7 +597,7 @@ export class Coach {
         turn.response = result.text;
         // 回覆解析失敗也留住當次 prompt，且不讓任務永遠卡在 running。
         const draft = structuredClone(t);
-        try { await apply(draft, result.text, agentLabel(agent)); }
+        try { await apply(draft, result.text, agentLabel(agent), prepared); }
         catch (error) {
           await this.audit(id, 'STAGE_FAILED', { stage: stageId, agent: agentLabel(agent), code: 'RESPONSE_INVALID', message: error.message });
           Object.assign(turn, { status: 'failed', error: error.message, errorCode: 'RESPONSE_INVALID' });
@@ -727,13 +757,17 @@ export class Coach {
     return result;
   }
 
-  async saveCard(id, revision, key, { card, attachmentIds = [] }) {
+  async saveCard(id, revision, key, { card, preview, attachmentIds = [] }) {
     if (!card || ['title', 'goal', 'audience', 'deliverable'].some(k => typeof card[k] !== 'string' || card[k].length > 6000) || !card.title.trim() || !card.goal.trim() || ['success', 'constraints', 'unknowns'].some(k => !Array.isArray(card[k]) || card[k].some(v => typeof v !== 'string' || v.length > 6000))) throw new TaskError(400, 'CARD_INVALID', '請填寫標題、目標，並確認任務卡欄位格式。');
+    const setting = preview === undefined ? undefined : normalizePreview(preview);
+    const testCommand = card.testCommand === undefined ? undefined : normalizeTestCommand(card.testCommand);
     return this.mutateAttachments(id, revision, key, attachmentIds, t => {
+      if (setting !== undefined) t.preview = setting;
       t.planning.card = { ...t.planning.card, ...Object.fromEntries(['title', 'goal', 'audience', 'deliverable', 'success', 'constraints', 'unknowns'].map(k => [k, card[k]])) };
+      if (testCommand !== undefined) t.planning.card.testCommand = testCommand;
       t.title = card.title; t.goal = card.goal;
       return { status: planningStatus(t) };
-    }, 'card', { card });
+    }, 'card', { card, preview });
   }
 
   async answer(id, revision, key, { message, attachmentIds = [] }) {
@@ -841,9 +875,14 @@ export class Coach {
       if (stageId === 'F' && item.status !== 'REVIEW_FAIL') throw new TaskError(409, 'NOTHING_TO_FIX', '這一項目前沒有待修正的驗收意見。');
       if (!ready(t.planning.workItems, item, unlockOf(t))) throw new TaskError(409, 'DEPENDENCY_PENDING', '前置項目還沒完成。');
       return prompts.D(t, item, t.planning.workItems.filter(i => unlockOf(t).includes(i.status))) + (item.instructions?.length ? `\n\n這一項的使用者補充指示（原文）：\n${item.instructions.map(x => `- ${x.text}`).join('\n')}` : '');
-    }, async (t, text, agent) => {
+    }, async (t, text, agent, testResult) => {
       const item = this.item(t, itemId);
-      const parsed = parseExecution(text);
+      const parsed = parseExecution(text, t.preview);
+      if (parsed.preview !== undefined) t.preview = parsed.preview;
+      if (parsed.testCommand !== undefined) t.planning.card.testCommand = parsed.testCommand;
+      item.changes = parsed.changes;
+      delete item.gitChangeChecks;
+      item.metadataError = parsed.metadataError;
       const outputs = [];
       for (const file of parsed.files.slice(0, 30)) {
         const full = path.resolve(outDir, file);
@@ -858,18 +897,25 @@ export class Coach {
       item.log = [...(item.log || []), { stage: stageId, agent, status: parsed.status, text: text.slice(-4000), at: now() }].slice(-6);
       // AI 說完成卻沒有任何產出檔案，視為假完成，不送驗收
       const noFiles = parsed.status === 'DONE' && !item.outputs.length;
-      item.status = parsed.status === 'DONE' && !noFiles ? 'AWAITING_REVIEW' : 'BLOCKED';
+      item.status = parsed.status === 'DONE' && !noFiles && !item.metadataError ? 'AWAITING_REVIEW' : 'BLOCKED';
       if (noFiles) item.fixes = [...(item.fixes || []), 'AI 回報完成，但產出資料夾沒有新的檔案。請把成果寫成檔案並在 FILES 列出。'];
       if (item.status === 'BLOCKED') {
-        const reason = noFiles ? '回報完成但沒有產出檔案' : parsed.missing || (parsed.parsed ? '' : '回覆沒有 STATUS 行');
+        const reason = item.metadataError || (noFiles ? '回報完成但沒有產出檔案' : parsed.missing || (parsed.parsed ? '' : '回覆沒有 STATUS 行'));
         // 同一原因連續停下要讓人看得出來，免得一直補同一句話。
         item.blocked = { kind: parsed.status === 'NEEDS_INPUT' ? 'info' : 'tool', reason, count: item.blocked?.reason === reason ? item.blocked.count + 1 : 1, at: now() };
       } else item.blocked = null;
       item.executor = agent;
       item.review = null;
       item.sensors = await outputSensors(outDir, item, t.planning.outline);
+      if (testResult) item.sensors.push({ ...testResult, attempt: item.attempts, stage: stageId, at: now() });
       this.addDiary(t, stageId, extractJson(text)?.diary, agent);
-    }, { workItemId: itemId });
+    }, { workItemId: itemId, beforeApply: async (text, task) => {
+      const parsed = parseExecution(text, task.preview);
+      if (parsed.status !== 'DONE' || parsed.metadataError) return null;
+      const command = parsed.testCommand ?? task.planning.card.testCommand;
+      // 保持 pending／running，測試結束並保存後才放行 E；執行時不占住任務寫入鎖。
+      return testCommandSensor(command, outDir, { executeFile: this.executeFile });
+    } });
   }
 
   // 驗收在成果的暫存副本裡跑：可以執行會寫檔的建置與測試，成果本身不會被改到。
@@ -1037,6 +1083,20 @@ export class Coach {
 
   resume(id, revision, key, { text = '', reason = '' } = {}) {
     return this.instruct(id, revision, key, { text, reason, scope: 'current', confirmImpact: true });
+  }
+
+  checkChange(id, revision, key, { itemId, index, change }) {
+    return this.store.mutate(id, revision, key, async t => {
+      const item = this.item(t, itemId);
+      if (t.planning.running || item.status === 'DONE') throw new TaskError(409, 'ITEM_CLOSED', '執行中或已結案的項目不能逐點驗收。');
+      const listing = await itemChanges(t, itemId);
+      const point = Number.isInteger(index) && listing.changes[index];
+      if (!point || !change || ['where', 'what', 'howToCheck', 'path'].some(k => point[k] !== change[k])) throw new TaskError(409, 'CHANGE_STALE', '改動清單已更新，請重新開啟驗收。');
+      if (listing.source === 'git') {
+        item.gitChangeChecks = [...(item.gitChangeChecks || []).filter(c => c.where !== point.where), { ...point, baseline: listing.baseline }];
+      } else point.status = 'PASS';
+      return {};
+    }, 'change-check', { itemId, index, change });
   }
 
   confirm(id, revision, key, { itemId, accept, note = '' }) {

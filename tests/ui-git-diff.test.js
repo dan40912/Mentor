@@ -22,14 +22,8 @@ test('Git 任務產出列提供差異入口，舊任務靠即時 Git 偵測，�
   }
   assert.equal(f.ctx.diffButton({id:'TASK-plain',gitAvailable:false},w),null);
   assert.equal(f.ctx.diffButton({id:'TASK-stale',gitAvailable:false,gitBaseline:'a'.repeat(40)},w),null);
-  const row=script.split('\n').find(line=>line.includes('if(w.outputs?.length)'));
-  for(const available of [true,false]){
-    f.ctx.t={id:'TASK-row',allowedRoots:['/out'],gitAvailable:available,gitBaseline:'a'.repeat(40)};f.ctx.w=w;f.ctx.card=f.element('article');
-    vm.runInContext(row,f.ctx);
-    assert.equal(f.ctx.card.children[0].children.filter(node=>node.textContent==='看改了什麼').length,available?1:0);
-  }
-  const outputs=script.slice(script.indexOf('if(w.outputs?.length)'),script.indexOf('if(w.outputs?.length)')+1800);
-  assert.match(outputs,/const diff=diffButton\(t,w\);if\(diff\)out.append\(diff\);card.append\(out\)/);
+  assert.match(script,/card.append\(processFiles\(t,w\)\)/);
+  assert.match(script,/const diff=diffButton\(task,item\);if\(diff\)box.append\(diff\)/);
   const server=await readFile(new URL('../src/server.js',import.meta.url),'utf8');
   assert.match(server,/gitAvailable: !task.error && Boolean\(await gitHead\(task.allowedRoots\?\.\[0\]\)\)/);
   assert.match(server,/action === 'diff'[\s\S]*?itemDiff\(task, new URLSearchParams\(query \|\| ''\)\.get\('item'\)\)/);

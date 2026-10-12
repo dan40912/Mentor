@@ -49,17 +49,7 @@ function appendConfirmArtifacts(task,one,items){
  const list=element('div',undefined,'confirm-artifacts');
  for(const item of items){
   const row=element('div',undefined,'outputs');row.append(element('strong',itemTitle(item.id,item.title||'')));
-  const files=[...new Set((item.outputs||[]).map(output=>output.file))];
-  for(const file of files){
-   const button=element('button',file,'file-chip preview-link');button.type='button';button.title=`預覽 ${file}`;button.dataset.previewFile=file;button.dataset.previewItem=item.id;
-   button.onclick=()=>openPreview(task.id,file,button);row.append(button);
-  }
-  if(!files.length)row.append(element('span','尚未登記產出檔案','small muted'));
-  const diff=diffButton(task,item);
-  if(diff){
-   const count=element('span',files.length?'改動檔案數：讀取中…':'改動 0 個檔案','small muted');count.setAttribute('aria-live','polite');row.append(count,diff);
-   if(files.length)request(`/api/tasks/${encodeURIComponent(task.id)}/diff?item=${encodeURIComponent(item.id)}`).then(result=>{count.textContent=`改動 ${result.changedFileCount} 個檔案`;}).catch(error=>{count.textContent=`改動檔案數無法讀取：${error.message}`;});
-  }
+  row.append(reviewButton(task,item),processFiles(task,item));
   list.append(row);
  }
  one.append(list);

@@ -1,3 +1,4 @@
+import { probePreview, localPreviewUrl } from './review-settings.js';
 import http from 'node:http';
 import { randomUUID, randomBytes } from 'node:crypto';
 import { mkdir, readFile, writeFile, realpath, readdir, stat } from 'node:fs/promises';
@@ -10,7 +11,7 @@ import { Trash } from './trash.js';
 import { Conversations } from './conversations.js';
 import { Projects } from './projects.js';
 import { Coach } from './coach.js';
-import { gitHead, itemDiff } from './git-diff.js';
+import { gitHead, itemDiff, itemChanges } from './git-diff.js';
 import { artifactPath, validateArtifactName } from './artifact-path.js';
 import { diagnose } from './agents.js';
 import { TaskStore, TaskError, buildBrief } from './tasks.js';
@@ -125,7 +126,7 @@ async function body(req) {
   return JSON.parse(text);
 }
 
-export async function createRequestHandler({ root = appDir, port = 4317, runAgent } = {}) {
+export async function createRequestHandler({ root = appDir, port = 4317, runAgent, previewProbeOptions, executeFile } = {}) {
   root = path.resolve(root);
   const memory = path.join(root, 'vault');
   const token = randomBytes(32).toString('hex');
@@ -159,7 +160,7 @@ export async function createRequestHandler({ root = appDir, port = 4317, runAgen
   const memoryStore = new Memory(path.join(memory, 'memory'));
   const conversations = new Conversations(path.join(memory, 'conversations'));
   const projects = new Projects(path.join(memory, 'projects'));
-  const coach = new Coach(tasks, () => settings, root, memoryStore, runAgent);
+  const coach = new Coach(tasks, () => settings, root, memoryStore, runAgent, executeFile);
   await coach.recover();
   const trash = new Trash(memory, tasks, coach);
   const handler = async (req, res) => {
@@ -187,7 +188,7 @@ export async function createRequestHandler({ root = appDir, port = 4317, runAgen
         res.writeHead(200, {
           'Content-Type': 'text/html; charset=utf-8',
           'Cache-Control': 'no-store',
-          'Content-Security-Policy': "default-src 'self'; img-src 'self' data: blob:; frame-src 'self' blob:; script-src 'self' 'unsafe-inline'; style-src 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'",
+          'Content-Security-Policy': "default-src 'self'; img-src 'self' data: blob:; frame-src 'self' blob: http://localhost:* http://127.0.0.1:* https://localhost:* https://127.0.0.1:*; script-src 'self' 'unsafe-inline'; style-src 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'",
           'Set-Cookie': `awc=${token}; HttpOnly; SameSite=Strict; Path=/`
         });
         return res.end(html);
@@ -233,6 +234,17 @@ export async function createRequestHandler({ root = appDir, port = 4317, runAgen
         if (!id && !action) return send(200, { tasks: await Promise.all((await tasks.list()).map(async task => ({ ...task, gitAvailable: !task.error && Boolean(await gitHead(task.allowedRoots?.[0])) }))) });
         if (id && action === 'events') return send(200, { events: await coach.events(id) });
         if (id && action === 'conversation') return send(200, await conversations.read((await tasks.get(id)).task));
+        if (id && action === 'preview-check') {
+          const { task } = await tasks.get(id);
+          if (!task.preview?.url) throw new TaskError(400, 'PREVIEW_URL_REQUIRED', '請先保存預覽網址。');
+          const target = new URLSearchParams(query || '').get('path');
+          const url = target === null ? localPreviewUrl(task.preview.url) : localPreviewUrl(target, localPreviewUrl(task.preview.url));
+          return send(200, { ...await probePreview(url, previewProbeOptions), command: task.preview.command || '' });
+        }
+        if (id && action === 'review-changes') {
+          const { task } = await tasks.get(id);
+          return send(200, await itemChanges(task, new URLSearchParams(query || '').get('item')));
+        }
         if (id && action === 'diff') {
           const { task } = await tasks.get(id);
           return send(200, await itemDiff(task, new URLSearchParams(query || '').get('item')));
@@ -368,6 +380,7 @@ export async function createRequestHandler({ root = appDir, port = 4317, runAgen
         execute: id => coach.execute(id, input.itemId),
         review: id => coach.review(id, input.itemId),
         fix: id => coach.fix(id, input.itemId),
+        'change-check': (id, key) => coach.checkChange(id, input.revision, key, input),
         confirm: (id, key) => coach.confirm(id, input.revision, key, input),
         cancel: id => coach.stop(id),
         stop: id => coach.stop(id),
@@ -385,7 +398,7 @@ export async function createRequestHandler({ root = appDir, port = 4317, runAgen
         const result = await coachActions[action](id, key);
         // 開著「一路做到完」時，你做完任何一步，AI 會自己接著往下。
         // 評分只是記錄，不推動流程；否則停下時評分會讓 AI 重新判斷又停一次。
-        if (!['stop', 'cancel', 'trash', 'autopilot', 'feedback', 'agents'].includes(action)) coach.resumeAuto(id);
+        if (!['stop', 'cancel', 'trash', 'autopilot', 'feedback', 'agents', 'change-check'].includes(action)) coach.resumeAuto(id);
         if (action === 'cancel' || action === 'stop') return send(202, { stopping: true, task: (await tasks.list()).find(t => t.id === id) || result.task });
         if (action === 'trash') return send(200, result);
         if (action === 'instruct' && input.dryRun) return send(200, result);

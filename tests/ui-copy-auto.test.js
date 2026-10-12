@@ -41,10 +41,10 @@ function card(task, coachAct, overrides = {}) {
     trackOf: () => ({ nodes: [{ state: 'now', name: '計畫' }] }),
     state: { stages: [], providers: [{ id: 'claude', name: 'Claude', runnable: true, modes: ['read'] }] }, coachAct, tell() {},
     $: () => detail, matchMedia: () => ({ matches: true }), task,
-    request: async () => ({ changedFileCount: 0 }), openPreview() {}, openDiff() {}, ...overrides,
+    request: async () => ({ changedFileCount: 0 }), openPreview() {}, openDiff() {}, openReview() {}, ...overrides,
     one, jump, oneText: { querySelector: selector => selector === '.eyebrow' ? eyebrow : label }
   });
-  vm.runInContext(`${holderSource}\n${busySource}\n${sharedNames}\n${html.slice(html.indexOf('function diffButton('),html.indexOf('async function openDiff('))}\n${autoSource}\ndecorateOneThing(task,{one,oneText,jump});`, context);
+  vm.runInContext(`${holderSource}\n${busySource}\n${sharedNames}\n${html.slice(html.indexOf('function reviewButton('),html.indexOf('function openReview('))}\n${html.slice(html.indexOf('function diffButton('),html.indexOf('async function openDiff('))}\n${autoSource}\ndecorateOneThing(task,{one,oneText,jump});`, context);
   return { buttons: one.children[0].children, positioned, jump, label, eyebrow, one };
 }
 
@@ -203,7 +203,7 @@ test('無連接埠：停點切成完全自動 → 批次確認 → 人工項目�
   assert.ok((await latest()).planning.workItems.filter(i => i.owner === 'ai').every(i => i.status === 'DONE'));
 });
 
-test('規格 5：各待確認項目列登記檔名，預覽傳入正確任務、檔案與入口', async () => {
+test('頂部成果列沿用過程檔案分類，預覽傳入正確任務、檔案與入口', async () => {
   const task=taskAt('confirm'), previews=[];
   task.planning.workItems=[
     {id:'W1',title:'文件',owner:'ai',status:'REVIEWED',outputs:[{file:'docs/a & <b>.md'},{file:'docs/a & <b>.md'}]},
@@ -219,50 +219,29 @@ test('規格 5：各待確認項目列登記檔名，預覽傳入正確任務、
     assert.equal(list.children.length,2);
     assert.deepEqual(list.children.map(n=>n.children[0].textContent),['第 1 項 文件','第 2 項 程式']);
     const files=descendants(list).filter(n=>n.dataset.previewFile);
-    assert.deepEqual(files.map(n=>n.textContent),['docs/a & <b>.md','src/code.js','report.txt']);
-    for(const button of files){button.onclick();assert.deepEqual(previews.at(-1),[task.id,button.textContent,button]);}
-    assert.deepEqual(files.map(n=>n.dataset.previewItem),['W1','W2','W2']);
+    assert.deepEqual(files.map(n=>n.textContent),['src/code.js','report.txt']);
+    for(const button of files){button.onclick();assert.deepEqual(previews.at(-1),[task.id,button.textContent,button,'preview',task.planning.workItems.find(i=>i.id===button.dataset.previewItem)]);}
+    assert.deepEqual(files.map(n=>n.dataset.previewItem),['W2','W2']);
     assert.equal(find(view,'button','看改了什麼'),undefined);
   }
 });
 
-test('規格 5：Git 每項改動數由 API 提供，含零改動、空產出；差異入口對應項目', async () => {
-  const task=taskAt('confirm'),calls=[],diffs=[];task.id='TASK & one';task.gitAvailable=true;
-  task.planning.workItems=[
-    {id:'W1',owner:'ai',status:'REVIEWED',outputs:[{file:'changed.js'},{file:'unchanged.txt'}]},
-    {id:'W2',owner:'ai',status:'REVIEWED',outputs:[{file:'zero.txt'}]},
-    {id:'W3',owner:'ai',status:'REVIEWED',outputs:[]}
-  ];
-  const view=card(task,()=>{}, {request:async url=>{calls.push(url);return {changedFileCount:url.endsWith('W1')?1:0,files:['not-a-count']};},openDiff:(...args)=>diffs.push(args)});
-  assert.ok(find(view,'span','改動檔案數：讀取中…'));
-  await new Promise(resolve=>setImmediate(resolve));
-  assert.deepEqual(calls,['/api/tasks/TASK%20%26%20one/diff?item=W1','/api/tasks/TASK%20%26%20one/diff?item=W2']);
-  const rows=descendants(view.one).find(n=>n.className==='confirm-artifacts').children;
-  assert.deepEqual(rows.map(row=>row.children.find(n=>n.textContent.startsWith('改動 ')).textContent),['改動 1 個檔案','改動 0 個檔案','改動 0 個檔案']);
-  assert.ok(find(view,'span','尚未登記產出檔案'));
-  for(const [index,row] of rows.entries()){
-    const button=row.children.find(n=>n.textContent==='看改了什麼');await button.onclick();
-    assert.deepEqual(diffs.at(-1),[task.id,`W${index+1}`,button]);
-  }
-  task.gitAvailable=false;task.gitBaseline='a'.repeat(40);
-  assert.equal(find(card(task,()=>{}, {request:()=>assert.fail('舊基準不可觸發差異讀取')}),'button','看改了什麼'),undefined);
-});
-
-test('規格 5：非 Git 空產出無差異；其他停點不顯示；Git 讀取失敗不假報零', async () => {
-  const task=taskAt('confirm');task.planning.workItems[0].outputs=[];
-  let view=card(task,()=>{}, {request:()=>assert.fail('非 Git 不應讀差異')});
-  assert.ok(find(view,'span','尚未登記產出檔案'));
-  assert.equal(find(view,'button','看改了什麼'),undefined);
+test('頂部過程檔案預設收合，Git 差異入口保留在收合內容，不背景讀取差異', async () => {
+  const task=taskAt('confirm'),diffs=[];task.gitAvailable=true;
+  task.planning.workItems[0].outputs=[{file:'code.js'}];
+  const view=card(task,()=>{}, {request:()=>assert.fail('頂部收合列不應讀差異'),openDiff:(...args)=>diffs.push(args)});
+  const details=find(view,'details');assert.ok(details);assert.notEqual(details.open,true);
+  assert.equal(details.children[0].textContent,'過程檔案（1）');
+  const button=details.children.find(n=>n.textContent==='看改了什麼');await button.onclick();
+  assert.deepEqual(diffs,[[task.id,'W1',button]]);
+  task.gitAvailable=false;
+  const empty=card(task,()=>{});assert.equal(find(empty,'button','看改了什麼'),undefined);
+  task.planning.workItems[0].outputs=[];
+  assert.ok(find(card(task,()=>{}),'summary','過程檔案（0）'));
   for(const kind of ['approve','error','answer','human']){
     task.planning.autopilot.waitingFor.kind=kind;
     assert.equal(descendants(card(task,()=>{}).one).find(n=>n.className==='confirm-artifacts'),undefined);
   }
-  task.planning.autopilot.waitingFor.kind='confirm';task.gitAvailable=true;task.planning.workItems[0].outputs=[{file:'code.js'}];
-  view=card(task,()=>{}, {request:async()=>{throw new Error('基準已不存在');}});
-  await new Promise(resolve=>setImmediate(resolve));
-  assert.ok(find(view,'span','改動檔案數無法讀取：基準已不存在'));
-  assert.equal(find(view,'span','改動 0 個檔案'),undefined);
-  assert.ok(find(view,'button','看改了什麼'));
 });
 
 test('規格 5：手動批次確認仍送 confirm-all，成果入口不觸發確認',async()=>{

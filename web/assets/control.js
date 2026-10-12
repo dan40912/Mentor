@@ -90,7 +90,7 @@ function instructionBox(t,{extraButtons=[]}={}){
  sync();return form;
 }
 // 把工作項目的修改導到同一個輸入區，套用範圍自動選好。
-function focusInstruct(itemId){const form=$('#task-detail .instruct');if(!form)return;const sel=form.querySelector('select');if(sel&&itemId){sel.value=itemId;sel.dispatchEvent(new Event('change'));}form.scrollIntoView({block:'center',behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth'});form.querySelector('textarea').focus({preventScroll:true});}
+function focusInstruct(itemId,note){const form=$('#task-detail .instruct');if(!form)return;const area=form.querySelector('textarea');if(note!==undefined){area.value=note;area.oninput();}const sel=form.querySelector('select');if(sel&&itemId){sel.value=itemId;sel.dispatchEvent(new Event('change'));}form.scrollIntoView({block:'center',behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth'});form.querySelector('textarea').focus({preventScroll:true});}
 
 // 任務選單：只處理這一個任務。移到回收桶不與主要送出並列。
 function taskMenu(t){

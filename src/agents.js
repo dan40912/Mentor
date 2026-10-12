@@ -53,6 +53,7 @@ export function classify(output) {
   if (/rate.?limit|usage limit|session limit|quota|insufficient_quota|429/i.test(output)) return ['AGENT_QUOTA', '這個 AI 的額度用完或被限流。可以在設定把此階段換給另一個 AI。'];
   if (/not logged in|please run \/login|\bunauthorized\b|\b401\s+Unauthorized\b|\b(?:status|HTTP)\s*[:=]?\s*401\b/i.test(output)) return ['AGENT_NOT_LOGGED_IN', 'CLI 尚未登入。請在終端機執行該 CLI 並完成登入。'];
   if (/content filtering/i.test(output)) return ['AGENT_FILTERED', 'AI 回覆被內容過濾擋下，沒有收到可用結果。可以重試，或在角色與設定選擇另一個 AI。'];
+  if (/\bmodel\b[^\r\n]*\b(?:at capacity|overloaded)\b|\bmodel_capacity_exceeded\b/i.test(output)) return ['AGENT_MODEL_CAPACITY', '這個模型目前滿載，可以稍後重試或換一個模型'];
   if (/model .*not supported|unknown model|invalid model|model_not_found|is not available/i.test(output)) return ['AGENT_MODEL_UNSUPPORTED', '這個帳號不支援所選模型，請在設定換一個模型。'];
   return ['AGENT_FAILED', 'AI 執行失敗，原因未能辨識。'];
 }

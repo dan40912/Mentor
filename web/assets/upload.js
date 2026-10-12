@@ -114,8 +114,8 @@ function taskAttachmentPicker(taskId, entry) {
 const cardDrafts = new Map();
 function cardEditor(t) {
   const form = element('form', undefined, 'card-editor');
-  const fields = {}, saved = cardDrafts.get(t.id) || t.planning.card;
-  for (const [key, label] of [['title','標題'],['goal','目標'],['audience','讀者'],['deliverable','產出'],['success','成功標準（每行一項）'],['constraints','限制（每行一項）'],['unknowns','還不知道（每行一項）']]) {
+  const fields = {}, saved = cardDrafts.get(t.id) || { ...t.planning.card, previewUrl: t.preview?.url || '', previewCommand: t.preview?.command || '' };
+  for (const [key, label] of [['title','標題'],['goal','目標'],['audience','讀者'],['deliverable','產出'],['success','成功標準（每行一項）'],['constraints','限制（每行一項）'],['unknowns','還不知道（每行一項）'],['previewUrl','預覽網址（localhost 或 127.0.0.1）'],['previewCommand','啟動指令（僅保存文字，供複製）'],['testCommand','測試指令（選填，例如 npm test；不支援 shell 運算）']]) {
     const row = element('label', undefined, 'field'), area = element('textarea');
     area.value = Array.isArray(saved[key]) ? saved[key].join('\n') : saved[key] || '';
     area.maxLength = 6000; area.required = key === 'title' || key === 'goal';
@@ -132,7 +132,7 @@ function cardEditor(t) {
     Object.values(fields).forEach(area => area.disabled = true);
     try {
       const attachmentIds = await picker.ids();
-      await coachAct(t, 'card', { card, attachmentIds });
+      await coachAct(t, 'card', { card, preview: { url: card.previewUrl, command: card.previewCommand }, attachmentIds });
       picker.consume(attachmentIds); cardDrafts.delete(t.id); openTask(t.id);
       tell('任務卡與附件已保存。');
     } finally { picker.lock(false); Object.values(fields).forEach(area => area.disabled = false); }

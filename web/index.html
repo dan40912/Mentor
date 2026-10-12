@@ -390,8 +390,9 @@ dialog.sheet{border-radius:var(--radius-card) 0 0 var(--radius-card)}dialog{bord
 .lane h3{overflow:visible}.lane-open{padding:2px 0}
 .file-chip{min-width:0;max-width:100%;overflow-wrap:anywhere;white-space:normal}
 .file-chip.preview-link{border:0;color:var(--content-highlight);cursor:pointer;text-align:left;text-decoration:underline}.file-chip.preview-link:focus-visible{outline:2px solid currentColor;outline-offset:2px}
-#preview-dialog{box-sizing:border-box;width:min(1100px,calc(100% - 24px));max-width:calc(100% - 24px);height:min(88dvh,900px);max-height:88dvh}#preview-dialog .dialog-inner{height:100%;display:flex;flex-direction:column}#preview-modes{display:flex;gap:8px;margin-bottom:12px}#preview-modes[hidden]{display:none}#preview-modes button[aria-pressed="true"]{border-color:var(--content-highlight);color:var(--content-highlight)}#preview-content{flex:1;min-width:0;min-height:0;display:grid;grid-template-columns:minmax(0,1fr);place-items:center;overflow:auto}#preview-content iframe{width:100%;height:100%;border:0;outline:1px solid var(--border-default);background:#fff}#preview-content.mobile iframe{width:min(390px,100%)}#preview-content img{max-width:100%;max-height:100%;object-fit:contain}#preview-status{margin:0 0 12px}
+#preview-dialog{box-sizing:border-box;width:min(1100px,calc(100% - 24px));max-width:calc(100% - 24px);height:min(88dvh,900px);max-height:88dvh}#preview-dialog .dialog-inner{height:100%;display:flex;flex-direction:column}#preview-modes{display:flex;gap:8px;margin-bottom:12px}#preview-modes[hidden]{display:none}#preview-modes button[aria-pressed="true"]{border-color:var(--content-highlight);color:var(--content-highlight)}#preview-content{flex:1;min-width:0;min-height:0;display:grid;grid-template-columns:minmax(0,1fr);place-items:center;overflow:auto}#preview-content iframe{width:100%;height:100%;border:0;outline:1px solid var(--border-default);background:#fff}#preview-content.program-preview{grid-template-rows:auto minmax(0,1fr);gap:8px}#preview-content.mobile iframe{width:min(390px,100%)}#preview-content img{max-width:100%;max-height:100%;object-fit:contain}#preview-status{margin:0 0 12px}
 #preview-content .text-preview{box-sizing:border-box;width:100%;height:100%;overflow:auto;margin:0;padding:24px;white-space:pre-wrap;overflow-wrap:anywhere}
+#preview-layout{min-height:0;flex:1;display:flex;flex-direction:column}#preview-layout.review-layout{display:grid;grid-template-columns:minmax(0,2fr) minmax(240px,1fr);gap:20px}#review-changes{overflow:auto;border-left:1px solid var(--border-default);padding-left:20px}#review-changes[hidden]{display:none}#review-changes article{margin-bottom:20px;overflow-wrap:anywhere}@media(max-width:700px){#preview-layout.review-layout{display:flex;overflow:auto}#review-changes{overflow:visible;border-left:0;padding-left:0}#preview-layout.review-layout #preview-content{min-height:320px;flex:none}}
 #preview-content .diff-added{color:#176b36;background:#e7f5eb}#preview-content .diff-removed{color:#a12622;background:#fdebea}#preview-content .diff-line{display:block;min-height:1em}
 #preview-content .markdown-preview{box-sizing:border-box;width:100%;height:100%;overflow:auto;padding:24px;font:16px/1.7 system-ui;overflow-wrap:anywhere}#preview-content .markdown-preview pre{white-space:pre-wrap;background:var(--glass);padding:12px;border-radius:6px}#preview-content .markdown-preview code{font-family:monospace}#preview-content .markdown-preview :is(h1,h2,h3,h4,h5,h6){line-height:1.3}#preview-content .markdown-preview table{border-collapse:collapse;max-width:100%}#preview-content .markdown-preview :is(th,td){border:1px solid var(--border-default);padding:6px 10px;text-align:left}#preview-content .markdown-preview a{color:var(--content-highlight)}
 @media(max-width:700px){#preview-dialog{width:100%;max-width:100%;height:100dvh;max-height:100dvh;margin:0;border-radius:0}#preview-dialog .dialog-inner{padding:16px}}
@@ -531,8 +532,12 @@ dialog.sheet [data-anchor],dialog.sheet [data-item]{scroll-margin-top:0}
 .instruct-field input:focus,.instruct-field select:focus{outline:0;border-color:var(--content-highlight);box-shadow:0 0 0 3px #4f44c340}.instruct .buttons{align-items:center}.instruct .counter{margin-left:auto}
 .impact{border-left:3px solid var(--content-highlight);background:var(--highlight-wash);border-radius:var(--radius-button);padding:12px 16px;display:grid;gap:8px;font-size:14px}.impact p{margin:0}
 .field-error{color:var(--status-error);font-size:13px;margin:0}
-.sheet-actions{display:flex;align-items:center;gap:var(--space-s)}
-.task-menu{position:relative}.task-menu summary{list-style:none;cursor:pointer}#task-menu-slot summary{display:grid;place-items:center;min-width:32px;height:32px;padding:0 8px;border-radius:16px;background:#f0f0f0;color:var(--muted);font-size:13px}.task-menu summary::-webkit-details-marker{display:none}
+.sheet-actions{display:flex;flex-wrap:nowrap;align-items:center;gap:var(--space-s);--task-action-height:32px}
+#task-dialog .sheet-actions>.btn,#task-dialog .task-share-tools>.btn,#task-dialog .sheet-actions>.close,#task-menu-slot summary{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;height:var(--task-action-height);min-height:var(--task-action-height)}
+.task-share-tools{display:flex;align-items:center;position:relative;flex:none}
+#task-share-panel{position:absolute;top:100%;right:0;z-index:5;width:min(420px,calc(100vw - 48px));max-height:60dvh;overflow:auto;box-shadow:0 12px 32px #0000001f}
+#task-share-panel[hidden]{display:none}
+.task-menu{position:relative}#task-menu-slot{display:flex;align-items:center}#task-menu-slot .task-menu{margin:0}.task-menu summary{list-style:none;cursor:pointer}#task-menu-slot summary{display:grid;place-items:center;min-width:32px;height:32px;padding:0 8px;border-radius:16px;background:#f0f0f0;color:var(--muted);font-size:13px}.task-menu summary::-webkit-details-marker{display:none}
 .task-menu summary:focus-visible{outline:2px solid var(--content-highlight);outline-offset:2px}
 .menu-panel{position:absolute;right:0;top:calc(100% + 6px);z-index:5;min-width:220px;background:#fff;border:1px solid var(--border-default);border-radius:var(--radius-container);box-shadow:0 12px 32px #0000001f;padding:6px;display:grid;gap:4px}
 .menu-panel p{margin:0;padding:4px 10px 8px}
@@ -544,11 +549,11 @@ dialog.sheet [data-anchor],dialog.sheet [data-item]{scroll-margin-top:0}
 .btn.destroy{color:var(--status-error);border-color:var(--status-error);font-weight:600}.btn.destroy:disabled{opacity:.45}
 .trash-list{display:grid;gap:var(--space-d);max-width:860px}.trash-card{padding:24px}.trash-head{display:flex;align-items:center;gap:var(--space-s)}.trash-head h3{margin:0;font-size:17px}.trash-card ul{margin:6px 0 0;padding-left:18px}
 .board-actions{display:flex;flex-wrap:wrap;gap:var(--space-s)}
-@media(max-width:700px){.control-bar{padding:14px 16px;flex-wrap:wrap}.control-bar .btn{margin-left:0;width:100%}.instruct{padding:16px}.trash-confirm,.purge-confirm,.trash-card{padding:16px}
+@media(max-width:700px){.sheet-actions{--task-action-height:44px}.control-bar{padding:14px 16px;flex-wrap:wrap}.control-bar .btn{margin-left:0;width:100%}.instruct{padding:16px}.trash-confirm,.purge-confirm,.trash-card{padding:16px}
  .control-bar .btn,.instruct .btn,.trash-card .btn,.trash-confirm .btn,.purge-confirm .btn,.board-card .btn,.instruct-field input,.instruct-field select,.task-menu summary,.menu-item,.impact .btn,.one-thing .btn{min-height:44px}#task-menu-slot summary{min-width:44px;height:44px}.close{width:44px;height:44px}}
 @media(prefers-color-scheme:dark){.control-bar.is-stopped,.instruct{background:#1f1f26}.instruct-field input,.instruct-field select{background:#1a1a20;border-color:var(--border-default);color:var(--content-primary)}.menu-panel,.trash-confirm{background:#24242c;border-color:#ffffff1a}#task-menu-slot summary{background:#2a2a32;color:#c9c9d2}.btn.danger-text{background:transparent}}
 
-.confirm-artifacts{flex-basis:100%;min-width:0}.confirm-artifacts .outputs{margin-top:var(--space-s);overflow-wrap:anywhere}.confirm-artifacts .outputs>strong{flex-basis:100%}
+.confirm-artifacts{flex-basis:100%;min-width:0}.confirm-artifacts .outputs{margin-top:var(--space-s);overflow-wrap:anywhere;flex-wrap:nowrap;align-items:baseline}.confirm-artifacts .outputs>details{min-width:0}.confirm-artifacts summary{cursor:pointer}.confirm-artifacts .outputs>strong{flex:1;min-width:0}
 .one-thing .one-actions{display:flex;flex-wrap:wrap;gap:var(--space-s);align-items:center;margin-top:var(--space-m)}
 .one-thing{flex-wrap:wrap}.one-thing>div:first-child{flex:1;min-width:240px}
 .auto-note{font-size:13px;color:var(--muted);margin:6px 0 0;flex-basis:100%}
@@ -680,8 +685,8 @@ dialog.sheet [data-anchor],dialog.sheet [data-item]{scroll-margin-top:0}
  </main>
 </div>
 </div>
-<dialog id="task-dialog" class="sheet" aria-labelledby="task-title"><div class="dialog-inner"><div class="dialog-heading"><div class="sheet-title"><span id="task-holder"></span><h2 id="task-title" tabindex="-1">任務詳情</h2></div><div class="sheet-track" id="task-track"></div><div class="sheet-actions"><button class="btn subtle small-btn" type="button" data-expand="task-dialog" aria-label="展開任務頁" aria-pressed="false"><svg class="expand-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/></svg><svg class="collapse-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8h5V3m13 5h-5V3M8 21v-5H3m13 5v-5h5"/></svg> <span data-expand-label>展開</span></button><span id="task-menu-slot"></span><button class="close" aria-label="關閉任務詳情" data-close="task-dialog"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div></div><div id="task-detail"></div></div></dialog>
-<dialog id="preview-dialog" aria-labelledby="preview-title"><div class="dialog-inner"><div class="dialog-heading"><h2 id="preview-title">預覽成果</h2><div class="buttons"><button class="btn subtle small-btn" type="button" data-expand="preview-dialog" aria-label="展開成果預覽" aria-pressed="false"><svg class="expand-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/></svg><svg class="collapse-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8h5V3m13 5h-5V3M8 21v-5H3m13 5v-5h5"/></svg> <span data-expand-label>展開</span></button><button class="close" type="button" aria-label="關閉成果預覽" data-close="preview-dialog">×</button></div></div><p id="preview-status" role="status"></p><div id="preview-modes" role="group" aria-label="預覽模式" hidden><button class="btn subtle small-btn" type="button" data-preview-mode="desktop" aria-pressed="true">桌面</button><button class="btn subtle small-btn" type="button" data-preview-mode="mobile" aria-pressed="false">手機（390px）</button><button class="btn subtle small-btn" type="button" id="preview-source" aria-pressed="false" hidden>原始碼</button></div><div id="preview-content"></div></div></dialog>
+<dialog id="task-dialog" class="sheet" aria-labelledby="task-title"><div class="dialog-inner"><div class="dialog-heading"><div class="sheet-title"><span id="task-holder"></span><h2 id="task-title" tabindex="-1">任務詳情</h2></div><div class="sheet-track" id="task-track"></div><div class="sheet-actions"><button class="btn subtle small-btn" type="button" data-expand="task-dialog" aria-label="展開任務頁" aria-pressed="false"><svg class="expand-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/></svg><svg class="collapse-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8h5V3m13 5h-5V3M8 21v-5H3m13 5v-5h5"/></svg> <span data-expand-label>展開</span></button><div class="task-share-tools"><button id="task-share-toggle" class="btn small-btn" type="button" aria-expanded="false" aria-controls="task-share-panel">分享給 AI</button><div id="task-share-panel" class="handoff-box" hidden></div></div><span id="task-menu-slot"></span><button class="close" aria-label="關閉任務詳情" data-close="task-dialog"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div></div><div id="task-detail"></div></div></dialog>
+<dialog id="preview-dialog" aria-labelledby="preview-title"><div class="dialog-inner"><div class="dialog-heading"><h2 id="preview-title">預覽成果</h2><div class="buttons"><button class="btn subtle small-btn" type="button" data-expand="preview-dialog" aria-label="展開成果預覽" aria-pressed="false"><svg class="expand-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/></svg><svg class="collapse-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8h5V3m13 5h-5V3M8 21v-5H3m13 5v-5h5"/></svg> <span data-expand-label>展開</span></button><button class="close" type="button" aria-label="關閉成果預覽" data-close="preview-dialog">×</button></div></div><p id="preview-status" role="status"></p><div id="preview-modes" role="group" aria-label="預覽模式" hidden><button class="btn subtle small-btn" type="button" data-preview-mode="desktop" aria-pressed="true">桌面</button><button class="btn subtle small-btn" type="button" data-preview-mode="mobile" aria-pressed="false">手機（390px）</button><button class="btn subtle small-btn" type="button" id="preview-source" aria-pressed="false" hidden>原始碼</button></div><div id="preview-layout"><div id="preview-content"></div><aside id="review-changes" aria-label="改了什麼" hidden></aside></div></div></dialog>
 <dialog id="draft-dialog" aria-labelledby="draft-title"><div class="dialog-inner"><div class="dialog-heading"><h2 id="draft-title">新任務</h2><button class="close" aria-label="關閉新任務" data-close="draft-dialog">×</button></div><p class="muted">用一兩句話說你想完成什麼。AI 會先整理成任務卡，再反問你，直到講清楚才擬計畫。</p><form id="draft-form"><input type="hidden" name="project"><p id="draft-project" class="notice" hidden></p><label class="field"><span>你想完成什麼？</span><textarea name="request" required minlength="4" maxlength="6000" placeholder="例如：下週要向主管報告新功能規劃，需要一份 HTML 簡報"></textarea></label><section id="draft-attachments" aria-label="加入附件（選填）"></section><fieldset class="profiles" id="profile-picker"><legend>選擇工作流程</legend></fieldset><fieldset class="auto-choice"><legend class="visually-hidden">執行方式</legend><label class="check-line"><input type="checkbox" name="autopilot" checked><span><strong>建立後交給 AI 一路做到完</strong><small>AI 會自己跑到需要你的地方才停下來：回答問題、確認成果、你負責的項目、額度或錯誤。隨時可以按「停止這次執行」。</small></span></label><label class="check-line"><input type="checkbox" name="full"><span><strong>完全自動</strong><small>計畫不用你核准，每一項 AI 自己檢查過就做下一項。全部做完，你再一次看。計畫錯了後面會白跑，建議只用在小任務。</small></span></label></fieldset><details><summary>進階：產出資料夾</summary><label class="field" style="margin-top:12px"><span>產出資料夾（絕對路徑，可空白）</span><input name="outputDir" autocomplete="off" placeholder="空白時放在 outputs/任務 ID"><small>執行與修改的 AI 只能在這個資料夾裡寫檔。</small></label></details><label class="field" style="margin-top:16px"><span>這個任務用的 AI</span><select name="agent" id="new-task-agent"></select><small>預設沿用「角色與設定」。選一個模型，這個任務的每個階段都用它；之後可在任務頁更換。</small></label><div class="buttons" style="margin-top:16px"><button class="btn primary" type="submit">交給 AI 教練</button><span class="small muted" id="new-task-agents"></span></div></form></div></dialog>
 <div id="message" role="status" aria-live="polite"></div>
 <script src="/assets/item-names.js"></script>
@@ -913,30 +918,111 @@ function toggleMarkdownSource(){
  button.setAttribute('aria-pressed',String(source));
  $('#preview-content .markdown-preview').innerHTML=markdownPreviewBody(previewMarkdown,source);
 }
-async function openPreview(taskId,file,trigger,action='preview'){
+function reviewButton(task,item){
+ const button=element('button','驗收','btn subtle small-btn');button.type='button';button.dataset.previewItem=item.id;
+ button.onclick=()=>openReview(task.id,item.id,button);return button;
+}
+function reviewFiles(item){
+ const rank=file=>/\.html$/i.test(file)?0:/\.md$/i.test(file)?1:2;
+ const candidates=[],process=[];
+ for(const output of item.outputs||[]){const file=output.file,name=file.split('/').pop();
+  const artifact=/\.(html|md|png|jpg|jpeg|webp)$/i.test(file)&&!/^NEEDS_INPUT\.md$/i.test(name)&&!/(?:^|[-_])(log|report|notes|readme|process|verification|說明|紀錄)(?:[-_.]|$)/i.test(name);
+  (artifact?candidates:process).push(file);
+ }
+ candidates.sort((a,b)=>rank(a)-rank(b)||a.localeCompare(b));
+ const preferred=(item.changes||[]).map(c=>c.path).find(p=>candidates.includes(p));
+ if(preferred)candidates.splice(candidates.indexOf(preferred),1),candidates.unshift(preferred);
+ return {candidates,process};
+}
+function processFiles(task,item){
+ const files=reviewFiles(item).process,box=element('details');box.append(element('summary',`過程檔案（${files.length}）`));
+ for(const file of files){const button=element('button',file,'file-chip preview-link');button.type='button';button.dataset.previewFile=file;button.dataset.previewItem=item.id;button.onclick=()=>openPreview(task.id,file,button,'preview',item);box.append(button);}
+ const diff=diffButton(task,item);if(diff)box.append(diff);
+ return box;
+}
+function openReview(taskId,itemId,trigger,path){
+ const task=tasks.find(task=>task.id===taskId),item=task?.planning?.workItems?.find(item=>item.id===itemId);
+ if(!item){tell('找不到這個工作項目，請重新開啟任務。');return;}
+ const files=reviewFiles(item),registered=item.outputs?.some(o=>o.file===path);
+ const file=registered?path:files.candidates[0];
+ return openPreview(taskId,file,trigger,'preview',item,task.preview?.url&&!registered?(path||''):null);
+}
+function renderReviewChanges(taskId,item,trigger){
+ const sidebar=$('#review-changes'),task=tasks.find(t=>t.id===taskId);sidebar.append(element('h3','改了什麼'));
+ for(const [index,change] of (item.changes||[]).entries()){
+  const point=element('article'),select=element('button',change.where,'btn subtle');select.type='button';select.onclick=()=>openReview(taskId,item.id,trigger,change.path);
+  point.append(element('h4',change.where),element('p',change.what),element('strong','試試看'),element('p',change.howToCheck),select);
+  const pass=element('button',change.status==='PASS'?'已通過':'通過','btn'),fail=element('button','有問題','btn');pass.type=fail.type='button';pass.setAttribute('aria-pressed',String(change.status==='PASS'));pass.disabled=fail.disabled=Boolean(task.planning.running)||item.status==='DONE';
+  pass.onclick=async()=>{pass.disabled=true;try{await coachAct(task,'change-check',{itemId:item.id,index,change:{where:change.where,what:change.what,howToCheck:change.howToCheck,path:change.path}});change.status='PASS';pass.textContent='已通過';pass.setAttribute('aria-pressed','true');}catch(error){tell(`未完成：${error.message}`);}finally{pass.disabled=false;}};
+  fail.onclick=()=>{$('#preview-dialog').close();focusInstruct(item.id,`在哪裡：${change.where}\n改了什麼：${change.what}\n試試看：${change.howToCheck}\n問題：`);};point.append(pass,fail);sidebar.append(point);
+ }
+ if(!item.changes?.length)sidebar.append(element('p','尚未提供改動清單。','muted'));
+ sidebar.append(processFiles(task,item));
+}
+async function loadReviewChanges(taskId,item,trigger,token){
+ try{
+  const result=await request(`/api/tasks/${encodeURIComponent(taskId)}/review-changes?item=${encodeURIComponent(item.id)}`);
+  if(previewReturn!==token||!$('#preview-dialog').open)return;
+  const sidebar=$('#review-changes');sidebar.replaceChildren();
+  renderReviewChanges(taskId,{...item,changes:result.changes},trigger);
+  if(result.source==='git')sidebar.append(element('p',result.baseline?`比較基準：${result.baselineSource} · ${result.baseline}`:'Git 替代清單','small muted'));
+  if(result.reason)sidebar.append(element('p',result.reason,'muted'));
+ }catch(error){if(previewReturn===token&&$('#preview-dialog').open){const sidebar=$('#review-changes'),retry=element('button','重試','btn');retry.type='button';retry.onclick=()=>{sidebar.replaceChildren(element('p','正在讀取改動清單…','muted'));return loadReviewChanges(taskId,item,trigger,token);};sidebar.replaceChildren(element('p',`無法取得改動清單：${error.message}`,'muted'),retry);}}
+}
+async function showProgramPreview(taskId,path,token){
+ const content=$('#preview-content'),status=$('#preview-status');
+ try{
+  const result=await request(`/api/tasks/${encodeURIComponent(taskId)}/preview-check${path?'?path='+encodeURIComponent(path):''}`);
+  if(previewReturn!==token||!$('#preview-dialog').open)return;
+  content.replaceChildren();status.textContent='';
+  if(result.reachable){
+   // server 已驗證探測與重新導向網址；iframe 再加 sandbox 限制導覽。
+   const frame=element('iframe');frame.src=result.url;frame.title='程式成果預覽';frame.setAttribute('sandbox','allow-scripts allow-forms allow-same-origin');
+   const link=element('a','在新分頁開啟');link.href=result.url;link.target='_blank';link.rel='noopener noreferrer';content.append(link,frame);$('#preview-modes').hidden=false;
+  }else{
+   const box=element('div',undefined,'notice'),command=element('pre',result.command||'尚未提供啟動指令。'),copy=element('button','複製啟動指令','btn'),retry=element('button','重新檢查','btn');copy.type=retry.type='button';copy.disabled=!result.command;
+   copy.onclick=async()=>{try{await navigator.clipboard.writeText(result.command);copy.textContent='已複製';}catch{status.textContent='無法複製，請選取上方指令。';}};
+   retry.onclick=()=>{status.textContent='檢查中…';return showProgramPreview(taskId,path,token);};box.append(element('p','預覽網址沒有回應，請在 shell 啟動後重新檢查。'),command,copy,retry);content.append(box);
+  }
+ }catch(error){if(previewReturn===token&&$('#preview-dialog').open)previewFailure(error,()=>showProgramPreview(taskId,path,token));}
+}
+function previewFailure(error,reload){
+ const retry=element('button','重試','btn');retry.type='button';retry.onclick=()=>{ $('#preview-status').textContent='載入中…';$('#preview-content').replaceChildren();return reload(); };
+ $('#preview-status').textContent=`無法預覽：${error.message}`;$('#preview-content').replaceChildren(retry);
+}
+async function openPreview(taskId,file,trigger,action='preview',item=null,programPath=null){
  const dialog=$('#preview-dialog'),content=$('#preview-content'),status=$('#preview-status'),modes=$('#preview-modes');
+ const sidebar=$('#review-changes');
+ $('#preview-layout')?.classList.toggle('review-layout',Boolean(item));
+ if(sidebar){sidebar.hidden=!item;sidebar.replaceChildren();if(item){
+  renderReviewChanges(taskId,item,trigger);
+ }}
  previewMarkdown=null;$('#preview-source').hidden=true;$('#preview-source').setAttribute('aria-pressed','false');for(const button of modes.querySelectorAll('[data-preview-mode]'))button.hidden=false;
- previewReturn={taskId,file,trigger};$('#preview-title').textContent=`預覽成果：${file}`;content.replaceChildren();content.classList.remove('mobile');modes.hidden=true;modes.querySelector('[data-preview-mode="desktop"]').setAttribute('aria-pressed','true');modes.querySelector('[data-preview-mode="mobile"]').setAttribute('aria-pressed','false');status.textContent='載入中…';
- dialog.showModal();dialog.querySelector('[data-close]').focus();
+ previewReturn={taskId,file,trigger,...(item?{itemId:item.id}:{})};$('#preview-title').textContent=item?`驗收：${item.title}`:`預覽成果：${file}`;content.replaceChildren();content.classList.remove('program-preview');if(programPath!==null)content.classList.toggle('program-preview',true);content.classList.remove('mobile');modes.hidden=true;modes.querySelector('[data-preview-mode="desktop"]').setAttribute('aria-pressed','true');modes.querySelector('[data-preview-mode="mobile"]').setAttribute('aria-pressed','false');status.textContent='載入中…';
+ if(!dialog.open)dialog.showModal();dialog.querySelector('[data-close]').focus();
+ const token=previewReturn;
+ if(item&&!item.changes?.length)void loadReviewChanges(taskId,item,trigger,token);
+ if(programPath!==null)return showProgramPreview(taskId,programPath,token);
+ if(item&&!file){content.append(element('p','這個工作項目尚未登記可預覽成果。','notice'));modes.hidden=true;status.textContent='';return;}
  const url=`/api/tasks/${encodeURIComponent(taskId)}/${action}?file=${encodeURIComponent(file)}`;
  try{
   await refreshSession();
   const response=await fetch(url,{credentials:'same-origin',cache:'no-store'});
   if(!response.ok){const error=await response.json();throw new Error(error.message||'預覽失敗，請回任務核對成果。');}
-  if(!dialog.open||previewReturn?.file!==file||previewReturn?.taskId!==taskId||previewReturn?.trigger!==trigger)return;
+  if(!dialog.open||previewReturn!==token)return;
   // 用已經抓到的內容做成 blob 網址顯示，不讓 iframe 再發一次請求（有些瀏覽器會擋 iframe 載入本機 API）。
   // HTML 使用沙箱與 CSP；Markdown 插入安全片段，文字檔以 textContent 顯示。
   const ext=file.split('.').pop().toLowerCase(),image=['png','jpg','jpeg','webp'].includes(ext),text=['txt','log','csv','json','js','mjs','cjs','ts','css','yml','yaml','sh','py'].includes(ext),node=text?element('pre',undefined,'text-preview'):image?element('img'):ext==='md'?element('div',undefined,'markdown-preview'):element('iframe');
   let body;
   if(text){
    const raw=await response.text();
-   if(!dialog.open||previewReturn?.file!==file||previewReturn?.taskId!==taskId||previewReturn?.trigger!==trigger)return;
+   if(!dialog.open||previewReturn!==token)return;
    node.textContent=raw;node.tabIndex=0;content.replaceChildren(node);status.textContent='';return;
   }
   else if(image){node.alt=file;body=await response.blob();}
   else if(ext==='md'){
    const wrapped=await response.text();
-   if(!dialog.open||previewReturn?.file!==file||previewReturn?.taskId!==taskId||previewReturn?.trigger!==trigger)return;
+   if(!dialog.open||previewReturn!==token)return;
    // API 已跳脫原文並包成 pre；還原文字後交給安全 renderer。
    previewMarkdown=markdownPreviewText(wrapped);
    node.innerHTML=markdownPreviewBody(previewMarkdown,false);node.tabIndex=0;
@@ -944,10 +1030,10 @@ async function openPreview(taskId,file,trigger,action='preview'){
    content.replaceChildren(node);modes.hidden=false;status.textContent='';return;
   }
   else{const csp=`<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; connect-src 'none'; form-action 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'">`;const html=await response.text(),doctype=html.match(/^\s*<!doctype[^>]*>/i)?.[0]||'';node.setAttribute('sandbox',ext==='html'?'allow-scripts':'');node.title=`${file} 的隔離預覽`;body=new Blob([doctype+csp+html.slice(doctype.length)],{type:'text/html'});}
-  if(!dialog.open||previewReturn?.file!==file)return;
+  if(!dialog.open||previewReturn!==token)return;
   if(previewBlob)URL.revokeObjectURL(previewBlob);previewBlob=URL.createObjectURL(body);
   node.src=previewBlob;content.replaceChildren(node);modes.hidden=ext!=='html'&&ext!=='md';status.textContent='';
- }catch(error){if(dialog.open&&previewReturn?.file===file&&previewReturn?.taskId===taskId&&previewReturn?.trigger===trigger){content.replaceChildren();status.textContent=`無法預覽：${error.message}`;}}
+ }catch(error){if(dialog.open&&previewReturn===token)previewFailure(error,()=>openPreview(taskId,file,trigger,action,item,programPath));}
 }
 function diffButton(task,item){
  if(!task.gitAvailable)return null;
@@ -955,10 +1041,11 @@ function diffButton(task,item){
  button.onclick=()=>openDiff(task.id,item.id,button);return button;
 }
 async function openDiff(taskId,itemId,trigger){
+ $('#preview-layout')?.classList.remove('review-layout');if($('#review-changes'))$('#review-changes').hidden=true;
  const dialog=$('#preview-dialog'),content=$('#preview-content'),status=$('#preview-status');
  previewMarkdown=null;$('#preview-source').hidden=true;$('#preview-modes').hidden=true;
  previewReturn={taskId,file:`diff:${itemId}`,trigger};const request=previewReturn;
- $('#preview-title').textContent='看改了什麼';content.replaceChildren();content.classList.remove('mobile');status.textContent='載入中…';
+ $('#preview-title').textContent='看改了什麼';content.replaceChildren();content.classList.remove('mobile');content.classList.remove('program-preview');status.textContent='載入中…';
  if(!dialog.open)dialog.showModal();dialog.querySelector('.close').focus();
  try{
   const url=`/api/tasks/${encodeURIComponent(taskId)}/diff?item=${encodeURIComponent(itemId)}`;
@@ -1015,7 +1102,7 @@ function stepper(t){
  for(const [id,name,phase] of steps){const li=element('li');const k=phaseOrder.indexOf(phase);const state_=p.running?.stage===id?'now':(k<idx||p.phase==='done'||(id==='A'&&p.messages.some(m=>m.stage==='A'&&m.role==='ai')))?'done':k===idx?'now':'';if(state_)li.className=state_;li.append(element('strong',`${id} ${name}`),element('small',agentOf(id)));box.append(li);}
  return box;
 }
-function cardPanel(card,t){const box=element('aside',undefined,'task-card');box.append(element('div','任務卡','eyebrow'),element('h4',card.title||'整理中'),definition([['目標',card.goal||'—'],['讀者',card.audience||'未定'],['產出',card.deliverable||'未定'],['成功標準',(card.success||[]).join('\n')||'未定'],['限制',(card.constraints||[]).join('\n')||'—'],['還不知道',(card.unknowns||[]).join('\n')||'—']]));if(t){const edit=element('details');edit.open=cardDrafts.has(t.id);edit.append(element('summary','編輯任務卡與加入附件'),cardEditor(t));box.append(edit);}return box;}
+function cardPanel(card,t){const box=element('aside',undefined,'task-card');box.append(element('div','任務卡','eyebrow'),element('h4',card.title||'整理中'),definition([['目標',card.goal||'—'],['讀者',card.audience||'未定'],['產出',card.deliverable||'未定'],['測試指令',card.testCommand||'未設定'],['成功標準',(card.success||[]).join('\n')||'未定'],['限制',(card.constraints||[]).join('\n')||'—'],['還不知道',(card.unknowns||[]).join('\n')||'—']]));if(t){const edit=element('details');edit.open=cardDrafts.has(t.id);edit.append(element('summary','編輯任務卡與加入附件'),cardEditor(t));box.append(edit);}return box;}
 const headingName={interpretations:'詮釋',deviations:'偏離',tradeoffs:'取捨',openQuestions:'未決問題'};
 function sensorList(list){const ul=element('ul',undefined,'sensors');for(const x of list||[]){const li=element('li');li.append(element('span',x.result,`badge ${results[x.result]?.[1]||'gray'}`),element('strong',x.name),element('small',x.detail));ul.append(li);}return ul;}
 function learningPanel(t){
@@ -1080,7 +1167,8 @@ function renderPlanning(t,detail){
    if(w.instructions?.length)card.append(element('p',`你的補充指示：${w.instructions.map(x=>x.text).join('；')}`,'small muted'));
    const acc=element('ul',undefined,'acceptance');for(const a of w.acceptance){const r=w.review?.results?.find(x=>x.criterion===a);const li=element('li',a);if(r){li.prepend(element('span',r.result,`badge ${results[r.result]?.[1]||'gray'}`));li.append(element('small',r.evidence));}acc.append(li);}card.append(acc);
    if(w.dependsOn?.length&&w.status!=='TODO')card.append(element('p',`要先完成：${itemNames(w.dependsOn)}`,'small muted'));
-   if(w.outputs?.length){const out=element('div',undefined,'outputs');out.append(element('span','產出','small muted'));for(const o of w.outputs){const f=element('button',o.file,'file-chip preview-link');f.type='button';f.title=`預覽 ${o.file}`;f.dataset.previewFile=o.file;f.dataset.previewItem=w.id;f.onclick=()=>openPreview(t.id,o.file,f);out.append(f);}const preview=element('button','預覽成果','btn subtle small-btn');preview.dataset.previewFile=w.outputs[0].file;preview.dataset.previewItem=w.id;preview.onclick=()=>openPreview(t.id,w.outputs[0].file,preview);const copy=element('button','複製路徑','btn subtle small-btn');copy.onclick=async()=>{const text=w.outputs.map(o=>`${t.allowedRoots[0]}/${o.file}`).join('\n');try{await navigator.clipboard.writeText(text);copy.textContent='已複製';}catch{copy.textContent='無法複製';}setTimeout(()=>copy.textContent='複製路徑',1600);};out.append(preview,copy);const diff=diffButton(t,w);if(diff)out.append(diff);card.append(out);}
+   card.append(processFiles(t,w));
+   card.append(reviewButton(t,w));
    if(w.skeleton)head.append(element('span','骨架：先確認方向','badge amber'));
    if(w.sensors?.length){const d=element('details');d.open=w.sensors.some(x=>x.result==='FAIL');d.append(element('summary',`自動檢查 ${w.sensors.filter(x=>x.result==='PASS').length}／${w.sensors.length} 通過`),sensorList(w.sensors));card.append(d);}
    if(w.fixes?.length&&w.status==='REVIEW_FAIL'){const ul=element('ul',undefined,'fixes');for(const f of w.fixes)ul.append(element('li',f));card.append(element('strong','要修正的地方','small'),ul);}
@@ -1114,13 +1202,18 @@ function snapshotForm(root){const keyOf=el=>[el.closest('[data-item]')?.dataset.
 function restoreForm(root,snap){if(!snap)return;for(const n of snap.notes){const trigger=root.querySelector(`[data-focus="${n.trigger}"]`);if(trigger&&!trigger.disabled&&trigger.dataset.opensNote){const before=new Set(root.querySelectorAll('.inline-note'));trigger.click();const form=[...root.querySelectorAll('.inline-note')].find(f=>!before.has(f));const area=form?.querySelector('textarea');if(area)area.value=n.text;}}for(const el of root.querySelectorAll('input,textarea,select')){if(el.closest('.instruct,.card-editor'))continue;const k=snap.keyOf(el);if(!snap.map.has(k))continue;const v=snap.map.get(k);if(/radio|checkbox/.test(el.type))el.checked=v;else if(el.tagName==='SELECT'){if([...el.options].some(o=>o.value===v))el.value=v;}else if(!el.value)el.value=v;}}
 function openTask(id,{background=false}={}){
  const t=tasks.find(x=>x.id===id);if(!t)return;
- const dialog=$('#task-dialog'),detail=$('#task-detail'),snap=dialog.open&&dialog.dataset.task===id?snapshotForm(detail):null,scroll=dialog.open?dialog.scrollTop:0,focused=restoreFocus||document.activeElement?.closest?.('[data-focus]')?.dataset.focus,focusInSheet=dialog.contains(document.activeElement)&&document.activeElement!==dialog,caret=document.activeElement?.closest?.('.instruct')?[document.activeElement.selectionStart,document.activeElement.selectionEnd]:null;restoreFocus=null;
+ // 驗收保留當次成果與清單，關閉後再套用背景更新。
+ if(background&&$('#preview-dialog').open){$('#task-dialog').dataset.reviewRefresh=id;return;}
+ const dialog=$('#task-dialog'),detail=$('#task-detail'),snap=dialog.open&&dialog.dataset.task===id?snapshotForm(dialog):null,scroll=dialog.open?dialog.scrollTop:0,focused=restoreFocus||document.activeElement?.closest?.('[data-focus]')?.dataset.focus,focusInSheet=dialog.contains(document.activeElement)&&document.activeElement!==dialog,caret=document.activeElement?.closest?.('.instruct')?[document.activeElement.selectionStart,document.activeElement.selectionEnd]:null;restoreFocus=null;
  dialog.classList.add('wide');dialog.dataset.task=id;$('#task-title').textContent=t.title;{const h=holderOf(t);const pill=$('#task-holder');pill.className=`holder-pill ${h}`;const run=t.planning?.running;pill.textContent=run?.stopping?(run.stopping.unconfirmed?'尚未確認停止':'正在停止'):t.planning?.stopped?'已停止':holderText[h];$('#task-track').replaceChildren(t.error?'':track(t,h));}detail.replaceChildren();
  taskMenu(t);
+ const shareToggle=$('#task-share-toggle'),sharePanel=$('#task-share-panel');
+ if(sharePanel.dataset.task!==id||!dialog.open){sharePanel.hidden=true;shareToggle.setAttribute('aria-expanded','false');}sharePanel.dataset.task=id;sharePanel.replaceChildren();shareToggle.hidden=!!t.error;
+ shareToggle.onclick=()=>{sharePanel.hidden=!sharePanel.hidden;shareToggle.setAttribute('aria-expanded',String(!sharePanel.hidden));};
  if(t.error){detail.append(element('p',t.error,'notice'));if(!dialog.open)dialog.showModal();return;}
  const control=controlBar(t);if(control)detail.append(control);
  const one=focusKey(element('div',undefined,'one-thing'),'one');one.tabIndex=-1;const oneText=element('div');oneText.append(element('div','你現在要做的一件事','eyebrow'),element('strong',t.nextAction.label));one.append(oneText);
- const jump=element('button',`前往：${t.nextAction.button}`,'btn');jump.onclick=()=>{const target=(t.nextAction.kind==='item'&&detail.querySelector(`[data-item="${t.nextAction.id}"]`))||detail.querySelector(`[data-anchor="${t.nextAction.kind}"]`)||detail.querySelector('.running')||detail.querySelector('[data-anchor=handoff]');target?.scrollIntoView({block:'start',behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth'});if(t.nextAction.kind==='running'){target?.focus({preventScroll:true});return;}const buttons=[...detail.querySelectorAll('button:not(:disabled)')].filter(b=>!one.contains(b));(buttons.find(b=>target?.contains(b)&&b.textContent.startsWith(t.nextAction.button))||buttons.find(b=>b.textContent.startsWith(t.nextAction.button))||target?.querySelector('.btn.primary:not(:disabled)')||target?.querySelector('textarea,input,button'))?.focus({preventScroll:true});};
+ const jump=element('button',`前往：${t.nextAction.button}`,'btn');jump.onclick=()=>{const target=(t.nextAction.kind==='item'&&detail.querySelector(`[data-item="${t.nextAction.id}"]`))||detail.querySelector(`[data-anchor="${t.nextAction.kind}"]`)||detail.querySelector('.running')||(t.nextAction.kind==='handoff'?shareToggle:null);if(target===shareToggle&&sharePanel.hidden)shareToggle.onclick();target?.scrollIntoView({block:'start',behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth'});if(t.nextAction.kind==='running'){target?.focus({preventScroll:true});return;}const buttons=[...detail.querySelectorAll('button:not(:disabled)')].filter(b=>!one.contains(b));(buttons.find(b=>target?.contains(b)&&b.textContent.startsWith(t.nextAction.button))||buttons.find(b=>b.textContent.startsWith(t.nextAction.button))||target?.querySelector('.btn.primary:not(:disabled)')||target?.querySelector('textarea,input,button'))?.focus({preventScroll:true});};
  if(!['none','stopping'].includes(t.nextAction.kind))one.append(jump);decorateOneThing(t,{one,oneText,jump});detail.append(one);{const fb=feedbackCard(t);if(fb)detail.append(fb);}const historyButton=element('button','閱讀每輪問答與改善','btn');historyButton.onclick=()=>showConversations(t.id);detail.append(historyButton);
  const open=t.decisions.filter(d=>d.status!=='DECIDED');const [label]=statuses[t.status]||[t.status];
  const facts=definition(t.planning?[['狀態',`${label} · 第 ${t.revision} 版 · 最後更新 ${when(t.updatedAt)}`],['目前成果',t.current.summary],['產出資料夾',t.allowedRoots[0]]]:[['狀態',`${label} · 第 ${t.revision} 版 · 最後更新 ${when(t.updatedAt)}`],['目標',t.goal],['目前成果',t.current.summary],['卡點',open.length?open.map(d=>d.question).join('\n'):'沒有待決策'],...t.decisions.filter(d=>d.status==='DECIDED').map(d=>['已確認決策',`${d.options.find(o=>o.id===d.choice)?.label}（${when(d.decidedAt)}）${d.note?`\n${d.note}`:''}`]),['AI 的唯一下一步',t.next]]);
@@ -1158,9 +1251,9 @@ function openTask(id,{background=false}={}){
   const bs=element('div',undefined,'buttons');b2.dataset.opensNote='1';b2.onclick=()=>inlineNote(acc,{label:'退回原因（會成為 AI 的下一步）',placeholder:'例如：P6 的文字仍寫不含掛失費',confirm:'確認退回',required:true,from:b2,onSubmit:async note=>{await act(t.id,'reject',{note});tell('已退回，原因已寫進 AI 的下一步。');}});
   bs.append(b1,b2);acc.append(bs);detail.append(acc);
  }
- const hand=section('交給 AI 接手');hand.dataset.anchor='handoff';const box=element('div',undefined,'handoff-box');
+ const box=sharePanel;
  const receiver=element('select');receiver.className='btn';receiver.setAttribute('aria-label','接手的 AI');options(receiver,[['codex','Codex'],['claude','Claude Code'],['unassigned','尚未指定']]);
- const copy=focusKey(element('button','複製接手包','btn primary'),'copy'),save=element('button','下載 .md','btn'),status=element('span','','small muted');status.setAttribute('role','status');
+ const copy=focusKey(element('button','複製接手包','btn subtle'),'copy'),save=element('button','下載 .md','btn'),status=element('span','','small muted');status.setAttribute('role','status');
  const preview=element('details'),pre=element('pre','','contract');preview.append(element('summary','預覽接手包'),pre);
  // 先把接手包載好，點擊時在同一個使用者手勢內寫入剪貼簿
  let cached=null,seq=0;const brief=async()=>{const who=receiver.value;if(cached?.receiver===who)return cached;const mine=++seq;const r=await request(`/api/tasks/${t.id}/brief?for=${who}`);if(mine!==seq||who!==receiver.value)return null;pre.textContent=r.text;cached=r;return r;};
@@ -1169,20 +1262,25 @@ function openTask(id,{background=false}={}){
  copy.onclick=async()=>{const r=(cached?.receiver===receiver.value&&cached)||await brief().catch(error=>{tell(`未完成：${error.message}`);return null;});if(!r||r.receiver!==receiver.value)return tell('接手 AI 剛換過，請再按一次複製。');if(await writeClipboard(r.text))status.textContent=`✓ 已複製 ${r.chars.toLocaleString()} 字元 · revision ${t.revision}`;else{preview.open=true;status.textContent='無法寫入剪貼簿，請從預覽手動複製或下載。';}};
  save.onclick=busy(save,async()=>{const r=await brief();if(!r||r.receiver!==receiver.value)throw new Error('接手 AI 剛換過，請再按一次下載。');download(`${t.id}-r${t.revision}-brief.md`,r.text);status.textContent='已下載。';});
  
- const handoffCopy=focusKey(element('button','複製交接提示','btn'),'handoff-copy'),handoffOpen=element('button','開啟 MD','btn'),handoffFallback=element('details'),handoffText=element('pre','','contract');
- handoffOpen.hidden=true;handoffFallback.hidden=true;handoffFallback.append(element('summary','手動複製交接提示'),handoffText);
+ const handoffCopy=focusKey(element('button','複製交接提示','btn primary'),'handoff-copy'),handoffOpen=element('button','開啟 MD','btn'),handoffFallback=element('details'),handoffText=element('pre','','contract');
+ handoffFallback.hidden=true;handoffFallback.append(element('summary','手動複製交接提示'),handoffText);
+ const prepareHandoff=async()=>{const r=await request(`/api/tasks/${t.id}/handoff-prompt`,{revision:t.revision});handoffText.textContent=r.prompt;return r;};
+ handoffOpen.onclick=busy(handoffOpen,async()=>{const r=await prepareHandoff();await openPreview(t.id,r.path,handoffOpen,'handoff-preview');});
  handoffCopy.onclick=busy(handoffCopy,async()=>{
-  status.textContent='正在保存交接檔與複製提示…';handoffOpen.hidden=true;handoffOpen.onclick=null;handoffFallback.hidden=true;handoffText.textContent='';
+  status.textContent='正在保存交接檔與複製提示…';handoffOpen.disabled=true;handoffFallback.hidden=true;handoffText.textContent='';
   try{
-   const r=await request(`/api/tasks/${t.id}/handoff-prompt`,{revision:t.revision});handoffOpen.hidden=false;handoffOpen.onclick=()=>openPreview(t.id,r.path,handoffOpen,'handoff-preview');handoffText.textContent=r.prompt;
+   const r=await prepareHandoff();
    if(await writeClipboard(r.prompt)){status.textContent=`✓ 已複製交接提示 · 檔案已存到 ${r.path}`;}
    else{handoffFallback.hidden=false;handoffFallback.open=true;status.textContent=`無法寫入剪貼簿，請從下方手動複製交接提示 · 檔案已存到 ${r.path}`;}
-  }catch(error){status.textContent=`未完成：${error.message}`;throw error;}
+  }catch(error){status.textContent=`未完成：${error.message}`;throw error;}finally{handoffOpen.disabled=false;}
  });
- const row=element('div',undefined,'buttons');row.append(receiver,copy,handoffCopy,save,handoffOpen,status);
+ const row=element('div',undefined,'buttons');row.append(handoffCopy,handoffOpen,status);
+ const secondary=element('div',undefined,'buttons');secondary.append(receiver,copy,save);
  const report=element('textarea');report.placeholder='把 AI 的回報整段貼在這裡（需包含 TASK_ID、BASE_REVISION、STATUS）';report.setAttribute('aria-label','AI 回報內容');report.value=reportDrafts[t.id]||'';report.oninput=()=>{reportDrafts[t.id]=report.value;};
  const send=focusKey(element('button','送出回報','btn'),'send');send.onclick=busy(send,async()=>{if(!report.value.trim()){report.focus();throw new Error('請先貼上回報。');}const text=report.value;delete reportDrafts[t.id];try{await act(t.id,'report',{text});}catch(error){reportDrafts[t.id]=text;report.value=text;throw error;}const st=tasks.find(x=>x.id===t.id).reports.at(-1).status;tell(st==='DONE'?'回報已保存。AI 說完成不等於完成，檢查已重設，等你驗收。':`回報已保存（${reportText[st]||st}）。任務維持阻擋，下一步已更新。`);});
- box.append(element('p','接手包包含邊界、已確認決策、待決策、口徑與回報格式，不含整段聊天。複製不代表 AI 已開始執行。','small muted'),row,preview,handoffFallback,element('h4','貼回 AI 回報','small'),report,send);hand.append(box);if(t.planning){receiver.hidden=true;copy.hidden=true;save.hidden=true;preview.hidden=true;report.hidden=true;send.hidden=true;box.querySelector('h4').hidden=true;box.querySelector('p').textContent='將目前任務與完整對話存成本地交接檔，再把提示貼給自己的 AI。';}detail.append(hand);
+ box.append(element('p',t.planning?'將目前任務與完整對話存成本地交接檔，再把提示貼給自己的 AI。':'接手包包含邊界、已確認決策、待決策、口徑與回報格式，不含整段聊天。複製不代表 AI 已開始執行。','small muted'),row,secondary,preview,handoffFallback);
+ if(t.planning){receiver.hidden=true;copy.hidden=true;save.hidden=true;preview.hidden=true;}
+ else{const reports=section('貼回 AI 回報');reports.dataset.anchor='report';const reportBox=element('div',undefined,'handoff-box');reportBox.append(report,send);reports.append(reportBox);detail.append(reports);}
  if(t.reports.length){const reps=section('AI 回報紀錄');for(const r of [...t.reports].reverse()){const item=element('div',undefined,'check-item');const info=element('div');info.append(element('strong',r.file),element('p',`基於 revision ${r.baseRevision} · 收到於 ${when(r.receivedAt)}${r.artifact?` · 新成果檔 ${r.artifact.split('/').pop()}`:''}`,'small muted'));item.append(element('span',reportText[r.status]||r.status,`badge ${r.status==='DONE'?'pass':r.status==='BLOCKED'?'amber':'blue'}`),info,element('span'));reps.append(item);}detail.append(reps);}
  const more=element('details');more.append(element('summary','口徑、邊界、來源與學習卡'));
  const factsBox=section('事實與口徑');factsBox.append(definition(t.facts.map(f=>[f.label,`${f.value}\n${f.verified?'已核對':'未獨立核對'} · 來源 ${f.source}`])));
@@ -1191,11 +1289,11 @@ function openTask(id,{background=false}={}){
  const parked=section('暫存建議（未採納，不在範圍內）');const pl=element('ul');for(const p of t.parked)pl.append(element('li',p,'small'));parked.append(pl);
  const src=section('來源定位');src.append(definition(t.current.sources.map(s=>[`${s.provider} · ${s.note||''}`,`${s.sessionId}\n${s.locator}`])));
  more.append(factsBox,scope,learn,parked,src);if(!t.planning)detail.append(more);
- restoreForm(detail,snap);
+ restoreForm(dialog,snap);
  if(!dialog.headObserver){dialog.headObserver=new ResizeObserver(()=>{const h=dialog.querySelector('.dialog-heading').offsetHeight;dialog.style.setProperty('--sheet-head',`${h}px`);dialog.style.scrollPaddingTop=`${h+16}px`;});dialog.headObserver.observe(dialog.querySelector('.dialog-heading'));}
  if(!dialog.open){dialog.showModal();one.focus();return;}
  // 重新渲染後保留位置與焦點；原本的元素消失時，焦點回到「你現在要做的一件事」
- dialog.scrollTop=scroll;const back=focused&&detail.querySelector(`[data-focus="${focused}"]`);
+ dialog.scrollTop=scroll;const back=focused&&dialog.querySelector(`[data-focus="${focused}"]`);
  if(back&&!back.disabled){back.focus({preventScroll:true});if(caret&&back.setSelectionRange&&caret[0]!=null)back.setSelectionRange(...caret);}else if(!background){dialog.scrollTop=0;one.focus({preventScroll:true});}else if(focusInSheet&&!dialog.contains(document.activeElement))$('#task-title').focus({preventScroll:true});
 }
 function renderSessions(){
@@ -1250,7 +1348,7 @@ async function init(){
 document.querySelectorAll('[data-view]').forEach(button=>button.onclick=()=>go(button.dataset.view));document.querySelectorAll('[data-go]').forEach(button=>button.onclick=()=>go(button.dataset.go));function afterSheetClose(){document.body.append($('#message'));const id=$('#task-dialog').dataset.task;(document.querySelector(`.lane[data-id="${id}"] .lane-open`)||document.querySelector('.lane-open')||$('#filter')||$('#new-task'))?.focus();}
 function closeSheet(){const d=$('#task-dialog');if(!d.open||d.classList.contains('closing'))return;if(matchMedia('(prefers-reduced-motion: reduce)').matches){d.close();afterSheetClose();return;}d.classList.add('closing');let done=false;const finish=()=>{if(done)return;done=true;d.classList.remove('closing');d.close();afterSheetClose();};d.addEventListener('animationend',finish,{once:true});setTimeout(finish,400);}
 $('#task-dialog').addEventListener('cancel',e=>{e.preventDefault();const menu=$('#task-menu-slot details[open]');if(menu){menu.open=false;menu.querySelector('summary').focus();return;}const confirmBox=$('#task-detail .trash-confirm');if(confirmBox){confirmBox.remove();$('#task-menu-slot summary')?.focus();return;}closeSheet();});$('#task-dialog').addEventListener('close',afterSheetClose);$('#draft-dialog').addEventListener('close',()=>document.body.append($('#message')));$('#task-dialog').addEventListener('click',e=>{if(e.target===e.currentTarget)closeSheet();});
-$('#preview-dialog').addEventListener('close',()=>{ previewMarkdown=null;$('#preview-content').replaceChildren();const {taskId,file,trigger}=previewReturn||{};previewReturn=null;const next=trigger?.isConnected?trigger:[...$('#task-detail').querySelectorAll('[data-preview-file], [data-preview-item]')].find(node=>(file?.startsWith('diff:')?node.textContent==='看改了什麼':node.dataset.previewFile===file)&&node.dataset.previewItem===trigger?.dataset.previewItem&&node.className===trigger?.className&&$('#task-dialog').dataset.task===taskId);(next||$('#task-title')).focus({preventScroll:true});});
+$('#preview-dialog').addEventListener('close',()=>{ previewMarkdown=null;$('#preview-content').replaceChildren();const {taskId,file,itemId,trigger}=previewReturn||{};previewReturn=null;const next=trigger?.isConnected?trigger:[...$('#task-detail').querySelectorAll('[data-preview-file], [data-preview-item]')].find(node=>(itemId?node.textContent==='驗收'&&node.dataset.previewItem===itemId:file?.startsWith('diff:')?node.textContent==='看改了什麼':node.dataset.previewFile===file)&&node.dataset.previewItem===trigger?.dataset.previewItem&&node.className===trigger?.className&&$('#task-dialog').dataset.task===taskId);const pending=$('#task-dialog').dataset.reviewRefresh;delete $('#task-dialog').dataset.reviewRefresh;if(pending&&$('#task-dialog').open&&$('#task-dialog').dataset.task===pending)openTask(pending,{background:true});(next?.isConnected?next:$('#task-title')).focus({preventScroll:true});});
 document.querySelectorAll('[data-expand]').forEach(button=>{restoreDialogExpansion(button);button.onclick=()=>toggleDialogExpansion(button);});
 $('#preview-source').onclick=toggleMarkdownSource;
 $('#preview-modes').addEventListener('click',event=>{const mode=event.target.closest('[data-preview-mode]');if(!mode)return;$('#preview-content').classList.toggle('mobile',mode.dataset.previewMode==='mobile');for(const button of $('#preview-modes').querySelectorAll('button'))button.setAttribute('aria-pressed',String(button===mode));});

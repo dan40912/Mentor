@@ -4,8 +4,8 @@ import { createRequestHandler } from '../../src/server.js';
 export const fakeAgent = async ({ prompt }) => ({ text: JSON.stringify(prompt.includes('「任務制定」') ? { card: { title: '測試任務', goal: '核對附件', project: '驗證專案' } } : { questions: [{ q: '要幾頁？', why: '決定密度' }], ready: false }), provider: 'codex' });
 
 // 真正的路由、驗證與 response headers；僅以記憶體 stream 取代 socket。
-export async function requestApp(root, runAgent = fakeAgent) {
-  const app = await createRequestHandler({ root, port: 4317, runAgent });
+export async function requestApp(root, runAgent = fakeAgent, options = {}) {
+  const app = await createRequestHandler({ root, port: 4317, runAgent, ...options });
   // create 的 done 包含 A → B 接續；只等 pending 會漏掉兩階段之間的空窗。
   const creations = new Set();
   const create = app.coach.create.bind(app.coach);

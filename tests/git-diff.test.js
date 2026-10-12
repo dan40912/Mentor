@@ -7,7 +7,8 @@ import path from 'node:path';
 import vm from 'node:vm';
 import { Coach } from '../src/coach.js';
 import { TaskStore, serializeTask, parseTask } from '../src/tasks.js';
-import { isGitRoot, gitHead, itemDiff } from '../src/git-diff.js';
+import { isGitRoot, gitHead, itemDiff, itemChanges } from '../src/git-diff.js';
+import { requestApp } from './fixtures/request.js';
 import { demoTask } from './fixtures/demo-task.js';
 const exec = promisify(execFile);
 async function fixture(t) {
@@ -154,4 +155,71 @@ test('根目錄判定：repo、worktree 與 symlink 可比較；子資料夾、i
     if(available)assert.equal((await itemDiff(ctx.task,'W1')).baseline,f.baseline,dir);
     else await assert.rejects(itemDiff(ctx.task,'W1'),{status:409,code:'DIFF_NOT_GIT_ROOT',message:'這個任務的產出資料夾不是 Git 專案，沒有差異可看'},dir);
   }
+});
+
+
+test('替代 changes 僅列實際登記異動，涵蓋新增、修改、刪除並保留 AI 回報優先', async t => {
+  const f = await fixture(t);
+  await writeFile(path.join(f.dir, 'edit.txt'), 'after\n');
+  await rm(path.join(f.dir, 'delete.txt'));
+  await writeFile(path.join(f.dir, 'new.txt'), 'new\n');
+  await writeFile(path.join(f.dir, 'other.txt'), 'private\n');
+  f.task.planning.workItems[0].outputs.push({ file: 'special*.txt' });
+  const listing = await itemChanges(f.task, 'W1');
+  assert.equal(listing.baselineSource, 'task.gitBaseline');
+  assert.deepEqual(listing.changes.map(c => c.where).sort(), ['delete.txt', 'edit.txt', 'new.txt']);
+  for (const change of listing.changes) {
+    assert.match(change.what, /Git 顯示(新增|修改|刪除)此檔案/);
+    assert.doesNotMatch(JSON.stringify(change), /已通過|畫面效果|private/);
+    assert.equal(change.status, undefined);
+  }
+  assert.equal(listing.changes.find(c => c.where === 'delete.txt').path, undefined);
+  const reported = [{ where: '畫面', what: 'AI 回報', howToCheck: '閱讀' }];
+  f.task.planning.workItems[0].changes = reported;
+  assert.deepEqual(await itemChanges(f.task, 'W1'), { source: 'report', changes: reported });
+});
+
+test('替代清單明示 HEAD 備援、無差異、非 Git、無 HEAD 與失效基準', async t => {
+  const f = await fixture(t);delete f.task.gitBaseline;
+  let result = await itemChanges(f.task, 'W1');
+  assert.equal(result.baselineSource, 'HEAD');assert.equal(result.baseline, f.baseline);
+  assert.deepEqual(result.changes, []);assert.match(result.reason, /沒有差異/);
+  const plain = path.join(f.root, 'plain');await mkdir(plain);f.task.allowedRoots = [plain];
+  result = await itemChanges(f.task, 'W1');assert.equal(result.code, 'DIFF_NOT_GIT_ROOT');assert.ok(result.reason);
+  await exec('git', ['init'], { cwd: plain });
+  result = await itemChanges(f.task, 'W1');assert.equal(result.code, 'DIFF_NO_HEAD');assert.ok(result.reason);
+  f.task.allowedRoots = [f.dir];f.task.gitBaseline = 'a'.repeat(40);
+  result = await itemChanges(f.task, 'W1');assert.equal(result.code, 'DIFF_FAILED');assert.ok(result.reason);
+});
+
+test('requestApp 路由取得替代清單、保存逐點通過、拒絕舊清單及未登入請求', async t => {
+  const f = await fixture(t), app = await requestApp(path.join(f.root, 'app'));
+  const session = await (await app.fetch('/api/session')).json();
+  const headers = { cookie: `awc=${session.csrfToken}`, 'x-csrf-token': session.csrfToken, 'idempotency-key': 'fallback-check-1' };
+  const created = await app.coach.create({ request: '核對替代清單', outputDir: f.dir });await app.settle();
+  const id = created.task.id;
+  await app.coach.store.mutate(id, 'latest', null, task => {
+    task.planning.workItems = f.task.planning.workItems;
+    task.planning.workItems[0].status = 'AWAITING_REVIEW';return {};
+  });
+  await writeFile(path.join(f.dir, 'edit.txt'), 'after\n');
+  const url = `/api/tasks/${id}/review-changes?item=W1`;
+  assert.equal((await app.fetch(url)).status, 403);
+  let result = await (await app.fetch(url, { headers })).json();assert.equal(result.changes.length, 1);
+  const task = (await app.coach.store.get(id)).task;
+  const response = await app.fetch(`/api/tasks/${id}/change-check`, { method: 'POST', headers, body: JSON.stringify({ revision: task.revision, itemId: 'W1', index: 0, change: result.changes[0] }) });
+  assert.equal(response.status, 200);
+  result = await (await app.fetch(url, { headers })).json();assert.equal(result.changes[0].status, 'PASS');
+  await rm(path.join(f.dir, 'edit.txt'));
+  const stale = await app.fetch(`/api/tasks/${id}/change-check`, { method: 'POST', headers: { ...headers, 'idempotency-key': 'fallback-check-2' }, body: JSON.stringify({ revision: (await app.coach.store.get(id)).task.revision, itemId: 'W1', index: 0, change: result.changes[0] }) });
+  assert.equal(stale.status, 409);
+  assert.equal((await app.fetch(`/api/tasks/${id}/review-changes?item=UNKNOWN`, { headers })).status, 404);
+});
+
+
+test('替代清單可列未追蹤 binary 成果，原有差異預覽的 UTF-8 邊界保留', async t => {
+  const f = await fixture(t);await writeFile(path.join(f.dir, 'new.png'), Buffer.from([255, 0]));
+  f.task.planning.workItems[0].outputs = [{ file: 'new.png' }];
+  const result = await itemChanges(f.task, 'W1');assert.equal(result.changes[0].where, 'new.png');assert.match(result.changes[0].what, /新增/);
+  await assert.rejects(itemDiff(f.task, 'W1'), { code: 'DIFF_FILE_UNSUPPORTED' });
 });

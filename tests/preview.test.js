@@ -20,7 +20,7 @@ test('preview UI isolates HTML, renders safe Markdown and preserves keyboard ret
   // HTML 仍用已抓到的內容做 blob 網址；Markdown 僅插入安全 renderer 的結果。
   assert.match(preview, /previewBlob=URL\.createObjectURL\(body\);\s*node\.src=previewBlob;content\.replaceChildren\(node\)/);
   assert.match(preview, /http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; connect-src 'none'; form-action 'none'/);
-  assert.match(preview, /catch\(error\)\{if\(dialog\.open&&previewReturn\?\.file===file&&previewReturn\?\.taskId===taskId&&previewReturn\?\.trigger===trigger\)/);
+  assert.match(preview, /catch\(error\)\{if\(dialog\.open&&previewReturn===token\)/);
   assert.match(preview, /node\.innerHTML=markdownPreviewBody\(previewMarkdown,false\)/);
   assert.match(preview, /node\.textContent=raw;node\.tabIndex=0;content\.replaceChildren\(node\)/);
   assert.match(preview, /node=text\?element\('pre',undefined,'text-preview'\)/);

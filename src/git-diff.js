@@ -20,7 +20,7 @@ export async function gitHead(cwd) {
   catch { return null; }
 }
 
-export async function itemDiff(task, itemId) {
+export async function itemDiff(task, itemId, { summaryOnly = false } = {}) {
   const item = task.planning?.workItems?.find(item => item.id === itemId);
   if (!item) throw new TaskError(404, 'DIFF_ITEM_MISSING', '找不到這個工作項目。');
   const root = await realpath(task.allowedRoots[0]);
@@ -28,6 +28,7 @@ export async function itemDiff(task, itemId) {
   const baseline = task.gitBaseline || await gitHead(root);
   if (!baseline) throw new TaskError(409, 'DIFF_NO_HEAD', '產出資料夾沒有可比較的 Git HEAD。');
   if (!/^[a-f0-9]{40,64}$/.test(baseline)) throw new TaskError(400, 'DIFF_BASELINE_INVALID', 'Git 基準格式不正確。');
+  const baselineSource = task.gitBaseline ? 'task.gitBaseline' : 'HEAD';
   const files = [...new Set((item.outputs || []).map(output => output.file))];
   for (const file of files) {
     await artifactPath(root, file, true);
@@ -35,17 +36,20 @@ export async function itemDiff(task, itemId) {
     try { if (!(await stat(path.join(root, file))).isFile()) throw new TaskError(415, 'DIFF_FILE_UNSUPPORTED', '只能比較一般檔案。'); }
     catch (error) { if (error.code !== 'ENOENT') throw error; }
   }
-  if (!files.length) return { baseline, files, diff: '', changedFileCount: 0 };
+  if (!files.length) return { baseline, baselineSource, files, changedFiles: [], diff: '', changedFileCount: 0 };
   try {
-    let diff = (await git(root, ['diff', '--no-ext-diff', '--no-textconv', '--no-color', baseline, '--', ...files])).stdout;
+    let diff = summaryOnly ? '' : (await git(root, ['diff', '--no-ext-diff', '--no-textconv', '--no-color', baseline, '--', ...files])).stdout;
     // 禁用 rename 合併，逐一計算本項登記路徑；NUL 分隔保留特殊檔名。
-    const changed = (await git(root, ['diff', '--no-ext-diff', '--no-textconv', '--no-renames', '--name-only', '-z', baseline, '--', ...files])).stdout.split('\0').filter(Boolean);
-    let changedFileCount = new Set(changed).size;
+    const changed = (await git(root, ['diff', '--no-ext-diff', '--no-textconv', '--no-renames', '--name-status', '-z', baseline, '--', ...files])).stdout.split('\0').filter(Boolean);
+    const changedFiles = [];
+    for (let i = 0; i < changed.length; i += 2) changedFiles.push({ file: changed[i + 1], type: changed[i] });
     const untracked = (await git(root, ['ls-files', '--others', '-z', '--', ...files])).stdout.split('\0').filter(Boolean);
     const prefix = (await git(root, ['rev-parse', '--show-prefix'])).stdout.replace(/\r?\n$/, '');
     for (const file of untracked) {
       // 從 index 移除的基準檔已由 git diff 呈現，避免再列一次新增內容。
       try { await git(root, ['cat-file', '-e', `${baseline}:${prefix}${file}`]); continue; } catch (error) { if (error.code !== 1 && error.code !== 128) throw error; }
+      changedFiles.push({ file, type: 'A' });
+      if (summaryOnly) continue;
       const resolved = await artifactPath(root, file);
       if ((await stat(resolved)).size > 2 * 1024 * 1024) throw new TaskError(413, 'DIFF_TOO_LARGE', '新增檔超過差異預覽的 2 MiB 上限。');
       const content = await readFile(resolved);
@@ -53,15 +57,34 @@ export async function itemDiff(task, itemId) {
       let text;
       try { text = new TextDecoder('utf-8', { fatal: true }).decode(content); }
       catch { throw new TaskError(415, 'DIFF_FILE_UNSUPPORTED', '新增檔不是有效的 UTF-8。'); }
-      changedFileCount++;
       const name = JSON.stringify(file), lines = text ? text.replace(/\n$/, '').split('\n') : [];
       diff += `diff --git ${JSON.stringify(`a/${file}`)} ${JSON.stringify(`b/${file}`)}\nnew file mode 100644\n--- /dev/null\n+++ ${name}\n`;
       if (lines.length) diff += `@@ -0,0 +1,${lines.length} @@\n${lines.map(line => `+${line}`).join('\n')}\n${text.endsWith('\n') ? '' : '\\ No newline at end of file\n'}`;
     }
     if (Buffer.byteLength(diff) > 8 * 1024 * 1024) throw new TaskError(413, 'DIFF_TOO_LARGE', '差異超過 8 MiB 預覽上限。');
-    return { baseline, files, diff, changedFileCount };
+    return { baseline, baselineSource, files, changedFiles, diff, changedFileCount: changedFiles.length };
   } catch (error) {
     if (error instanceof TaskError) throw error;
     throw new TaskError(422, 'DIFF_FAILED', '無法讀取 Git 差異，請確認基準 commit 仍存在且差異未超過 8 MiB。');
+  }
+}
+
+// 替代清單只陳述 Git 能證實的檔案異動，不推測畫面行為。
+export async function itemChanges(task, itemId) {
+  const item = task.planning?.workItems?.find(item => item.id === itemId);
+  if (!item) throw new TaskError(404, 'DIFF_ITEM_MISSING', '找不到這個工作項目。');
+  if (item.changes?.length) return { source: 'report', changes: item.changes };
+  try {
+    const result = await itemDiff(task, itemId, { summaryOnly: true });
+    const changes = result.changedFiles.map(({ file, type }) => {
+      const point = { where: file, what: `Git 顯示${{ A: '新增', M: '修改', D: '刪除', T: '檔案類型變更' }[type] || '異動'}此檔案。`, howToCheck: '開啟「看改了什麼」核對此檔案的差異，再依工作項目的驗收條件檢查。' };
+      if (type !== 'D') point.path = file;
+      if (item.gitChangeChecks?.some(check => check.baseline === result.baseline && ['where', 'what', 'howToCheck', 'path'].every(k => check[k] === point[k]))) point.status = 'PASS';
+      return point;
+    });
+    return { source: 'git', baseline: result.baseline, baselineSource: result.baselineSource, changes, reason: changes.length ? '' : '這個項目的登記檔案沒有差異。' };
+  } catch (error) {
+    if (!(error instanceof TaskError)) throw error;
+    return { source: 'git', changes: [], code: error.code, reason: error.message };
   }
 }
