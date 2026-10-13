@@ -53,7 +53,9 @@ test('stop during A is confirmed only after the CLI exits, then resume redoes A 
   assert.equal(planningAction(stopping.task).kind, 'stopping');
   // 重複按停止不會再送訊號或出錯
   assert.equal((await coach.stop(id)).stopping, true);
-  await assert.rejects(coach.instruct(id, stopping.task.revision, 'k-busy', { text: '先寫的補充' }), { code: 'AGENT_BUSY' });
+  assert.throws(() => coach.plan(stopping.task, { text: '先寫的補充' }), { code: 'AGENT_STOPPING' });
+  // instruct 可能先遇到 pending 鎖，或讀到正在停止；兩個階段都必須阻擋寫入。
+  await assert.rejects(coach.instruct(id, stopping.task.revision, 'k-busy', { text: '先寫的補充' }), error => ['AGENT_BUSY', 'AGENT_STOPPING'].includes(error.code));
   await created.done;
   let task = await latest(store, id);
   assert.equal(task.planning.running, null);
@@ -113,11 +115,11 @@ test('a CLI that will not exit is marked unconfirmed and blocks removal until cl
   const ctx = await setup();
   const { store, coach, trash } = ctx;
   mode('hang');
-  process.env.FAKE_HANG_MS = '1500';
+  process.env.FAKE_HANG_MS = '4000';
   const created = await coach.create({ request: '我要做一份新品簡報給主管', profile: 'quick' });
   const id = created.task.id;
   assert.ok(await waitFor(() => coach.children.has(id)));
-  await new Promise(r => setTimeout(r, 200));
+  await new Promise(r => { const out = coach.children.get(id).stderr; out.on('data', b => { if (String(b).includes('HANG_READY')) r(); }); });
   await coach.stop(id, { graceMs: 100, confirmMs: 300 });
   assert.ok(await waitFor(async () => (await latest(store, id)).planning.running?.stopping?.unconfirmed, 2000), '超過時間仍未確認結束');
   const pending = await latest(store, id);
@@ -171,7 +173,7 @@ test('supplementary instructions route by state: answer, outline change, fix, re
   await (await coach.review(id, 'W1')).done;
   task = await latest(store, id);
   task = (await coach.confirm(id, task.revision, 'k-c1', { itemId: 'W1', accept: true })).task;
-  await assert.rejects(coach.instruct(id, task.revision, 'k-rp0', { text: '多一段競品', scope: 'outline' }), error => error.code === 'CONFIRM_IMPACT' && /重新擬定/.test(error.message) && /W1/.test(error.message));
+  await assert.rejects(coach.instruct(id, task.revision, 'k-rp0', { text: '多一段競品', scope: 'outline' }), error => error.code === 'CONFIRM_IMPACT' && /重新擬定/.test(error.message) && /第 1 項/.test(error.message));
   await (await coach.instruct(id, task.revision, 'k-rp', { text: '多一段競品', scope: 'outline', confirmImpact: true, reason: '主管要比較' })).done;
   task = await latest(store, id);
   assert.equal(task.planning.phase, 'outline', '改了核定大綱要重新確認');
@@ -352,6 +354,34 @@ test('full autopilot approves the outline itself and records it; failing reviews
   assert.ok((await coach.events(id)).some(e => e.type === 'GATE_AUTO_APPROVED'));
   assert.match(task.planning.autopilot.waitingFor.label, /自動修了 2 輪/);
   mode();
+});
+
+test('full autopilot lets AI-passed items unlock the next ones and asks you once at the end; plain autopilot still waits', async () => {
+  const { store, coach } = await setup();
+  mode();
+  const created = await coach.create({ request: '我要做一份新品簡報給主管十頁', profile: 'standard', autopilot: true, full: true });
+  const id = created.task.id;
+  await created.done;
+  // standard 會補骨架 W0，W1 依賴 W0。完全自動時 W0 驗收通過就接著做 W1，兩項一起等你確認。
+  assert.ok(await waitFor(async () => (await latest(store, id)).planning.autopilot?.waitingFor?.kind === 'confirm', 30000));
+  let task = await latest(store, id);
+  assert.deepEqual(task.planning.workItems.filter(i => i.owner === 'ai').map(i => `${i.id}:${i.status}`), ['W0:REVIEWED', 'W1:REVIEWED']);
+  assert.match(task.planning.autopilot.waitingFor.label, /確認 2 項/);
+  assert.match(task.planning.learningTurns.find(t => t.stage === 'D' && t.workItemId === 'W1').prompt, /已完成的其他項目與檔案：\n- 骨架版/);
+  // 退回骨架時，已經用它做下去的 W1 標成待核對
+  task = (await coach.confirm(id, task.revision, 'k-unlock-1', { itemId: 'W0', accept: false, note: '封面要換' })).task;
+  assert.match(task.planning.workItems.find(i => i.id === 'W1').recheck, /骨架版 被退回/);
+  await coach.setAutopilot(id, task.revision, 'k-unlock-2', { on: false });
+  // 一般自動模式：W0 通過後就停下等你確認
+  const plain = await coach.create({ request: '我要做一份新品簡報給主管十頁', profile: 'standard', autopilot: true });
+  await plain.done;
+  assert.ok(await waitFor(async () => (await latest(store, plain.task.id)).planning.autopilot?.waitingFor?.kind === 'approve', 15000));
+  task = await latest(store, plain.task.id);
+  await coach.approveOutline(task.id, task.revision, 'k-unlock-3');
+  coach.resumeAuto(task.id);
+  assert.ok(await waitFor(async () => (await latest(store, plain.task.id)).planning.autopilot?.waitingFor?.kind === 'confirm', 15000));
+  task = await latest(store, plain.task.id);
+  assert.deepEqual(task.planning.workItems.filter(i => i.owner === 'ai').map(i => `${i.id}:${i.status}`), ['W0:REVIEWED', 'W1:TODO']);
 });
 
 test('autopilot parks on AI failure with the reason, can resume with another AI, and ends when you stop it', async () => {

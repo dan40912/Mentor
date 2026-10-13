@@ -82,7 +82,7 @@ export function nextRequest(task, archive = {}) {
     `請處理「${task.title}」。`,
     `讀者：${card?.audience || task.audience || '待確認'}；目標：${String(card?.goal || task.goal).replace(/[。]+$/, '')}。`,
     `目前基準：${task.current?.artifact || task.allowedRoots?.[0] || '待提供'}。先核對現檔與來源，版本有差異請回報，不要沿用舊聊天中的檔名。`,
-    `本次請先整理可讀的大綱與缺口，尚不修改正式成果。${archive.direction ? `主張：${archive.direction}。` : ''}`,
+    `本次請先整理可讀的計畫與缺口，尚不修改正式成果。${archive.direction ? `主張：${archive.direction}。` : ''}`,
     `保留：${[...(task.scope?.locked || []).map(l => l.text), ...(card?.constraints || [])].join('；') || '使用者未要求調整的部分'}。`,
     `歷史口徑（仍需核對現檔）：\n${known.length ? known.map(t => `- ${t}`).join('\n') : '- 先讀資料夾現有素材；讀不到才回報缺口，不猜數字。'}`,
     ...(archive.cautions?.length ? [`最新來源提醒：\n${archive.cautions.map(c => `- ${c}`).join('\n')}`] : []),

@@ -1,49 +1,48 @@
+import { probePreview, localPreviewUrl } from './review-settings.js';
 import http from 'node:http';
 import { randomUUID, randomBytes } from 'node:crypto';
 import { mkdir, readFile, writeFile, realpath, readdir, stat } from 'node:fs/promises';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import path from 'node:path';
-import { renameReplace } from './platform.js';
+import { renameReplace, killTree } from './platform.js';
 import { providers, resolveModel, stages, defaultStageSettings, profiles, recommendationPlans } from './models.js';
 import { Memory } from './memory.js';
 import { Trash } from './trash.js';
 import { Conversations } from './conversations.js';
 import { Projects } from './projects.js';
 import { Coach } from './coach.js';
+import { gitHead, itemDiff, itemChanges } from './git-diff.js';
+import { artifactPath, validateArtifactName } from './artifact-path.js';
 import { diagnose } from './agents.js';
 import { TaskStore, TaskError, buildBrief } from './tasks.js';
+import { summarize, MOMENTS } from './feedback.js';
+import { writeHandoff, previewHandoff } from './handoffs.js';
+import { readAttachment } from './attachments.js';
 
 const appDir = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const webDir = path.join(appDir, 'web');
 // 使用者資料（vault、outputs、設定）放在 MENTOR_HOME，預設是 repo 根目錄。
 const flag = name => { const i = process.argv.indexOf(`--${name}`); return i > 0 ? process.argv[i + 1] : undefined; };
 const root = path.resolve(flag('home') || process.env.MENTOR_HOME || appDir);
-const memory = path.join(root, 'vault');
-const token = randomBytes(32).toString('hex');
-let settings = { revision: 1, stages: defaultStageSettings() };
-const diagnosis = {};
+const textPreviewExtensions = ['.txt', '.log', '.csv', '.json', '.js', '.mjs', '.cjs', '.ts', '.css', '.yml', '.yaml', '.sh', '.py'];
 const previewTypes = { '.html': ['text/html; charset=utf-8', 5 * 1024 * 1024], '.md': ['text/plain; charset=utf-8', 5 * 1024 * 1024], '.png': ['image/png', 20 * 1024 * 1024], '.jpg': ['image/jpeg', 20 * 1024 * 1024], '.jpeg': ['image/jpeg', 20 * 1024 * 1024], '.webp': ['image/webp', 20 * 1024 * 1024] };
-const inside = (parent, child) => child.startsWith(`${parent}${path.sep}`);
+for (const ext of textPreviewExtensions) previewTypes[ext] = ['text/plain; charset=utf-8', 2 * 1024 * 1024];
+
 
 export async function previewArtifact(tasks, projectRoot, id, file) {
-  if (typeof file !== 'string' || !file || file.includes('\0') || path.isAbsolute(file) || file.split(/[\\/]/).includes('..') || file.includes('\\')) throw new TaskError(400, 'PREVIEW_NAME_INVALID', '成果檔名格式不正確。');
+  validateArtifactName(file);
   const { task } = await tasks.get(id);
   if (!task.planning?.workItems?.some(item => item.outputs?.some(output => output.file === file))) throw new TaskError(404, 'PREVIEW_NOT_REGISTERED', '這份成果尚未登記在任務中。');
   const type = previewTypes[path.extname(file).toLowerCase()];
-  if (!type) throw new TaskError(415, 'PREVIEW_TYPE_UNSUPPORTED', '目前只支援 HTML、Markdown、PNG、JPEG 與 WebP。');
-  const canonicalRoot = await realpath(projectRoot);
-  const taskDir = path.join(canonicalRoot, 'outputs', id);
-  let canonicalDir, resolved;
-  try { canonicalDir = await realpath(taskDir); resolved = await realpath(path.join(task.allowedRoots[0], file)); }
-  catch (error) { if (error.code === 'ENOENT') throw new TaskError(404, 'PREVIEW_MISSING', '成果檔已不存在，請回任務核對檔名與產出。'); throw error; }
-  if (canonicalDir !== taskDir || !inside(canonicalRoot, canonicalDir) || !inside(canonicalDir, resolved) || !inside(canonicalRoot, resolved) || !inside(await realpath(task.allowedRoots[0]), resolved)) throw new TaskError(403, 'PREVIEW_OUTSIDE_TASK', '成果檔超出此任務的產出範圍。');
+  if (!type) throw new TaskError(415, 'PREVIEW_TYPE_UNSUPPORTED', '目前只支援 HTML、Markdown、指定文字檔、PNG、JPEG 與 WebP。');
+  const resolved = await artifactPath(task.allowedRoots[0], file);
   const info = await stat(resolved);
   if (!info.isFile()) throw new TaskError(415, 'PREVIEW_TYPE_UNSUPPORTED', '只能預覽一般檔案。');
   if (info.size > type[1]) throw new TaskError(413, 'PREVIEW_TOO_LARGE', '成果檔超過預覽大小上限。');
   const content = await readFile(resolved);
   if (content.length > type[1]) throw new TaskError(413, 'PREVIEW_TOO_LARGE', '成果檔超過預覽大小上限。');
   const ext = path.extname(file).toLowerCase();
-  if (['.html', '.md'].includes(ext)) {
+  if (['.html', '.md', ...textPreviewExtensions].includes(ext)) {
     try { new TextDecoder('utf-8', { fatal: true }).decode(content); }
     catch { throw new TaskError(415, 'PREVIEW_TYPE_UNSUPPORTED', '文字檔不是有效的 UTF-8。'); }
   }
@@ -66,7 +65,7 @@ function resolveStageInput(stageId, input) {
   if (!provider.runnable || !provider.modes?.includes(mode)) throw new Error(`${provider.name} 不能負責 ${stageId} 階段：這一階段需要${{ chat: '只對話', read: '唯讀資料夾', write: '寫產出資料夾' }[mode]}，這個 AI 沒有可呼叫的 CLI。`);
   return model;
 }
-let queue = Promise.resolve();
+
 
 async function atomicWrite(file, content) {
   const temporary = `${file}.${randomUUID()}.tmp`;
@@ -127,7 +126,13 @@ async function body(req) {
   return JSON.parse(text);
 }
 
-export async function startServer(port = Number(flag('port') || process.env.PORT || 4317)) {
+export async function createRequestHandler({ root = appDir, port = 4317, runAgent, previewProbeOptions, executeFile } = {}) {
+  root = path.resolve(root);
+  const memory = path.join(root, 'vault');
+  const token = randomBytes(32).toString('hex');
+  let settings = { revision: 1, stages: defaultStageSettings() };
+  const diagnosis = {};
+  let queue = Promise.resolve();
   await mkdir(memory, { recursive: true });
   const canonicalRoot = await realpath(root);
   if (!((await realpath(memory)).startsWith(`${canonicalRoot}${path.sep}`))) {
@@ -155,18 +160,18 @@ export async function startServer(port = Number(flag('port') || process.env.PORT
   const memoryStore = new Memory(path.join(memory, 'memory'));
   const conversations = new Conversations(path.join(memory, 'conversations'));
   const projects = new Projects(path.join(memory, 'projects'));
-  const coach = new Coach(tasks, () => settings, root, memoryStore);
+  const coach = new Coach(tasks, () => settings, root, memoryStore, runAgent, executeFile);
   await coach.recover();
   const trash = new Trash(memory, tasks, coach);
-  const server = http.createServer(async (req, res) => {
-    const origin = `http://127.0.0.1:${server.address().port}`;
+  const handler = async (req, res) => {
+    const requestPort = typeof port === 'function' ? port() : port;
+    const origin = `http://127.0.0.1:${requestPort}`;
     const send = (status, data) => {
       res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
       res.end(JSON.stringify(data));
     };
-    const port = server.address().port;
     // 用 localhost 開啟首頁時導到 127.0.0.1，cookie 與 CSRF 只綁一個來源。
-    if (req.method === 'GET' && req.url === '/' && req.headers.host === `localhost:${port}`) {
+    if (req.method === 'GET' && req.url === '/' && req.headers.host === `localhost:${requestPort}`) {
       res.writeHead(302, { Location: `${origin}/` });
       return res.end();
     }
@@ -183,12 +188,12 @@ export async function startServer(port = Number(flag('port') || process.env.PORT
         res.writeHead(200, {
           'Content-Type': 'text/html; charset=utf-8',
           'Cache-Control': 'no-store',
-          'Content-Security-Policy': "default-src 'self'; img-src 'self' data:; script-src 'self' 'unsafe-inline'; style-src 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'",
+          'Content-Security-Policy': "default-src 'self'; img-src 'self' data: blob:; frame-src 'self' blob: http://localhost:* http://127.0.0.1:* https://localhost:* https://127.0.0.1:*; script-src 'self' 'unsafe-inline'; style-src 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'",
           'Set-Cookie': `awc=${token}; HttpOnly; SameSite=Strict; Path=/`
         });
         return res.end(html);
       }
-      if (req.method === 'GET' && /^\/assets\/(mentor\.svg|openai\.svg|claude\.svg|copilot\.svg|conversation\.js|project\.js|control\.js|auto\.js)$/.test(req.url)) {
+      if (req.method === 'GET' && /^\/assets\/(mentor\.svg|openai\.svg|claude\.svg|copilot\.svg|conversation\.js|project\.js|control\.js|auto\.js|feedback\.js|item-names\.js|upload\.js)$/.test(req.url)) {
         res.writeHead(200, { 'Content-Type': req.url.endsWith('.js') ? 'application/javascript; charset=utf-8' : req.url.endsWith('.svg') ? 'image/svg+xml' : 'image/png', 'Cache-Control': req.url.endsWith('.js') ? 'no-store' : 'max-age=86400' });
         return res.end(await readFile(path.join(webDir, 'assets', path.basename(req.url))));
       }
@@ -214,6 +219,11 @@ export async function startServer(port = Number(flag('port') || process.env.PORT
         if (projectRoute[2] === 'summary') return send(200, await trash.projectSummary(decodeURIComponent(projectRoute[1])));
         return send(200, { project });
       }
+      if (req.method === 'GET' && req.url === '/api/feedback') {
+        if (!req.headers.cookie?.split('; ').includes(`awc=${token}`)) return send(403, { code: 'SESSION_REQUIRED' });
+        const all = (await tasks.list()).filter(t => !t.error && !t.trashed);
+        return send(200, { summary: summarize(all), moments: MOMENTS });
+      }
       if (req.method === 'GET' && req.url === '/api/memory') {
         if (!req.headers.cookie?.split('; ').includes(`awc=${token}`)) return send(403, { code: 'SESSION_REQUIRED' });
         return send(200, await memoryStore.list());
@@ -221,12 +231,35 @@ export async function startServer(port = Number(flag('port') || process.env.PORT
       if (req.method === 'GET' && taskRoute) {
         if (!req.headers.cookie?.split('; ').includes(`awc=${token}`)) return send(403, { code: 'SESSION_REQUIRED' });
         const [, id, action, query] = taskRoute;
-        if (!id && !action) return send(200, { tasks: await tasks.list() });
+        if (!id && !action) return send(200, { tasks: await Promise.all((await tasks.list()).map(async task => ({ ...task, gitAvailable: !task.error && Boolean(await gitHead(task.allowedRoots?.[0])) }))) });
         if (id && action === 'events') return send(200, { events: await coach.events(id) });
         if (id && action === 'conversation') return send(200, await conversations.read((await tasks.get(id)).task));
-        if (id && action === 'preview') {
+        if (id && action === 'preview-check') {
+          const { task } = await tasks.get(id);
+          if (!task.preview?.url) throw new TaskError(400, 'PREVIEW_URL_REQUIRED', '請先保存預覽網址。');
+          const target = new URLSearchParams(query || '').get('path');
+          const url = target === null ? localPreviewUrl(task.preview.url) : localPreviewUrl(target, localPreviewUrl(task.preview.url));
+          return send(200, { ...await probePreview(url, previewProbeOptions), command: task.preview.command || '' });
+        }
+        if (id && action === 'review-changes') {
+          const { task } = await tasks.get(id);
+          return send(200, await itemChanges(task, new URLSearchParams(query || '').get('item')));
+        }
+        if (id && action === 'diff') {
+          const { task } = await tasks.get(id);
+          return send(200, await itemDiff(task, new URLSearchParams(query || '').get('item')));
+        }
+        if (id && action === 'attachment') {
+          const { task } = await tasks.get(id);
+          const { attachment, content } = await readAttachment(task, new URLSearchParams(query || '').get('id'));
+          res.writeHead(200, { 'Content-Type': 'application/octet-stream', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Content-Disposition': `attachment; filename=attachment; filename*=UTF-8''${encodeURIComponent(attachment.name)}` });
+          return res.end(content);
+        }
+        if (id && ['preview', 'handoff-preview'].includes(action)) {
           const file = new URLSearchParams(query || '').get('file');
-          const preview = await previewArtifact(tasks, root, id, file);
+          const preview = action === 'handoff-preview'
+            ? await previewHandoff(root, (await tasks.get(id)).task, file)
+            : await previewArtifact(tasks, root, id, file);
           res.writeHead(200, { 'Content-Type': preview.mime, 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Content-Disposition': 'inline', 'Content-Security-Policy': preview.html ? "sandbox allow-scripts; default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; connect-src 'none'; form-action 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; frame-ancestors 'self'" : "default-src 'none'; style-src 'unsafe-inline'; sandbox; frame-ancestors 'self'" });
           return res.end(preview.content);
         }
@@ -267,7 +300,20 @@ export async function startServer(port = Number(flag('port') || process.env.PORT
       if (!req.headers.cookie?.split('; ').includes(`awc=${token}`) || req.headers['x-csrf-token'] !== token) {
         return send(403, { code: 'CSRF_FAILED' });
       }
+      if (req.url.startsWith('/api/uploads?')) {
+        const params = new URLSearchParams(req.url.split('?')[1]);
+        return send(201, { attachment: await coach.attachments.stage(params.get('name'), req, params.has('batch') ? params.get('batch') : undefined, params.has('index') ? Number(params.get('index')) : undefined) });
+      }
       const input = await body(req);
+      if (taskRoute?.[1] && taskRoute[2] === 'handoff-prompt') {
+        const { task } = await tasks.get(taskRoute[1]);
+        if (input.revision !== task.revision) throw new TaskError(409, 'REVISION_CONFLICT', '任務版本已更新。', { revision: task.revision });
+        return send(200, await writeHandoff(root, task));
+      }
+      if (req.url === '/api/uploads/batches') {
+        if (input.taskId != null) await coach.latest(input.taskId);
+        return send(201, coach.attachments.batch(input.names, input.taskId));
+      }
       if (projectRoute) {
         if (!projectRoute[1]) return send(201, { project: await projects.create(input) });
         if (projectRoute[2] === 'save') return send(200, await projects.save(decodeURIComponent(projectRoute[1]), input));
@@ -324,6 +370,7 @@ export async function startServer(port = Number(flag('port') || process.env.PORT
         return send(202, { task: result.task });
       }
       const coachActions = {
+        card: (id, key) => coach.saveCard(id, input.revision, key, input),
         retry: (id, key) => coach.retry(id, input.revision, key, input.provider || null),
         answer: (id, key) => coach.answer(id, input.revision, key, input),
         outline: id => coach.draftOutline(id, input.feedback),
@@ -333,6 +380,7 @@ export async function startServer(port = Number(flag('port') || process.env.PORT
         execute: id => coach.execute(id, input.itemId),
         review: id => coach.review(id, input.itemId),
         fix: id => coach.fix(id, input.itemId),
+        'change-check': (id, key) => coach.checkChange(id, input.revision, key, input),
         confirm: (id, key) => coach.confirm(id, input.revision, key, input),
         cancel: id => coach.stop(id),
         stop: id => coach.stop(id),
@@ -340,6 +388,8 @@ export async function startServer(port = Number(flag('port') || process.env.PORT
         resume: (id, key) => coach.resume(id, input.revision, key, input),
         trash: id => trash.trashTask(id, input),
         autopilot: (id, key) => coach.setAutopilot(id, input.revision, key, input),
+        feedback: (id, key) => coach.feedback(id, input.revision, key, input),
+        agents: (id, key) => coach.setAgents(id, input.revision, key, input),
         'confirm-all': (id, key) => coach.confirmAll(id, input.revision, key)
       };
       if (taskRoute?.[1] && coachActions[taskRoute[2]]) {
@@ -347,7 +397,8 @@ export async function startServer(port = Number(flag('port') || process.env.PORT
         const key = req.headers['idempotency-key'];
         const result = await coachActions[action](id, key);
         // 開著「一路做到完」時，你做完任何一步，AI 會自己接著往下。
-        if (!['stop', 'cancel', 'trash', 'autopilot'].includes(action)) coach.resumeAuto(id);
+        // 評分只是記錄，不推動流程；否則停下時評分會讓 AI 重新判斷又停一次。
+        if (!['stop', 'cancel', 'trash', 'autopilot', 'feedback', 'agents', 'change-check'].includes(action)) coach.resumeAuto(id);
         if (action === 'cancel' || action === 'stop') return send(202, { stopping: true, task: (await tasks.list()).find(t => t.id === id) || result.task });
         if (action === 'trash') return send(200, result);
         if (action === 'instruct' && input.dryRun) return send(200, result);
@@ -387,16 +438,43 @@ export async function startServer(port = Number(flag('port') || process.env.PORT
       console.error(error);
       send(400, { code: 'REQUEST_FAILED', message: error.message, nextStep: '檢查輸入；保存失敗時查看終端錯誤。' });
     }
-  });
+  };
+  return { handler, coach };
+}
+
+// 測試用：不監聽埠，回傳可直接呼叫 request listener 的 server。
+export async function createApplication(home = root, port = 4317) {
+  const app = await createRequestHandler({ root: home, port });
+  const server = http.createServer(app.handler);
+  const { coach } = app;
+  server.stopAgents = () => { for (const child of coach.children.values()) killTree(child, 'SIGTERM'); return coach.children.size; };
+  return server;
+}
+
+export async function startServer(port = Number(flag('port') || process.env.PORT || 4317)) {
+  let server;
+  const app = await createRequestHandler({ root: flag('home') || process.env.MENTOR_HOME || appDir, port: () => server.address().port });
+  server = http.createServer(app.handler);
   await new Promise((resolve, reject) => {
     server.once('error', reject);
     server.listen(port, '127.0.0.1', resolve);
   });
+  // 服務結束時一併停掉它啟動的 CLI，不留在背景繼續跑、繼續寫檔。
+  const { coach } = app;
+  server.stopAgents = () => { for (const child of coach.children.values()) killTree(child, 'SIGTERM'); return coach.children.size; };
   return server;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  startServer().then(server => console.log(`Mentor: http://127.0.0.1:${server.address().port}`)).catch(error => {
+  startServer().then(server => {
+    console.log(`Mentor: http://127.0.0.1:${server.address().port}`);
+    for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, () => {
+      const stopped = server.stopAgents();
+      if (stopped) console.log(`已停止 ${stopped} 個執行中的 AI。下次啟動時這些步驟會標成結果未知。`);
+      server.close();
+      setTimeout(() => process.exit(0), 300).unref();
+    });
+  }).catch(error => {
     console.error(error.code === 'EADDRINUSE' ? '連接埠已使用。請執行 PORT=4318 npm start。' : error);
     process.exitCode = 1;
   });
