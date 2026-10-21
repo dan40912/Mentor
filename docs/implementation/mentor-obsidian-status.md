@@ -80,3 +80,5 @@
 - 首次 CI 顯示 Windows 測試使用 POSIX 專用檔名與 URL.pathname、固定 /etc/hosts，以及 SIGTERM 繼承 pipe 假設。改用平台有效的 fixture、fileURLToPath、明確建立的外部檔，並以可控制 runner 驗證「停止結果未確認」契約。真實停止流程的其他測試保留。
 - 發現實際安全缺口：Windows 沒有 O_NOFOLLOW，附件 symlink 原本可能被讀取。新增跨平台 lstat 拒絕及開檔前後檔案 identity 核對，保留既有路徑保護與錯誤。
 - 修正後 macOS／Node v26.7.0 全部 290 pass／0 fail；遠端新 head 仍須跨平台確認。首次 Linux／macOS Node 22 的取消來自同一個不確定停止 fixture，不能當成功。
+
+- 第二輪 CI：Linux／macOS 的 Node 20／22／24 共六組成功；Windows 三組剩同一 shutdown 分類問題。taskkill 僅提供 exit code 時，現在由平台模組的 WeakSet 保留停止請求，runAgent 優先判定中斷，不把舊登入輸出當新錯誤。新增停止請求識別測試；本機完整 291 pass／0 fail。最終跨平台矩陣仍待最新 commit 驗證。

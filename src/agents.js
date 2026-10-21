@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { spawnPlan, killTree } from './platform.js';
+import { spawnPlan, killTree, wasTerminationRequested } from './platform.js';
 
 // 呼叫已登入的 CLI。只用 argv 與 stdin，不經 shell；不使用任何 bypass 權限旗標。
 // mode：chat 不給工具；read 只能讀產出資料夾；write 只能在產出資料夾內寫檔。
@@ -67,7 +67,7 @@ export async function runAgent({ provider, modelId = null, effort = null, mode =
   const workdir = mode === 'chat' ? scratch : cwd;
   const args = buildArgs({ provider, modelId, effort, mode, cwd: workdir, outputFile, images });
   try {
-    const { code, signal, stdout, stderr } = await new Promise((resolve, reject) => {
+    const { code, signal, stdout, stderr, interrupted } = await new Promise((resolve, reject) => {
       const plan = spawnPlan(bin(provider), args);
       const child = spawn(plan.command, plan.args, { ...plan.options, cwd: workdir, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true, env: { ...process.env, NO_COLOR: '1' } });
       onSpawn?.(child);
@@ -76,10 +76,10 @@ export async function runAgent({ provider, modelId = null, effort = null, mode =
       child.stdout.on('data', chunk => { stdout += chunk; if (stdout.length > 2_000_000) stdout = stdout.slice(-1_000_000); });
       child.stderr.on('data', chunk => { stderr += chunk; if (stderr.length > 200_000) stderr = stderr.slice(-100_000); });
       child.on('error', error => { clearTimeout(timer); reject(error.code === 'ENOENT' || error.code === 'EINVAL' ? new AgentError('AGENT_NOT_INSTALLED', `找不到 ${bin(provider)} 指令。`) : error); });
-      child.on('close', (code, signal) => { clearTimeout(timer); resolve({ code, signal, stdout, stderr }); });
+      child.on('close', (code, signal) => { clearTimeout(timer); resolve({ code, signal, stdout, stderr, interrupted: wasTerminationRequested(child) }); });
       child.stdin.end(prompt);
     });
-    if (signal) throw new AgentError('AGENT_INTERRUPTED', 'CLI 被訊號中斷，結果未知。請核對產出後再接續。', signal);
+    if (signal || interrupted) throw new AgentError('AGENT_INTERRUPTED', 'CLI 被訊號中斷，結果未知。請核對產出後再接續。', signal);
     let text = stdout.trim();
     if (provider === 'codex') text = (await readFile(outputFile, 'utf8').catch(() => '')).trim();
     const filtered = /^The model returned no content because the response was blocked by content filtering\.?$/i.test(text);
