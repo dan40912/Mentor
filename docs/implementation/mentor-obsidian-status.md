@@ -32,7 +32,7 @@
 | Mentor 資訊架構與 UI 簡化 | 已實作第一版／待完整操作驗收 | 現在／任務／成果與知識三入口，其餘工具展開；首頁近期工作與實際成果索引 |
 | 自然語言修正與方向漂移處理 | 部分完成 | 原始要求與 AI 理解並列；尚未完成明確影響分析與修正閉環 |
 | Token 效率與上下文去重 | 部分完成 | 接手摘要大小可重現量測；CLI Prompt 去重與真實 Token 基準尚未完成 |
-| 數據呈現可信度 | 部分完成 | 字元／bytes 為實測，Token／成本未知；其他數據仍待整體 Review |
+| 數據呈現可信度 | 部分完成 | 字元／bytes／時間為本機量測，Token 為成功 CLI 回報；Claude 費用僅 CLI 估算，無跨版本節省承諾 |
 | README 與完整教學 | 中英文重寫完成／真人與實機待驗 | 三入口、兩種模式、資料與限制、復原、量測、實際新截圖；入門教學校正為可驗證示範 |
 | 真實多 AI 與停止／復原／驗收 | Codex D → Claude E 已實測；其餘待驗 | live-cross-ai.mjs，結構檢查通過、來源完整；真人與 Obsidian 視覺仍未驗收 |
 | 真人閱讀與接手測試 | 未驗證 | 需真人；不得由 AI 自評替代 |
@@ -82,3 +82,11 @@
 - 修正後 macOS／Node v26.7.0 全部 290 pass／0 fail；遠端新 head 仍須跨平台確認。首次 Linux／macOS Node 22 的取消來自同一個不確定停止 fixture，不能當成功。
 
 - 第二輪 CI：Linux／macOS 的 Node 20／22／24 共六組成功；Windows 三組剩同一 shutdown 分類問題。taskkill 僅提供 exit code 時，現在由平台模組的 WeakSet 保留停止請求，runAgent 優先判定中斷，不把舊登入輸出當新錯誤。新增停止請求識別測試；本機完整 291 pass／0 fail。最終跨平台矩陣仍待最新 commit 驗證。
+
+## 第五批：CLI 用量實測
+
+- Codex 改用 --json，同時維持 -o 保存原始回覆；只讀 turn.completed 的白名單計數。Claude 改用 --output-format json，抽出 result、is_error、usage 與費用估算，錯誤 envelope 不可被當成功。
+- 用量保存於同一 learningTurn，工作卡與普通 Markdown 顯示同一來源；Web 完整卡片、原生側欄的收合用量區可閱讀。不因缺欄位補零，不把快取或帳單估算混為實測成本。
+- 虛構短句、真實 CLI smoke：兩個 provider 皆精確回覆 MENTOR_USAGE_OK。Codex：輸入 24,122、其中快取 13,056、輸出 8、9,246 ms，費用未知。Claude：input 2、cache read 649、cache creation 3,689、output 15、5,876 ms，CLI 估算 USD 0.0299498。這些是 CLI 實際上下文計數，遠大於使用者短句，反映工具自己的背景；不代表純 Prompt 大小或效率改善。
+- 原始數值證據留於被忽略的 .lab-home/usage-smoke-evidence.json。成功回合的新格式已實測；舊回合／失敗回合仍可能沒有用量。完整 before/after Token 與品質基準未完成。
+- 自動測試：295 pass／0 fail（新增純解析、未知欄位、錯誤 envelope、subprocess 整合、持久化與驗證過的 HTTP 工作卡用量測試）。原生外觀仍待實機。

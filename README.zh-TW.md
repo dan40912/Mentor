@@ -85,7 +85,7 @@ npm run package:obsidian
 
 ## 使用量與驗證
 
-每輪可核對實際 Prompt／回覆的字元與 UTF-8 bytes。Token／費用目前無可靠量測，顯示未知。接手摘要不會為了滿足 8,000 字元而刪除必要限制；超長會標示，不能把字元減少直接宣稱為 Token 節省。
+每輪可核對實際 Prompt／回覆的字元與 UTF-8 bytes。成功的 Codex／Claude 呼叫另保存 CLI 回報的 Token 欄位與本機執行時間；缺少欄位、舊紀錄及失敗回合仍可能未知。Claude 費用是 CLI 端估算，非帳單，不推算 Codex 費用。各 provider 快取／輸入定義不同，不能直接混加比較。接手摘要不會為了滿足 8,000 字元而刪除必要限制；超長會標示，不能把字元減少直接宣稱為 Token 節省。
 
 ```sh
 npm test

@@ -611,6 +611,7 @@ export class Coach {
         completed.afterRevision = t.revision + 1;
         completed.nextAction = planningAction(draft);
         completed.usage = result.usage || null;
+        completed.elapsedMs = Number.isSafeInteger(result.elapsedMs) ? result.elapsedMs : null;
         completed.checks = structuredClone(metadata.workItemId ? draft.planning.workItems.find(w => w.id === metadata.workItemId)?.sensors || [] : []);
         completed.outputs = metadata.workItemId ? draft.planning.workItems.find(w => w.id === metadata.workItemId)?.outputs || [] : [];
         const learning = extractJson(result.text)?.learning;

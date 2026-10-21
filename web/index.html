@@ -1341,7 +1341,7 @@ async function showRoundCards(t){
   if(c.aiClaims?.evidence)box.append(element('p',`AI 聲稱的證據（非獨立驗證）：${c.aiClaims.evidence}`,'small muted'));
   for(const o of c.outputs){const file=typeof o==='string'?o:o.file||o.path,b=element('button',`開啟成果：${file}`,'btn');b.onclick=busy(b,async()=>{d.close();await openPreview(t.id,file,b);});box.append(b);}
   if(c.checks.length)box.append(sensorList(c.checks));else box.append(element('p','機器檢查未記錄，不視為通過。','small muted'));
-  box.append(element('p',`本輪輸入 ${c.contextMetrics.input.characters} 字元／${c.contextMetrics.input.utf8Bytes} UTF-8 bytes；輸出 ${c.contextMetrics.output.characters} 字元。Token 與費用：未量測。`,'small muted'),element('p',`來源：${c.source}`,'small muted'));d.append(box);
+  box.append(element('p',`本輪輸入 ${c.contextMetrics.input.characters} 字元／${c.contextMetrics.input.utf8Bytes} UTF-8 bytes；輸出 ${c.contextMetrics.output.characters} 字元。${c.contextMetrics.usageLabel||'Token 與費用未知。'}`,'small muted'),element('p',`來源：${c.source}`,'small muted'));d.append(box);
  }
  const brief=element('button','準備精簡接手包','btn primary');brief.onclick=busy(brief,async()=>showCompactHandoff(t));d.append(brief);
 }

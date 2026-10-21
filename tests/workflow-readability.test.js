@@ -96,3 +96,14 @@ test('compact handoff removes repeated AI history but never truncates boundaries
   assert.equal(result.metrics.summary.tokens, null);
   assert.ok(result.metrics.recordedPromptAndReply.utf8Bytes > result.metrics.summary.utf8Bytes);
 });
+
+test('CLI usage and elapsed time survive task persistence and reach authenticated work cards',async t=>{
+ const {task,app,home,headers}=await setup(t);
+ const usage={source:'codex.exec.turn.completed',inputTokens:120,cachedInputTokens:40,outputTokens:8,cacheCreationInputTokens:null,costEstimateUsd:null};
+ app.coach.runAgent=async()=>({text:JSON.stringify({outline:{storyline:'表格閱讀',logic:[],sections:[],imageTotal:0},workItems:[{id:'W1',title:'表格',owner:'ai',detail:'調整樣式',acceptance:['保留來源'],dependsOn:[]}]}),usage,elapsedMs:42});
+ const started=await app.coach.draftOutline(task.id);await started.done;
+ const saved=parseTask(await readFile(path.join(home,'vault',task.id+'.md'),'utf8'),task.id+'.md');
+ assert.deepEqual(saved.planning.learningTurns.at(-1).usage,usage);
+ const response=await app.fetch(`/api/tasks/${task.id}/work-cards`,{headers});assert.equal(response.status,200);
+ const card=(await response.json()).cards.at(-1);assert.equal(card.contextMetrics.elapsedMs,42);assert.equal(card.contextMetrics.usage.inputTokens,120);assert.match(card.contextMetrics.usageLabel,/CLI 回報/);assert.match(workCardsMarkdown(saved),/輸入 120/);
+});

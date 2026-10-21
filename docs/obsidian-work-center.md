@@ -73,7 +73,7 @@ Theme 使用系統字型、Obsidian 變數與原創紙色／森林綠配色，�
 
 ## 使用量
 
-每輪保存實際送出的 Prompt、回覆、字元與 UTF-8 bytes。CLI 未提供可靠 tokenization／usage 時，Token 與費用為未知，不以零或字元數代替。
+每輪保存實際送出的 Prompt、回覆、字元與 UTF-8 bytes。成功的 Codex／Claude 呼叫會擷取 CLI 回報的用量，保存欄位來源與本機量測時間。缺少欄位、舊紀錄或失敗呼叫仍標未知，不以零或字元數代替。Claude 費用是 CLI 端估算，非實際帳單；不推算 Codex 費用。Codex 的 cached_input_tokens 是輸入中的快取部分；Claude 的 input_tokens、cache_read_input_tokens、cache_creation_input_tokens 是不同欄位，不混加後直接比較。
 
 ```sh
 npm run measure:handoff -- /absolute/MENTOR_HOME/vault/TASK-id.md
@@ -91,4 +91,11 @@ npm run measure:handoff -- /absolute/MENTOR_HOME/vault/TASK-id.md
 
 ## 尚未完成的產品方向
 
-本批不是完整改版完成：通用整理方案中的分類／搬移、全流程真實 AI 驗收、完整 Token 基準、README 全面改寫、PR／CI 審查仍需後續工作。
+本批不是完整改版完成：通用整理方案中的分類／搬移、全流程真實 AI 驗收、完整 Token 基準、README 真人操作驗證、PR／CI 審查仍需後續工作。
+
+### CLI 用量格式來源
+
+- [Codex 非互動模式](https://learn.chatgpt.com/docs/non-interactive-mode)：--json 的 turn.completed.usage；最終文字仍從 -o 讀取。
+- [Claude 程式化執行](https://code.claude.com/docs/en/headless)：--output-format json 的 result／metadata；total_cost_usd 是 client-side estimate。
+
+只保存白名單數值，不保存 CLI envelope 中的 session／帳號 metadata。此變更不會啟用 resume 或改變工具權限。比較兩個 Prompt 的真實用量仍需同模型、相同任務與品質驗證，不能用這次短句 smoke test 宣稱節省比例。

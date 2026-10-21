@@ -39,4 +39,4 @@ if (mode === 'filter-zero') reply = 'The model returned no content because the r
 if (mode === 'malformed-a' && prompt.includes('「任務制定」')) reply = '我無法提供任務卡。';
 if (mode === 'empty-b' && prompt.includes('「Grill me」')) reply = json({ ready: false, questions: [] });
 if (mode === 'quote-filter') reply = json({ explanation: 'The model returned no content because the response was blocked by content filtering.' });
-if (out) writeFileSync(out, reply); else process.stdout.write(reply);
+if (out) writeFileSync(out, reply); else process.stdout.write(args[args.indexOf('--output-format')+1]==='json' ? JSON.stringify({type:'result',is_error:false,result:reply}) : reply);

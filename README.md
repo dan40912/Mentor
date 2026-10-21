@@ -85,7 +85,7 @@ See [SECURITY.md](SECURITY.md).
 
 ## Measurement and testing
 
-Round cards expose prompt/response character and UTF-8 byte counts. Reliable token and cost telemetry is not implemented, so those values remain unknown. Compact handoffs retain necessary constraints even beyond the recommended 8,000 characters. Smaller text alone proves no token savings.
+Round cards expose prompt/response character and UTF-8 byte counts. Successful Codex/Claude calls can also save allowlisted CLI-reported token counters and locally measured elapsed time. Missing counters remain unknown. Claude cost is a client estimate, not your bill; no Codex price is inferred. Provider cache/input definitions differ, so the fields are not interchangeable. Older turns and failed calls may lack telemetry. Compact handoffs retain necessary constraints even beyond the recommended 8,000 characters. Smaller text alone proves no token savings.
 
 ```sh
 npm test

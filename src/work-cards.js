@@ -1,3 +1,4 @@
+import { usageLabel } from './cli-usage.js';
 // These projections use persisted state, never another AI call to invent a summary.
 export function measureText(text = '') {
   return { characters: [...text].length, utf8Bytes: Buffer.byteLength(text), tokens: null, tokenSource: 'unavailable' };
@@ -30,7 +31,7 @@ export function workCards(task) {
     outputs: turn.outputs || [],
     checks: turn.checks || [],
     next: turn.nextAction || null,
-    contextMetrics: { input: measureText(turn.prompt), output: measureText(turn.response), usage: turn.usage || null },
+    contextMetrics: { input: measureText(turn.prompt), output: measureText(turn.response), usage: turn.usage || null, usageLabel: usageLabel(turn.usage), elapsedMs: turn.elapsedMs ?? null },
     simulated: Boolean(turn.simulated),
     source: `vault/${task.id}.md#planning.learningTurns[id=${turn.id}]`,
   }));
@@ -51,6 +52,7 @@ export function workCardsMarkdown(task) {
       ...card.checks.map(check => `- 機器檢查：${check.result}｜${check.label || check.id}｜${check.detail || check.note || '未附說明'}`),
       ...(!card.checks.length ? ['- 機器檢查：未記錄，不視為通過'] : []),
       `- 當輪結束時的下一步：${card.next?.label || '未記錄，請查看目前任務狀態'}`,
+      `- 使用量：${card.contextMetrics.usageLabel}`,
       `- 來源：${card.source}`,
     ].join('\n')),
   ].join('\n\n');

@@ -46,7 +46,7 @@ class MentorView extends ItemView {
       const box=host.createDiv({cls:'mentor-task'});text(box,'h3',task.title);text(box,'p',task.nextAction?.label||task.current?.summary);
       text(box,'p',`第 ${task.revision} 版 · ${task.planning?.running?'執行中':task.status}`,'mentor-caption');
       const latest=task.workCards?.at(-1);
-      if(latest){text(box,'h4','這一輪');text(box,'p',latest.context?.interpretation||'當時理解未記錄');text(box,'p',latest.outcome);}
+      if(latest){text(box,'h4','這一輪');text(box,'p',latest.context?.interpretation||'當時理解未記錄');text(box,'p',latest.outcome);const usage=box.createEl('details');text(usage,'summary','本輪用量');text(usage,'p',latest.contextMetrics?.usageLabel||'Token 與費用未知。');text(usage,'p',latest.contextMetrics?.elapsedMs==null?'執行時間未記錄。':`本機量測執行時間：${latest.contextMetrics.elapsedMs} ms。`);}
       const row=box.createDiv({cls:'mentor-actions'});
       button(row,'開啟任務與下一步',()=>this.plugin.task(task),true);
       button(row,'準備接手包',()=>this.plugin.handoff(task));
