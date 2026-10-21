@@ -1,0 +1,55 @@
+# Mentor × Obsidian 改版追蹤
+
+規格：`prompts/mentor-obsidian-redesign-prompt.md` 與 `prompts/mentor-obsidian-workflow-optimization-prompt.md`。完整目標不因第一批實作而縮小。本文件為開發狀態，不是驗收通過宣告。
+
+## 工作基準
+
+- Repo：dan40912/Mentor；基於既有 lab-zero-touch 的 commit `5b8c7e89eadf6e1a833651a695037b184109864b`。
+- 分支：codex/mentor-obsidian-workflow。
+- 獨立 worktree；原始 checkout 的 agents／coach／handoffs／server／web 修改，以及 Body-release、POC 與其他未追蹤檔均未覆蓋或帶入。
+- 基線：npm test，276 pass／0 fail。
+
+## 盤點結論
+
+既有任務正本、revision、CLI 執行、教練階段、核准計畫、成果檢查與交接機制可以保留。缺口是：本輪狀態分散、完整交接混入過多歷史、原生 Obsidian 入口缺失、預覽沒有獨立內容識別、Theme／範本尚未形成正式套裝。
+
+原始 Web 工作台仍有多入口與大量細節。本批先提供可核對資料與原生入口，不宣稱已解決全部複雜度。
+
+## 需求／證據追蹤
+
+| 需求 | 狀態 | 目前證據／下一步 |
+| --- | --- | --- |
+| 現況盤點與保護既有修改 | 已完成本批 | 獨立 worktree、基線測試 |
+| 本輪工作卡、當時理解、結果與證據分層 | 已實作／自動測試 | work-cards.js、workflow-readability.test.js；已瀏覽器檢查 |
+| 計畫預覽、內容與版本綁定 | 已實作／自動測試 | plan-preview.js、Coach.approveOutline；錯誤識別、過期與重複點擊測試 |
+| 不靠完整聊天的接手摘要 | 已實作／自動測試 | compact-handoff.js；保留完整人的修正與邊界，歷史按需讀取 |
+| 原生 Obsidian 側欄與命令 | 已實作，待實機 | main.js；關鍵行為隔離測試不代替 Obsidian 桌面驗收 |
+| 本機配對、撤銷、有限權限 | 已實作／HTTP 測試 | obsidian-bridge.test.js；不放寬網站同源 |
+| 從筆記預覽建立任務 | 已實作／隔離測試 | 來源變動拒絕、長文不截斷、重試建立冪等 |
+| Theme、首頁與八個內容範本 | 已產生，待實機 | themes/Mentor、obsidian/templates；閱讀／Live Preview 待驗證 |
+| 由一份狀態提供人／AI／稽核閱讀層 | 部分完成 | 工作卡與接手摘要已共用狀態；仍須進一步降低主畫面閱讀負擔 |
+| 通用整理方案與批次預覽／復原 | 尚未實作 | 需規劃索引／分類／搬移的來源版本、部分成功與復原契約 |
+| Mentor 資訊架構與 UI 簡化 | 尚未完成 | 保留既有可用功能，下一批以使用流程重排必要資訊 |
+| 自然語言修正與方向漂移處理 | 部分完成 | 原始要求與 AI 理解並列；尚未完成明確影響分析與修正閉環 |
+| Token 效率與上下文去重 | 部分完成 | 接手摘要大小可重現量測；CLI Prompt 去重與真實 Token 基準尚未完成 |
+| 數據呈現可信度 | 部分完成 | 字元／bytes 為實測，Token／成本未知；其他數據仍待整體 Review |
+| README 與完整教學 | 部分完成 | 新安裝限制文件與 README 入口；全面重寫與實機教學驗證待完成 |
+| 真實多 AI 與停止／復原／驗收 | 待整合驗收 | 既有機器測試可回歸；真實登入 CLI 未使用，不宣稱實測 |
+| 真人閱讀與接手測試 | 未驗證 | 需真人；不得由 AI 自評替代 |
+| GitHub PR、最新 head CI | 待完成後提交 | 不以本機綠燈代替遠端 CI 或維護者驗收 |
+
+## 第一批驗證紀錄
+
+- npm test：284 pass／0 fail；新增最後的成功標準保留檢查後，workflow-readability 的 3 項也再次通過。
+- 插件隔離測試：不把憑證存入 data.json、不連遠端主機、預覽不執行、來源變動拒絕、重試保持建立識別、過長原文不截斷。
+- 瀏覽器測試：正式 Web 的工作卡與計畫預覽可讀；fake CLI 故意回傳與原始 Obsidian 要求不相符的簡報，預覽能對照偏差，退回修改而沒有批准錯誤方向。這不是原生 Theme 或真實 AI 品質測試。
+- 同一份虛構任務 revision 7：完整交接 7,494 字元／9,824 bytes，摘要 1,701 字元／2,883 bytes。只是格式大小比較，Token 與費用皆未量測，品質需另驗。
+- 輸出套裝：npm run package:obsidian；不啟用插件、不修改正式 Vault。
+
+## 下一批順序
+
+1. 完成插件 HTTP/UI 整合測試與 Theme 實機驗收條件，修正發現的缺口。
+2. 將「現在／任務／成果與知識」落實為更少決策負擔的 UI，詳細歷史與設定按需展開。
+3. 實作可預覽的一般整理方案，先做索引／知識整理，再評估搬移；加入過期、部分成功與復原測試。
+4. 真實 CLI 與跨 AI 接力、Prompt 去重與可重現使用量基準。
+5. 更新 README、教學、截圖、相容性矩陣，跑完整檢查後提交 PR；缺少實機或真人證據時保持 Draft 並明示。

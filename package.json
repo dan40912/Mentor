@@ -18,7 +18,9 @@
   "scripts": {
     "start": "node src/server.js",
     "test": "node scripts/test.mjs",
-    "demo": "node scripts/demo.mjs"
+    "demo": "node scripts/demo.mjs",
+    "package:obsidian": "node scripts/package-obsidian.mjs",
+    "measure:handoff": "node scripts/measure-handoff.mjs"
   },
   "engines": {
     "node": ">=20"

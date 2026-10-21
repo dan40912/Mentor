@@ -1,3 +1,5 @@
+> **Obsidian integration in development:** native sidebar, session-only local pairing, version-bound plan previews, work cards, an original light/dark theme and starter templates. Build with `npm run package:obsidian`. Desktop/real-provider acceptance is still pending. See [setup and limitations](docs/obsidian-work-center.md).
+
 <div align="center">
 
 <img src="web/assets/mentor.svg" width="72" alt="Mentor logo">

@@ -1,3 +1,4 @@
+import { workCardsMarkdown } from './work-cards.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { readFile, writeFile, rename, readdir, realpath, stat, lstat, unlink } from 'node:fs/promises';
 import path from 'node:path';
@@ -82,6 +83,7 @@ function renderHuman(task) {
     `**你現在要做的一件事**：${action.label}`,
     '',
     ...planning,
+    workCardsMarkdown(task),
     `## 驗收清單`,
     list(task.checks.map(c => `${c.result}｜${c.label}${c.note ? `（${c.note}）` : ''}`)),
     '',

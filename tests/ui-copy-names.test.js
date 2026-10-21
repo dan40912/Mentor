@@ -94,10 +94,11 @@ test('規格 3–8、10、26：實際 renderPlanning 標題、依賴、按鈕與
   t.nextAction = planningAction(t);const detail = node('div');ctx.renderPlanning(t, detail);
   const copy = texts(detail);
   for (const text of ['成品架構', 'AI 打算這樣組織成品。這裡錯了，後面每一項都會跟著錯，所以先看這裡。',
-    '要做的事（共 3 項）', '看這份計畫時注意', '核准，開始做', '我要改', '要先完成：第 1、2 項']) assert.ok(copy.includes(text), text);
+    '要做的事（共 3 項）', '看這份計畫時注意', '預覽並核准計畫', '我要改', '要先完成：第 1、2 項']) assert.ok(copy.includes(text), text);
   assert.ok(copy.includes('骨架版 W0 的素材標題'));
-  await all(detail).find(n => n.textContent === '核准，開始做').onclick();
-  assert.deepEqual(calls[0], [t, 'approve']);
+  ctx.previewPlan = async task => calls.push([task, 'preview']);
+  await all(detail).find(n => n.textContent === '預覽並核准計畫').onclick();
+  assert.deepEqual(calls[0], [t, 'preview']);
   all(detail).find(n => n.textContent === '我要改').onclick();assert.deepEqual(calls[1], ['focus']);
   assert.equal(ctx.trackOf(t).nodes[2].name, '計畫');
   for (const ready of [false, true]) {

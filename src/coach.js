@@ -1,3 +1,5 @@
+import { turnContext } from './work-cards.js';
+import { planPreview } from './plan-preview.js';
 import { normalizePreview, normalizeChanges } from './review-settings.js';
 import { normalizeTestCommand } from './test-command.js';
 import { Attachments, attachmentContext } from './attachments.js';
@@ -554,7 +556,7 @@ export class Coach {
     this.cancelled.delete(id);
     const started = await this.store.mutate(id, task.revision, null, t => {
       const startedAt = now();
-      (t.planning.learningTurns ||= []).push({ id: turnId, stage: stageId, provider: agent.provider, modelId: agent.modelId, effort: agent.effort, agent: agentLabel(agent), startedAt, status: 'running', prompt, userInput, inputKind, workItemId: metadata.workItemId || null, beforeRevision: task.revision });
+      (t.planning.learningTurns ||= []).push({ id: turnId, stage: stageId, provider: agent.provider, modelId: agent.modelId, effort: agent.effort, agent: agentLabel(agent), startedAt, status: 'running', prompt, userInput, inputKind, workItemId: metadata.workItemId || null, beforeRevision: task.revision, context: turnContext(task), simulated: /fake-cli/i.test(path.basename(process.env[{codex:'AWC_CODEX_BIN',claude:'AWC_CLAUDE_BIN',copilot:'AWC_COPILOT_BIN'}[agent.provider]] || '')) });
       t.planning.running = { stage: stageId, provider: agent.provider, modelId: agent.modelId, effort: agent.effort, agent: agentLabel(agent), startedAt, turnId, workItemId: metadata.workItemId || null, mode };
       t.planning.stopped = null;
       return { status: 'RUNNING' };
@@ -607,6 +609,9 @@ export class Coach {
         const completed = draft.planning.learningTurns.find(entry => entry.id === turnId);
         completed.status = 'completed';
         completed.afterRevision = t.revision + 1;
+        completed.nextAction = planningAction(draft);
+        completed.usage = result.usage || null;
+        completed.checks = structuredClone(metadata.workItemId ? draft.planning.workItems.find(w => w.id === metadata.workItemId)?.sensors || [] : []);
         completed.outputs = metadata.workItemId ? draft.planning.workItems.find(w => w.id === metadata.workItemId)?.outputs || [] : [];
         const learning = extractJson(result.text)?.learning;
         completed.learning = Object.fromEntries(['change', 'reason', 'evidence', 'lesson', 'nextPrompt', 'question'].map(key => [key, typeof learning?.[key] === 'string' ? learning[key].trim().slice(0, 2000) : '']));
@@ -850,13 +855,16 @@ export class Coach {
     return started;
   }
 
-  approveOutline(id, revision, key) {
+  approveOutline(id, revision, key, proposalId = null) {
     return this.store.mutate(id, revision, key, t => {
       if (t.planning?.phase !== 'outline') throw new TaskError(409, 'WRONG_PHASE', '目前沒有待確認的計畫。');
+      const preview = planPreview(t);
+      if (proposalId !== null && proposalId !== preview.id) throw new TaskError(409, 'PLAN_STALE', '計畫已變更，請重新預覽後再核准。');
+      t.planning.approvedPlan = { id: preview.id, revision: t.revision, at: now(), by: 'human' };
       t.planning.phase = 'execute';
       t.next = '依工作項目順序執行；每項完成後讓 AI 檢查，再由你確認。';
-      return { status: planningStatus(t) };
-    }, 'approve', {}).then(async result => { await this.audit(id, 'GATE_APPROVED', { stage: 'C', outlineVersion: result.task.planning.outline.version }); return result; });
+      return { status: planningStatus(t), after: () => this.audit(id, 'GATE_APPROVED', { stage: 'C', outlineVersion: t.planning.outline.version, proposalId: preview.id }) };
+    }, 'approve', { proposalId });
   }
 
   item(t, itemId) {

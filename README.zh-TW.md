@@ -1,3 +1,5 @@
+> **Obsidian 整合開發中：**已加入原生側欄、僅記憶體保存的本機配對、版本綁定的計畫預覽、每輪工作卡、原創淺深色主題與範本。以 `npm run package:obsidian` 產生示範庫；桌面實機與真實 AI 驗收仍待完成。詳見[安裝與限制](docs/obsidian-work-center.md)。
+
 <div align="center">
 
 <img src="web/assets/mentor.svg" width="72" alt="Mentor logo">

@@ -1,0 +1,99 @@
+/* Mentor — original paper and forest design. MIT; no external assets or fonts. */
+.theme-light {
+  --background-primary: #fbfaf6;
+  --background-primary-alt: #f4f3ed;
+  --background-secondary: #efeee7;
+  --background-secondary-alt: #e9e9e0;
+  --background-modifier-border: #dfE2d7;
+  --background-modifier-border-hover: #bac8b6;
+  --text-normal: #303b32;
+  --text-muted: #677362;
+  --text-faint: #7e887a;
+  --text-accent: #3d6a4c;
+  --text-accent-hover: #285139;
+  --interactive-accent: #426b50;
+  --interactive-accent-hover: #365a41;
+  --text-on-accent: #ffffff;
+  --color-accent: #426b50;
+  --color-accent-rgb: 66,107,80;
+  --blockquote-border-color: #a48c64;
+  --table-header-background: #eaf0e5;
+  --table-row-alt-background: #f5f6ef;
+  --code-background: #f0f1e9;
+}
+.theme-dark {
+  --background-primary: #202823;
+  --background-primary-alt: #27312a;
+  --background-secondary: #19211c;
+  --background-secondary-alt: #151d18;
+  --background-modifier-border: #3b493e;
+  --background-modifier-border-hover: #657e67;
+  --text-normal: #e2e9dd;
+  --text-muted: #b2bfa9;
+  --text-faint: #95a28e;
+  --text-accent: #b3d0a8;
+  --text-accent-hover: #d4e6ca;
+  --interactive-accent: #b3d0a8;
+  --interactive-accent-hover: #c2dcb8;
+  --text-on-accent: #1b2c20;
+  --color-accent: #b3d0a8;
+  --color-accent-rgb: 179,208,168;
+  --blockquote-border-color: #bea57f;
+  --table-header-background: #304033;
+  --table-row-alt-background: #263329;
+  --code-background: #29362c;
+}
+body {
+  --font-text-theme: -apple-system, BlinkMacSystemFont, "PingFang TC", sans-serif;
+  --line-height-normal: 1.8;
+  --h1-size: 1.9em;
+  --h2-size: 1.4em;
+  --h3-size: 1.15em;
+  --h1-weight: 550;
+  --h2-weight: 550;
+  --h3-weight: 600;
+  --h1-color: var(--text-normal);
+  --h2-color: var(--text-accent);
+  --h3-color: var(--text-normal);
+  --file-line-width: 790px;
+  --radius-s: 6px;
+  --radius-m: 10px;
+  --radius-l: 14px;
+  --tab-radius-active: 9px;
+  --tab-font-size: 13px;
+  --nav-item-size: 13px;
+  --nav-item-padding: 7px 10px;
+  --nav-item-radius: 7px;
+  --nav-item-background-active: var(--background-primary);
+  --nav-item-color-active: var(--text-accent);
+  --metadata-label-font-size: 12px;
+  --metadata-input-font-size: 13px;
+  --table-border-color: var(--background-modifier-border);
+  --table-header-weight: 600;
+  --table-cell-vertical-alignment: top;
+  --table-row-alt-background: var(--background-primary-alt);
+  --callout-radius: 12px;
+  --callout-padding: 16px 20px;
+  --blockquote-border-thickness: 2px;
+  --blockquote-font-style: normal;
+  --input-radius: 7px;
+  --code-radius: 8px;
+}
+.markdown-rendered h1, .HyperMD-header-1 { letter-spacing: .025em; }
+.markdown-rendered h2 { margin-top: 1.8em; }
+.markdown-rendered table { width: 100%; font-variant-numeric: tabular-nums; }
+.markdown-rendered th, .markdown-rendered td { padding: 10px 14px; line-height: 1.6; }
+.markdown-rendered tbody tr:hover { background: var(--background-primary-alt); }
+.markdown-source-view.mod-cm6 .cm-table-widget th,
+.markdown-source-view.mod-cm6 .cm-table-widget td { padding: 10px 14px; }
+.callout { border: 1px solid var(--background-modifier-border); }
+.metadata-container { border: 1px solid var(--background-modifier-border); border-radius: 10px; padding: 12px; margin-bottom: 24px; }
+.workspace-tab-header.is-active { box-shadow: 0 1px 4px #0000000a; }
+button:focus-visible, a:focus-visible { outline: 2px solid var(--text-accent); outline-offset: 3px; }
+@media (max-width: 600px) {
+  body { --h1-size: 1.65em; --file-margins: 20px; }
+  .markdown-rendered th, .markdown-rendered td { padding: 8px 10px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0s !important; animation-duration: 0s !important; }
+}
