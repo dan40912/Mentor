@@ -1,6 +1,7 @@
 /* MIT. Buildless CommonJS, using only Obsidian's public API and Node's crypto. */
 const { Plugin, ItemView, Modal, Notice, MarkdownView, requestUrl, Setting, PluginSettingTab } = require('obsidian');
 const { randomUUID, createHash } = require('node:crypto');
+const { Organization, ROOT: ORGANIZED_ROOT, HISTORY: ORGANIZATION_HISTORY } = require('./organization');
 const VIEW = 'mentor-work-center';
 
 function localAddress(value) {
@@ -39,7 +40,7 @@ class MentorView extends ItemView {
     const { tasks } = await this.plugin.api('/tasks');
     host.empty();text(host,'h2','現在，需要你做什麼？');
     text(host,'p','原生筆記與本機任務，共用同一份狀態。','mentor-caption');
-    const actions=host.createDiv({cls:'mentor-actions'});button(actions,'從目前筆記準備任務',()=>this.plugin.prepare(),true);button(actions,'重新整理',this.refresh);
+    const actions=host.createDiv({cls:'mentor-actions'});button(actions,'從目前筆記準備任務',()=>this.plugin.prepare(),true);button(actions,'重新整理',this.refresh);button(actions,'預寫資料夾索引',()=>this.plugin.prepareIndex());button(actions,'整理紀錄與復原',()=>this.plugin.organizationHistory());
     if (!tasks.filter(t=>!t.error&&!t.trashed).length) text(host,'p','還沒有任務。從目前筆記或選取內容開始。');
     for (const task of tasks.filter(t=>!t.error&&!t.trashed).sort((a,b)=>(a.status==='COMPLETED')-(b.status==='COMPLETED'))) {
       const box=host.createDiv({cls:'mentor-task'});text(box,'h3',task.title);text(box,'p',task.nextAction?.label||task.current?.summary);
@@ -76,6 +77,9 @@ module.exports = class MentorPlugin extends Plugin {
     this.addCommand({id:'prepare-from-note',name:'從目前筆記或選取內容準備任務',callback:()=>this.prepare()});
     this.addCommand({id:'pair-local-service',name:'配對本機服務',callback:()=>this.pair()});
     this.addSettingTab(new MentorSettings(this.app,this));
+    this.organization=new Organization(this.organizationAdapter());
+    this.addCommand({id:'preview-folder-index',name:'為目前資料夾預寫索引（先預覽）',callback:()=>this.prepareIndex().catch(e=>new Notice(e.message))});
+    this.addCommand({id:'organization-history',name:'查看整理紀錄與復原',callback:()=>this.organizationHistory().catch(e=>new Notice(e.message))});
   }
   onunload() { this.token=null; }
   async savePreferences() { await this.saveData({address:this.address,sources:this.sources}); }
@@ -122,6 +126,75 @@ module.exports = class MentorPlugin extends Plugin {
         if(lastRequest!==null&&lastRequest!==request)createKey=randomUUID();lastRequest=request;
         const r=await this.api('/tasks',{request,profile:'quick'},createKey);this.sources[r.task.id]={path:file.path,hash:baseHash};await this.savePreferences();modal.close();await this.open();this.refresh();
       },true);
+    }).open();
+  }
+  organizationAdapter() {
+    const vault=this.app.vault;
+    const folder=async name=>{if(!name)return;let current='';for(const part of name.split('/')){current=current?current+'/'+part:part;const found=vault.getAbstractFileByPath(current);if(!found)await vault.createFolder(current);else if(found.stat)throw new Error('資料夾位置已有檔案：'+current);}};
+    const fileAt=name=>{const file=vault.getAbstractFileByPath(name);if(file&&!file.stat)throw new Error('預期檔案卻遇到資料夾：'+name);return file;};
+    return {
+      read:async name=>{const file=fileAt(name);return file?await vault.read(file):null;},
+      createJournal:async(name,content)=>{await folder(name.slice(0,name.lastIndexOf('/')));await vault.create(name,content);},
+      writeJournal:async(name,content)=>{const file=fileAt(name);if(!file)throw new Error('復原紀錄已消失，停止整理。');await vault.process(file,()=>content);},
+      compareWrite:async(name,before,after)=>{
+        if(before===null){if(after===null)return;await folder(name.slice(0,name.lastIndexOf('/')));await vault.create(name,after);return;}
+        const file=fileAt(name);if(!file)throw new Error('檔案已消失：'+name);
+        await vault.process(file,current=>{if(current!==before)throw new Error('檔案已被修改，保留目前內容：'+name);return after===null?current:after;});
+        if(after===null){if(await vault.read(file)!==before)throw new Error('撤回前有人修改，停止移入回收桶：'+name);await vault.trash(file,false);}
+      }
+    };
+  }
+  async prepareIndex() {
+    const view=this.app.workspace.getActiveViewOfType(MarkdownView),file=view?.file;
+    if(!file)throw new Error('請先開啟資料夾內的一份 Markdown 筆記。');
+    const parent=file.path.includes('/')?file.path.slice(0,file.path.lastIndexOf('/')):'';
+    const paths=this.app.vault.getMarkdownFiles().filter(f=>(parent?f.path.startsWith(parent+'/'):!f.path.includes('/'))&&!f.path.startsWith(ORGANIZED_ROOT+'/')).map(f=>f.path);
+    const title=(parent||'根目錄')+' · 筆記索引';
+    const target=ORGANIZED_ROOT+'/'+(parent?parent.replaceAll('/',' · '):'根目錄')+'索引.md';
+    const plan=await this.organization.previewIndex(paths,title,target);
+    this.showOrganizationPlan(plan);
+  }
+  showOrganizationPlan(plan) {
+    new ReviewModal(this.app,plan.label+' · 先看變更',(host,modal)=>{
+      text(host,'p',`${plan.sources.length} 份來源，${plan.operations.length} 項產出。這份索引依檔名預寫，不會呼叫 AI、不搬動原文。`);
+      text(host,'p',`方案 ${plan.id} · ${plan.digest.slice(0,12)}`,'mentor-caption');const sourceList=host.createEl('details');text(sourceList,'summary','查看本次來源清單');for(const source of plan.sources)text(sourceList,'p',source.path);
+      const selected=new Set(plan.operations.map(op=>op.id)),edits=new Map();
+      for(const op of plan.operations){
+        const box=host.createDiv({cls:'mentor-task'}),label=box.createEl('label'),check=label.createEl('input',{type:'checkbox'});check.checked=true;label.appendText((op.before===null?'建立：':'更新：')+op.path);check.onchange=()=>check.checked?selected.add(op.id):selected.delete(op.id);
+        if(op.before!==null){text(box,'h4','修改前');text(box,'pre',op.before,'mentor-source');}text(box,'h4','套用後');text(box,'pre',op.after,'mentor-source');const edit=box.createEl('details');text(edit,'summary','修改這份草稿');const area=edit.createEl('textarea',{attr:{'aria-label':'修改草稿：'+op.path}});area.value=op.after;edits.set(op.id,area);
+      }
+      text(host,'p','可取消不想套用的項目。來源或目標有變更時會拒絕；套用後可在「整理紀錄與復原」撤回，後來的人工修改不會被覆寫。新建筆記撤回時移入 Vault 的 .trash，可再次取回。');
+      const result=text(host,'p','','mentor-caption');
+      button(host,'套用已選的整理方案',async()=>{if(plan.operations.some(op=>edits.get(op.id).value!==op.after))throw new Error('草稿已修改，請先按「重新預覽修改後草稿」，再套用新版方案。');const log=await this.organization.apply(plan,[...selected]);result.textContent=log.status==='applied'?'已套用。原始筆記保持原位。':`部分完成：${log.error||'請查看紀錄'}。請先查看已完成項目，再決定是否重試。`;new Notice(result.textContent);},true);
+      button(host,'重新預覽修改後草稿',async()=>{const outputs=plan.operations.filter(op=>selected.has(op.id)).map(op=>({path:op.path,after:edits.get(op.id).value}));await this.organization.verifySources(plan);const revised=await this.organization.previewWrites(plan.sources,outputs,plan.label);modal.close();this.showOrganizationPlan(revised);});
+      button(host,'暫不套用',()=>modal.close());
+    }).open();
+  }
+  async organizationHistory() {
+    const ids=this.app.vault.getFiles().filter(f=>f.path.startsWith(ORGANIZATION_HISTORY+'/')&&/\/[a-f0-9-]{36}\.json$/.test(f.path)).map(f=>f.basename);
+    new ReviewModal(this.app,'整理紀錄與復原',(host,modal)=>{
+      if(!ids.length)text(host,'p','尚無已確認的整理操作。預覽方案不會寫入紀錄。');
+      for(const id of ids){const box=host.createDiv({cls:'mentor-task'});text(box,'h3',id);
+        button(box,'檢查這次結果',async()=>{const log=await this.organization.inspect(id);text(box,'p',`${log.plan.label} · ${log.status}`);for(const file of log.files)text(box,'p',`${file.path} · ${{'matches-after':'符合套用後內容','matches-before':'符合套用前內容',conflict:'後來有變更，不能直接復原'}[file.state]}`);});
+        button(box,'重新核對中斷結果',async()=>{
+          const reviewed=await this.organization.inspect(id);
+          new ReviewModal(this.app,'先確認沒有其他執行中的整理',(view,review)=>{
+            text(view,'p','這個按鍵只比對內容並更新紀錄，不會重做或復原檔案。請先確認沒有其他 Obsidian 視窗或裝置正在套用同一方案。');
+            const label=view.createEl('label'),check=label.createEl('input',{type:'checkbox'});label.appendText('我已確認先前的整理已停止。');
+            text(view,'p',`目前紀錄：${reviewed.status}`);
+            button(view,'核對檔案並更新中斷紀錄',async()=>{if(!check.checked)throw new Error('請先確認先前的整理已停止。');const result=await this.organization.reconcile(id);new Notice('核對完成：'+result.status);review.close();});
+          }).open();
+        });
+        button(box,'重試已確認停止的未完成項目',async()=>{const log=await this.organization.load(id);if(!['partial','prepared'].includes(log.status))throw new Error('請先核對中斷結果；只有明確部分完成的操作能重試。');const result=await this.organization.apply(log.plan,log.selected);new Notice('重試結果：'+result.status);});
+        button(box,'預覽撤回這次整理',async()=>{
+          const log=await this.organization.inspect(id);
+          new ReviewModal(this.app,'確認復原範圍',(preview,review)=>{
+            text(preview,'p','只處理內容仍符合本次套用結果的檔案。後來的修改會保留並回報衝突。');
+            for(const file of log.files){const op=log.plan.operations.find(o=>o.id===file.id);text(preview,'p',`${file.path} · ${file.state==='conflict'?'保留人工修改，不覆寫':op.before===null?'移入 Vault .trash':'恢復原內容'}`);}
+            button(preview,'撤回仍可安全復原的項目',async()=>{const result=await this.organization.undo(id);new Notice(result.status==='reverted'?'已撤回這次整理。':`部分撤回，保留 ${result.conflicts?.length||0} 項衝突；請查看紀錄。`);review.close();modal.close();},true);
+          }).open();
+        });
+      }
     }).open();
   }
   async task(task) {

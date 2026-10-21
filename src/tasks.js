@@ -150,7 +150,7 @@ export function planningAction(task) {
     if (last?.role === 'ai' && last.questions?.length) return { kind: 'grill', label: `回答 AI 的 ${last.questions.length} 個問題`, button: '回答' };
     return { kind: 'grill', label: '補充需求，讓 AI 繼續問', button: '回答' };
   }
-  if (p.phase === 'outline') return { kind: 'outline', label: '看 AI 的計畫，沒問題就核准', button: '核准計畫' };
+  if (p.phase === 'outline') return { kind: 'outline', label: '看 AI 的計畫，沒問題就核准', button: '預覽計畫' };
   if (p.phase === 'done') return { kind: 'none', label: '全部工作項目都已由你確認', button: '查看' };
   const items = p.workItems;
   const pick = (status, extra = () => true) => items.find(i => i.status === status && extra(i));

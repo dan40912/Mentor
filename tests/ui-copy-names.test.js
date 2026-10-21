@@ -70,7 +70,7 @@ test('共用資源先載入，server 白名單、MIME 與檔案路徑可提供�
 test('規格 1、2、9、26：label/button 原文與 holderOf 的 AI 動作分類', () => {
   const ctx = context();vm.runInContext(`${holder}\nglobalThis.classify = holderOf;`, ctx);
   const outline = task('outline');
-  assert.deepEqual(planningAction(outline), { kind: 'outline', label: '看 AI 的計畫，沒問題就核准', button: '核准計畫' });
+  assert.deepEqual(planningAction(outline), { kind: 'outline', label: '看 AI 的計畫，沒問題就核准', button: '預覽計畫' });
   assert.equal(Coach.prototype.nextStep.call({}, outline, {}).stop.label, '看 AI 的計畫，沒問題就核准');
   const grill = task('grill');grill.planning.readyForOutline = true;
   assert.deepEqual(planningAction(grill), { kind: 'grill', label: '需求問清楚了，可以讓 AI 擬計畫', button: '讓 AI 擬計畫' });
