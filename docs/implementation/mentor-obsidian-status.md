@@ -73,3 +73,10 @@
 - 瀏覽器走過示範決策：開啟 Q3 卡片、選 30 日口徑、加入示範註記並送出；畫面證實保存且下一步改為人工驗收，未宣稱新成果或核准 placeholder 報告。新版截圖 docs/images/workflow-home.jpg 僅含虛構資料。
 - 入門教學改寫為範圍明確的示範，停止把檔案 hash 或示範畫面當成果品質證明。完整真人與 Obsidian 教學仍待驗。
 - GitHub 預設分支確認為 main；main 已透過 c976169 合併原工作基準，當前功能分支只多兩筆功能 commit，尚無對應 PR。
+
+## 第四批：Draft PR 與跨平台回歸修復
+
+- Draft PR：https://github.com/dan40912/Mentor/pull/2，目標 main；保留完整未完成需求，不宣稱已驗收。
+- 首次 CI 顯示 Windows 測試使用 POSIX 專用檔名與 URL.pathname、固定 /etc/hosts，以及 SIGTERM 繼承 pipe 假設。改用平台有效的 fixture、fileURLToPath、明確建立的外部檔，並以可控制 runner 驗證「停止結果未確認」契約。真實停止流程的其他測試保留。
+- 發現實際安全缺口：Windows 沒有 O_NOFOLLOW，附件 symlink 原本可能被讀取。新增跨平台 lstat 拒絕及開檔前後檔案 identity 核對，保留既有路徑保護與錯誤。
+- 修正後 macOS／Node v26.7.0 全部 290 pass／0 fail；遠端新 head 仍須跨平台確認。首次 Linux／macOS Node 22 的取消來自同一個不確定停止 fixture，不能當成功。

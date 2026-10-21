@@ -158,7 +158,9 @@ test('report with a new ARTIFACT rebinds checks, and acceptance re-verifies the 
   ({ task } = await store.markCheck('TASK-t1', 4, 'key-00033', { checkId: 'C2', result: 'PASS', note: '看過' }));
   await writeFile(v2, 'v2 被改了');
   await assert.rejects(store.accept('TASK-t1', 5, 'key-00034'), { code: 'ACCEPTANCE_INCOMPLETE' });
-  await assert.rejects(store.report('TASK-t1', 5, 'key-00035', { text: `TASK_ID: TASK-t1\nBASE_REVISION: 5\nSTATUS: DONE\nARTIFACT: /etc/hosts\n證據：x` }), { code: 'PATH_OUTSIDE_ROOT' });
+  const outside = path.join(path.dirname(allowed), 'outside-report.txt');
+  await writeFile(outside, 'outside');
+  await assert.rejects(store.report('TASK-t1', 5, 'key-00035', { text: `TASK_ID: TASK-t1\nBASE_REVISION: 5\nSTATUS: DONE\nARTIFACT: ${outside}\n證據：x` }), { code: 'PATH_OUTSIDE_ROOT' });
 });
 
 test('task file symlinks are refused', async () => {

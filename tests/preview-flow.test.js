@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile, mkdtemp, rm } from 'node:fs/promises';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
 import { classify, runAgent } from '../src/agents.js';
 import { Coach, prompts } from '../src/coach.js';
@@ -12,7 +13,7 @@ import { killTree } from '../src/platform.js';
 import { pendingFeedback, validateFeedback } from '../src/feedback.js';
 
 const read = file => readFile(new URL(`../${file}`, import.meta.url), 'utf8');
-const fake = new URL('fixtures/fake-cli.mjs', import.meta.url).pathname;
+const fake = fileURLToPath(new URL('fixtures/fake-cli.mjs', import.meta.url));
 process.env.AWC_CODEX_BIN = fake;
 process.env.AWC_CLAUDE_BIN = fake;
 
@@ -35,7 +36,7 @@ test('spec 6: a signalled CLI ignores stale login output', async t => {
   process.env.FAKE_MODE = 'slow-login';
   t.after(() => delete process.env.FAKE_MODE);
   await assert.rejects(runAgent({ provider: 'claude', prompt: 'x', onSpawn: child => {
-    child.stderr.once('data', () => killTree(child, 'SIGTERM'));
+    child.stderr.once('data', () => child.kill('SIGTERM'));
   } }), { code: 'AGENT_INTERRUPTED' });
 });
 
