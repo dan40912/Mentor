@@ -2,6 +2,7 @@
 const { Plugin, ItemView, Modal, Notice, MarkdownView, requestUrl, Setting, PluginSettingTab } = require('obsidian');
 const { randomUUID, createHash } = require('node:crypto');
 const { Organization, ROOT: ORGANIZED_ROOT, HISTORY: ORGANIZATION_HISTORY } = require('./organization');
+const ContentDrafts = require('./content-drafts');
 const VIEW = 'mentor-work-center';
 
 function localAddress(value) {
@@ -40,7 +41,7 @@ class MentorView extends ItemView {
     const { tasks } = await this.plugin.api('/tasks');
     host.empty();text(host,'h2','現在，需要你做什麼？');
     text(host,'p','原生筆記與本機任務，共用同一份狀態。','mentor-caption');
-    const actions=host.createDiv({cls:'mentor-actions'});button(actions,'從目前筆記準備任務',()=>this.plugin.prepare(),true);button(actions,'重新整理',this.refresh);button(actions,'預寫資料夾索引',()=>this.plugin.prepareIndex());button(actions,'整理紀錄與復原',()=>this.plugin.organizationHistory());
+    const actions=host.createDiv({cls:'mentor-actions'});button(actions,'從目前筆記準備任務',()=>this.plugin.prepare(),true);button(actions,'重新整理',this.refresh);button(actions,'預寫資料夾索引',()=>this.plugin.prepareIndex());button(actions,'預寫知識卡／回顧',()=>this.plugin.prepareContentDraft());button(actions,'整理紀錄與復原',()=>this.plugin.organizationHistory());
     if (!tasks.filter(t=>!t.error&&!t.trashed).length) text(host,'p','還沒有任務。從目前筆記或選取內容開始。');
     for (const task of tasks.filter(t=>!t.error&&!t.trashed).sort((a,b)=>(a.status==='COMPLETED')-(b.status==='COMPLETED'))) {
       const box=host.createDiv({cls:'mentor-task'});text(box,'h3',task.title);text(box,'p',task.nextAction?.label||task.current?.summary);
@@ -50,6 +51,7 @@ class MentorView extends ItemView {
       const row=box.createDiv({cls:'mentor-actions'});
       button(row,'開啟任務與下一步',()=>this.plugin.task(task),true);
       button(row,'準備接手包',()=>this.plugin.handoff(task));
+      const drafts=(task.planning?.messages||[]).filter(m=>m.role==='user'&&m.organizationDraft);if(drafts.length){const saved=box.createEl('details');text(saved,'summary',`內容草稿（${drafts.length}）`);for(const message of drafts){const kind=ContentDrafts.KINDS[message.organizationDraft.kind];if(kind)button(saved,`查看${kind.label}草稿：${message.organizationDraft.sourcePath}`,()=>this.plugin.contentDraft(task.id,message.requestKey));}}
       const source=this.plugin.sources[task.id];if(source)button(row,'開啟來源筆記',()=>this.app.workspace.openLinkText(source.path,'',false));
     }
   }
@@ -79,6 +81,7 @@ module.exports = class MentorPlugin extends Plugin {
     this.addSettingTab(new MentorSettings(this.app,this));
     this.organization=new Organization(this.organizationAdapter());
     this.addCommand({id:'preview-folder-index',name:'為目前資料夾預寫索引（先預覽）',callback:()=>this.prepareIndex().catch(e=>new Notice(e.message))});
+    this.addCommand({id:'prepare-content-draft',name:'從目前筆記預寫知識卡、每週回顧或來源筆記',callback:()=>this.prepareContentDraft().catch(e=>new Notice(e.message))});
     this.addCommand({id:'organization-history',name:'查看整理紀錄與復原',callback:()=>this.organizationHistory().catch(e=>new Notice(e.message))});
   }
   onunload() { this.token=null; }
@@ -154,9 +157,45 @@ module.exports = class MentorPlugin extends Plugin {
     const plan=await this.organization.previewIndex(paths,title,target);
     this.showOrganizationPlan(plan);
   }
+  async prepareContentDraft() {
+    const view=this.app.workspace.getActiveViewOfType(MarkdownView),file=view?.file;
+    if(!file)throw new Error('請先開啟來源 Markdown 筆記。');
+    const original=await this.app.vault.read(file),sourceHash=createHash('sha256').update(original).digest('hex'),excerpt=view.editor?.getSelection()||original;
+    if(!excerpt.trim()||excerpt.length>3500)throw new Error('請選取 1～3,500 字，不會自動截斷來源。');
+    const {tasks}=await this.api('/tasks'),available=tasks.filter(t=>!t.error&&!t.trashed&&t.planning&&!t.planning.running&&!t.planning.stopped&&(!t.planning.autopilot||t.planning.autopilot.waitingFor));
+    new ReviewModal(this.app,'先確認送給 AI 的整理內容',(host,modal)=>{
+      text(host,'p','只送出以下選取內容與來源版本，不傳整個 Vault。這次會使用已登入 CLI 的額度，產生草稿後仍需另行預覽與套用。');
+      text(host,'p',file.path);text(host,'pre',excerpt,'mentor-source');
+      if(!available.length){text(host,'p','目前沒有可紀錄這次草稿的閒置任務。請先建立任務並等 AI 停下；不自動建立另一套工作狀態。');button(host,'從這份筆記準備任務',()=>{modal.close();return this.prepare();});return;}
+      text(host,'label','紀錄到哪個任務');const taskSelect=host.createEl('select',{attr:{'aria-label':'紀錄草稿的任務'}});taskSelect.createEl('option',{value:'',text:'請選擇任務'});for(const task of available)taskSelect.createEl('option',{value:task.id,text:task.title});
+      text(host,'label','草稿類型');const kind=host.createEl('select',{attr:{'aria-label':'整理草稿類型'}});for(const [id,definition]of Object.entries(ContentDrafts.KINDS))kind.createEl('option',{value:id,text:definition.label});kind.value='knowledge';
+      text(host,'label','回顧期間（選填）');const period=host.createEl('input',{type:'text',attr:{'aria-label':'回顧期間',placeholder:'例如：2026-10-19 至 2026-10-25；留空會標示未知'}});
+      let submission=null;
+      button(host,'確認來源，讓 AI 預寫草稿',async()=>{
+        const task=available.find(t=>t.id===taskSelect.value);if(!task)throw new Error('請先選擇紀錄草稿的任務。');
+        const current=await this.app.vault.read(file);if(createHash('sha256').update(current).digest('hex')!==sourceHash)throw new Error('來源筆記已變更，請重新預覽。');
+        const payload={revision:task.revision,...ContentDrafts.prepare(kind.value,file.path,sourceHash,excerpt,period.value)};
+        const signature=JSON.stringify([task.id,payload]);if(!submission||submission.signature!==signature)submission={signature,key:randomUUID()};
+        await this.api(`/tasks/${task.id}/ask`,payload,submission.key);modal.close();new Notice('草稿已交給 AI。原文尚未修改，請從任務的「查看草稿」檢查結果。');this.refresh();
+      },true);
+    }).open();
+  }
+  async contentDraft(taskId,key) {
+    if(!/^TASK-[a-zA-Z0-9-]+$/.test(taskId)||!/^[a-f0-9-]{36}$/.test(key))throw new Error('草稿識別不正確。');
+    const {tasks}=await this.api('/tasks'),task=tasks.find(t=>t.id===taskId);if(!task)throw new Error('找不到紀錄草稿的任務。');
+    const request=task.planning?.messages.find(m=>m.role==='user'&&m.organizationDraft&&m.requestKey===key),reply=task.planning?.messages.find(m=>m.role==='ai'&&m.inReplyTo===key);
+    if(!request)throw new Error('找不到原始整理要求。');
+    if(!reply)throw new Error(task.planning?.running?'AI 還在預寫，請稍後再查看。':'這次尚無可核對的回答；請查看問答紀錄，不自動重跑。');
+    const metadata=ContentDrafts.snapshotOf(request),output=ContentDrafts.output(request,reply,task.id,reply.resultRevision);
+    const sources=[{path:metadata.sourcePath,hash:metadata.sourceSha256}];
+    await this.organization.verifySources({sources});
+    if(await this.organization.io.read(output.path)===output.after){new ReviewModal(this.app,'這份草稿已保存',(host)=>{text(host,'p','目前內容與這次草稿相同，不重複寫入或建立復原紀錄。');text(host,'pre',output.after,'mentor-source');button(host,'開啟已保存的草稿',()=>this.app.workspace.openLinkText(output.path,'',false));}).open();return;}
+    const plan=await this.organization.previewWrites(sources,[output],'AI '+ContentDrafts.KINDS[metadata.kind].label+'草稿');
+    await this.organization.verifySources(plan);this.showOrganizationPlan(plan);
+  }
   showOrganizationPlan(plan) {
     new ReviewModal(this.app,plan.label+' · 先看變更',(host,modal)=>{
-      text(host,'p',`${plan.sources.length} 份來源，${plan.operations.length} 項產出。這份索引依檔名預寫，不會呼叫 AI、不搬動原文。`);
+      text(host,'p',`${plan.sources.length} 份來源，${plan.operations.length} 項產出。來源原文保持原位；這裡只預覽已準備的內容，套用不會再次呼叫 AI。AI 草稿的內容仍需你核對。`);
       text(host,'p',`方案 ${plan.id} · ${plan.digest.slice(0,12)}`,'mentor-caption');const sourceList=host.createEl('details');text(sourceList,'summary','查看本次來源清單');for(const source of plan.sources)text(sourceList,'p',source.path);
       const selected=new Set(plan.operations.map(op=>op.id)),edits=new Map();
       for(const op of plan.operations){
@@ -204,7 +243,13 @@ module.exports = class MentorPlugin extends Plugin {
       text(host,'p',task.current?.summary||'');
       for(const c of task.workCards||[]){const box=host.createDiv({cls:'mentor-task'});text(box,'h3',`${c.roleLabel||c.stage} · ${c.label}`);text(box,'p',c.outcome);if(c.aiClaims?.change)text(box,'p',`AI 自述：${c.aiClaims.change}`);for(const check of c.checks)text(box,'p',`${check.result} · ${check.label||check.id}`);}
       const invoke=async(action,input={})=>{await this.api(`/tasks/${task.id}/${action}`,{revision:task.revision,...input});modal.close();this.refresh();};
-      for(const message of (p?.messages||[]).filter(m=>m.kind==='discussion').slice(-4)){text(host,'h3',message.role==='user'?'你的問題':'問答回答（不是修改授權）');text(host,'p',message.text);if(message.discussion?.proposedChange)button(host,'帶入修正草稿',()=>{modal.close();this.instruction(task,{text:message.discussion.proposedChange,scope:message.discussion.scope});});}
+      for(const message of (p?.messages||[]).filter(m=>m.kind==='discussion').slice(-4)){
+        if(message.organizationDraft){text(host,'h3','整理草稿要求');text(host,'p',`${ContentDrafts.KINDS[message.organizationDraft.kind]?.label||'草稿'} · ${message.organizationDraft.sourcePath}`);const snapshot=host.createEl('details');text(snapshot,'summary','來源快照與原始要求');text(snapshot,'pre',message.text,'mentor-source');button(host,'查看與套用這份草稿',()=>this.contentDraft(task.id,message.requestKey));continue;}
+        const draftReply=(p.messages||[]).some(m=>m.organizationDraft&&m.requestKey===message.inReplyTo);
+        text(host,'h3',message.role==='user'?'你的問題':draftReply?'AI 整理草稿（尚未套用）':'問答回答（不是修改授權）');
+        if(draftReply){const body=host.createEl('details');text(body,'summary','閱讀完整草稿');text(body,'pre',message.text,'mentor-source');}else text(host,'p',message.text);
+        if(!draftReply&&message.discussion?.proposedChange)button(host,'帶入修正草稿',()=>{modal.close();this.instruction(task,{text:message.discussion.proposedChange,scope:message.discussion.scope});});
+      }
       if(p&&!p.running&&!p.stopped)button(host,'先問問題，不修改成果',()=>{modal.close();this.ask(task);});
       if(p?.running){button(host,'停止這次執行',()=>invoke('stop'));return;}
       if(p)button(host,'補充或修正這個任務',()=>{modal.close();this.instruction(task);});

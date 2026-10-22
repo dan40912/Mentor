@@ -6,6 +6,8 @@ import crypto from 'node:crypto';
 import path from 'node:path';
 const organizationModule={exports:{}};
 vm.runInNewContext(await readFile(new URL('../obsidian/mentor-work-center/organization.js',import.meta.url),'utf8'),{module:organizationModule,require:name=>name==='node:crypto'?crypto:path});
+const contentModule={exports:{}};
+vm.runInNewContext(await readFile(new URL('../obsidian/mentor-work-center/content-drafts.js',import.meta.url),'utf8'),{module:contentModule,require:name=>name==='./organization'?organizationModule.exports:path});
 const source=await readFile(new URL('../obsidian/mentor-work-center/main.js',import.meta.url),'utf8');
 class El {
   constructor(tag='',options={}){this.tag=tag;this.text=options.text||'';this.value=options.value||'';this.children=[];this.attrs=options.attr||{};}
@@ -25,6 +27,7 @@ function fixture(){
   const context={module:{exports:{}},URL,window:{},document:{},require:name=>{
     if(name==='node:crypto')return crypto;
     if(name==='./organization')return organizationModule.exports;
+    if(name==='./content-drafts')return contentModule.exports;
     if(name==='obsidian')return {Plugin,ItemView,Modal,MarkdownView,Notice:class{constructor(t){notices.push(t);}},PluginSettingTab:class{},Setting:class{},requestUrl:async input=>{requests.push(input);return {status:200,json:input.url.endsWith('/connect')?{token:'memory-only-secret'}:{task:{id:'TASK-plugin'}}};}};
     throw Error(name);
   }};
@@ -106,4 +109,26 @@ test('native question entry submits only ask and keeps one request identity for 
  f.plugin.ask({id:'TASK-question',revision:3});const modal=f.modal;all(modal.contentEl).find(e=>e.attrs['aria-label']==='只提問，不修改成果').value='這輪改了什麼？';
  const ask=all(modal.contentEl).find(e=>e.text==='先回答這個問題');await ask.onclick();await ask.onclick();
  assert.equal(calls.length,2);assert.ok(calls.every(c=>c.route==='/tasks/TASK-question/ask'));assert.equal(calls[0].key,calls[1].key);assert.equal(calls[0].input.question,'這輪改了什麼？');assert.ok(f.notices.includes('network unavailable'));
+});
+
+test('native AI draft preview exposes exact source and retries the same ask without storing a note body in preferences',async()=>{
+ const f=fixture();await f.plugin.onload();f.plugin.token='memory-only';
+ const calls=[];f.plugin.api=async(route,input,key)=>{calls.push({route,input,key});if(route==='/tasks')return {tasks:[{id:'TASK-draft',revision:5,title:'測試整理',planning:{messages:[],workItems:[]}}]};throw Error('network interrupted');};
+ await f.plugin.prepareContentDraft();assert.equal(calls.length,1);assert.equal(calls[0].route,'/tasks');
+ const modal=f.modal;all(modal.contentEl).find(e=>e.attrs['aria-label']==='紀錄草稿的任務').value='TASK-draft';
+ const send=all(modal.contentEl).find(e=>e.text==='確認來源，讓 AI 預寫草稿');await send.onclick();await send.onclick();
+ const asks=calls.filter(c=>c.input);assert.equal(asks.length,2);assert.equal(asks[0].key,asks[1].key);assert.equal(asks[0].route,'/tasks/TASK-draft/ask');assert.equal(asks[0].input.organizationDraft.sourcePath,'測試.md');assert.match(asks[0].input.question,/原始筆記/);assert.equal(f.saved,undefined);
+ f.read='改過的來源';await send.onclick();assert.equal(calls.filter(c=>c.input).length,2,'source drift blocks another transmission');
+});
+
+test('correlated AI content enters reversible preview only; later task revisions do not rewrite provenance',async()=>{
+ const f=fixture();await f.plugin.onload();const org=organizationModule.exports,prepared=contentModule.exports.prepare('weekly','測試.md',org.hash('原始筆記'),'原始筆記','');
+ const key='12345678-1234-1234-1234-123456789abc',request={role:'user',kind:'discussion',requestKey:key,text:prepared.question,organizationDraft:prepared.organizationDraft},reply={role:'ai',kind:'discussion',inReplyTo:key,resultRevision:8,text:'## 本週交付\n來源未記錄已驗收成果。',discussion:{intent:'question'}};
+ const task={id:'TASK-draft',revision:99,planning:{messages:[request,reply]}};f.plugin.api=async()=>({tasks:[task]});
+ const files=new Map([['測試.md','原始筆記']]);const io={read:async p=>files.get(p)??null,createJournal:async(p,text)=>{if(files.has(p))throw Error('exists');files.set(p,text);},writeJournal:async(p,text)=>files.set(p,text),compareWrite:async(p,before,after)=>{if((files.get(p)??null)!==before)throw Error('conflict');if(after===null)files.delete(p);else files.set(p,after);}};
+ f.plugin.organization=new org.Organization(io);let plan,previews=0;f.plugin.showOrganizationPlan=p=>{plan=p;previews++;};
+ await f.plugin.contentDraft(task.id,key);assert.equal(files.size,1);assert.equal(previews,1);assert.match(plan.operations[0].after,/mentor_revision: 8/);assert.match(plan.operations[0].after,/status: draft/);
+ await f.plugin.organization.apply(plan);const count=files.size;await f.plugin.contentDraft(task.id,key);assert.equal(previews,1,'identical saved draft creates no new plan');assert.equal(files.size,count);
+ await f.plugin.organization.undo(plan.id);assert.equal(files.get('測試.md'),'原始筆記');assert.equal(files.has(plan.operations[0].path),false);
+ files.set('測試.md','來源更新');await assert.rejects(f.plugin.contentDraft(task.id,key),error=>error.code==='SOURCE_STALE');
 });

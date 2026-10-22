@@ -67,9 +67,10 @@ npm run package:obsidian
 - 首頁和八份內容範本使用普通 Markdown，不要求 Dataview 或 Templater。
 - 從目前筆記／選取內容準備任務，送出前看清楚原文與目標；過長內容不偷偷截斷。
 - 「為目前資料夾預寫索引」先列來源與完整草稿。修改後重新預覽，再套用；只寫 `Mentor 整理/`，不搬動來源。它是檔名索引，不是 AI 摘要。
+- 「從目前筆記預寫知識卡、每週回顧或來源筆記」：先選紀錄任務、核對送給 AI 的來源，再生成草稿；預覽與修改後才能保存。來源版本變更會拒絕套用，保存不代表內容已驗收。
 - 「整理與復原紀錄」支援部分失敗重試及復原。後來被人修改的內容會保留並提示衝突。中斷先核對結果，不盲目重跑。
 
-停用 Theme／插件後，Markdown 仍可閱讀。套裝生成器不安裝到正式 Vault；`dist/` 是可重建產出，不要放正式筆記。升級前備份，插件需一併替換 main.js、organization.js、manifest.json、styles.css。[完整安裝、復原與限制](docs/obsidian-work-center.md)。
+停用 Theme／插件後，Markdown 仍可閱讀。套裝生成器不安裝到正式 Vault；`dist/` 是可重建產出，不要放正式筆記。升級前備份，插件需一併替換 main.js、organization.js、content-drafts.js、manifest.json、styles.css。[完整安裝、復原與限制](docs/obsidian-work-center.md)。
 
 ## 資料、權限與隱私
 
