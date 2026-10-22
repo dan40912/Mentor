@@ -21,7 +21,8 @@
     "demo": "node scripts/demo.mjs",
     "package:obsidian": "node scripts/package-obsidian.mjs",
     "measure:handoff": "node scripts/measure-handoff.mjs",
-    "benchmark:handoff": "node scripts/benchmark-handoff.mjs"
+    "benchmark:handoff": "node scripts/benchmark-handoff.mjs",
+    "verify:obsidian": "node scripts/verify-obsidian.mjs"
   },
   "engines": {
     "node": ">=20"

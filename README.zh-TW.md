@@ -59,6 +59,7 @@ npm start -- --home ~/mentor-data --port 4318
 
 ```sh
 npm run package:obsidian
+npm run verify:obsidian -- --vault dist/mentor-obsidian
 ```
 
 在 Obsidian 桌面版開啟 `dist/mentor-obsidian` 作為**獨立示範庫**。選擇 Mentor Theme，審閱插件後自行啟用，再從 Web「連接 Obsidian」取得一次性配對碼。插件只連 `http://127.0.0.1:port`；憑證只存在記憶體，重啟需重配對。
@@ -73,7 +74,7 @@ npm run package:obsidian
 - 「搬移或重新命名筆記」先核對完整筆記與連結變更，通過受支援範圍檢查後才能確認套用。保存操作日誌，支援核對中斷、重試與整組復原；後來的修改會阻擋復原並保留。此功能仍待 Obsidian 桌面驗收。
 - 「整理與復原紀錄」支援部分失敗重試及復原。後來被人修改的內容會保留並提示衝突。中斷先核對結果，不盲目重跑。
 
-停用 Theme／插件後，Markdown 仍可閱讀。套裝生成器不安裝到正式 Vault；`dist/` 是可重建產出，不要放正式筆記。升級前備份，插件需一併替換 main.js、organization.js、content-drafts.js、relocation.js、reference-coverage.js、manifest.json、styles.css。[完整安裝、復原與限制](docs/obsidian-work-center.md)。
+停用 Theme／插件後，Markdown 仍可閱讀。套裝生成器不安裝到正式 Vault；`dist/` 是可重建產出，不要放正式筆記。重建遇到人工改過的範本會停止，不默默覆寫。升級前備份，插件需一併替換 main.js、organization.js、content-drafts.js、relocation.js、reference-coverage.js、manifest.json、styles.css。[完整安裝、復原與限制](docs/obsidian-work-center.md)。
 
 ## 資料、權限與隱私
 
