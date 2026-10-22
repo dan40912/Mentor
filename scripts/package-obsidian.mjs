@@ -25,5 +25,5 @@ await cp(path.join(repo,'obsidian','templates'),path.join(target,'範本'),{recu
 for(const file of await readdir(path.join(repo,'obsidian','examples')))await copyFile(path.join(repo,'obsidian','examples',file),path.join(target,file));
 await copyFile(path.join(repo,'LICENSE'),path.join(target,'LICENSE'));
 await writeFile(path.join(target,'安裝說明.md'),`# Mentor Obsidian 套裝\n\n這是獨立示範庫，不會修改你的正式筆記庫。\n\n1. 在 Obsidian 開啟這個資料夾。\n2. 在「外觀」選擇 Mentor 主題。\n3. 審閱插件原始碼與權限，再自行啟用「Mentor Work Center」。未自動啟用第三方插件。\n4. 啟動本機 Mentor，從工作台取得一次性配對碼。\n5. 命令面板選擇「配對本機服務」。\n6. 開啟「00 工作首頁」。原生 Templates 插件可選「範本」資料夾。\n\n憑證只保存於插件記憶體，重啟需重新配對。主題停用不影響 Markdown 原文。\n\n完整文件：${'https://github.com/dan40912/Mentor'}\n\n這個版本尚須 Obsidian 實機與真人操作驗收；機器測試不可替代它們。\n`);
-for(const file of ['manifest.json','main.js','organization.js','content-drafts.js','styles.css'])if(!(await readFile(path.join(config,'plugins','mentor-work-center',file))).length)throw new Error('Missing plugin file');
+for(const file of ['manifest.json','main.js','organization.js','content-drafts.js','relocation.js','styles.css'])if(!(await readFile(path.join(config,'plugins','mentor-work-center',file))).length)throw new Error('Missing plugin file');
 console.log(`Built standalone Vault: ${target}`);

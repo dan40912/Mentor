@@ -8,6 +8,8 @@ const organizationModule={exports:{}};
 vm.runInNewContext(await readFile(new URL('../obsidian/mentor-work-center/organization.js',import.meta.url),'utf8'),{module:organizationModule,require:name=>name==='node:crypto'?crypto:path});
 const contentModule={exports:{}};
 vm.runInNewContext(await readFile(new URL('../obsidian/mentor-work-center/content-drafts.js',import.meta.url),'utf8'),{module:contentModule,require:name=>name==='./organization'?organizationModule.exports:path});
+const relocationModule={exports:{}};
+vm.runInNewContext(await readFile(new URL('../obsidian/mentor-work-center/relocation.js',import.meta.url),'utf8'),{module:relocationModule,require:name=>name==='./organization'?organizationModule.exports:name==='node:crypto'?crypto:path});
 const source=await readFile(new URL('../obsidian/mentor-work-center/main.js',import.meta.url),'utf8');
 class El {
   constructor(tag='',options={}){this.tag=tag;this.text=options.text||'';this.value=options.value||'';this.children=[];this.attrs=options.attr||{};}
@@ -27,8 +29,9 @@ function fixture(){
   const context={module:{exports:{}},URL,window:{},document:{},require:name=>{
     if(name==='node:crypto')return crypto;
     if(name==='./organization')return organizationModule.exports;
+    if(name==='./relocation')return relocationModule.exports;
     if(name==='./content-drafts')return contentModule.exports;
-    if(name==='obsidian')return {Plugin,ItemView,Modal,MarkdownView,Notice:class{constructor(t){notices.push(t);}},PluginSettingTab:class{},Setting:class{},requestUrl:async input=>{requests.push(input);return {status:200,json:input.url.endsWith('/connect')?{token:'memory-only-secret'}:{task:{id:'TASK-plugin'}}};}};
+    if(name==='obsidian')return {Plugin,ItemView,Modal,MarkdownView,parseLinktext:link=>({path:link.split('#')[0]}),Notice:class{constructor(t){notices.push(t);}},PluginSettingTab:class{},Setting:class{},requestUrl:async input=>{requests.push(input);return {status:200,json:input.url.endsWith('/connect')?{token:'memory-only-secret'}:{task:{id:'TASK-plugin'}}};}};
     throw Error(name);
   }};
   vm.runInNewContext(source,context);
@@ -165,4 +168,18 @@ test('native AI classification passes through evidence, editable tags, exact pre
  await all(preview.contentEl).find(e=>e.text==='套用已選的整理方案').onclick();assert.match(files.get('測試.md'),/#人工調整/);
  const journal=JSON.parse(files.get([...files.keys()].find(p=>p.endsWith('.json'))));assert.equal(journal.plan.basis.resultRevision,8);assert.equal(journal.plan.basis.suggestions[0].tag,'研究');assert.equal(journal.plan.operations[0].tags[0],'人工調整');
  await f.plugin.organization.undo(journal.plan.id);assert.equal(files.get('測試.md'),'原始筆記');
+});
+
+test('native relocation command reads a full snapshot and exposes link differences without any write or model call',async()=>{
+ const f=fixture();await f.plugin.onload();const files=new Map([['測試.md','原文'],['引用.md','[[測試]]']]);const entries=[...files.keys()].map(path=>({path,stat:{}}));
+ Object.assign(f.plugin.app.vault,{getMarkdownFiles:()=>entries,getFiles:()=>entries,getAbstractFileByPath:p=>entries.find(file=>file.path===p)||null,read:async file=>files.get(file.path),rename:async()=>assert.fail('preview must never rename'),modify:async()=>assert.fail('preview must never modify')});
+ f.plugin.app.metadataCache={getFileCache:file=>({links:file.path==='引用.md'?[{original:'[[測試]]',link:'測試',position:{start:{offset:0},end:{offset:6}}}]:[]}),getFirstLinkpathDest:link=>link==='測試'?entries[0]:null};
+ await f.plugin.previewRelocation();assert.equal(f.requests.length,0);all(f.modal.contentEl).find(e=>e.attrs['aria-label']==='搬移目標筆記路徑').value='知識/新名字.md';
+ await all(f.modal.contentEl).find(e=>e.text==='計算搬移與連結草稿').onclick();
+ assert.equal(f.modal.title,'搬移與連結草稿 · 尚不可套用');assert.ok(all(f.modal.contentEl).some(e=>e.text.includes('[[知識/新名字]]')));assert.ok(all(f.modal.contentEl).some(e=>e.text.includes('尚未證明索引完整')));assert.equal(all(f.modal.contentEl).filter(e=>e.tag==='button').length,0);assert.equal(f.requests.length,0);assert.equal(files.get('測試.md'),'原文');assert.equal(files.get('引用.md'),'[[測試]]');
+});
+test('native relocation discards a snapshot if note contents change during scanning',async()=>{
+ const f=fixture();await f.plugin.onload();const entry={path:'測試.md',stat:{}};let reads=0;
+ Object.assign(f.plugin.app.vault,{getMarkdownFiles:()=>[entry],getFiles:()=>[entry],getAbstractFileByPath:p=>p===entry.path?entry:null,read:async()=>++reads===1?'原文':'後來修改'});f.plugin.app.metadataCache={getFileCache:()=>({}),getFirstLinkpathDest:()=>null};
+ await f.plugin.previewRelocation();all(f.modal.contentEl).find(e=>e.attrs['aria-label']==='搬移目標筆記路徑').value='新.md';await all(f.modal.contentEl).find(e=>e.text==='計算搬移與連結草稿').onclick();assert.match(f.notices.at(-1),/掃描期間筆記已變更/);assert.equal(f.modal.title,'搬移／重新命名 · 只讀草稿');
 });

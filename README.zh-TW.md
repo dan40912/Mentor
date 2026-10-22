@@ -70,9 +70,10 @@ npm run package:obsidian
 - 「從目前筆記預寫內容或建議分類標籤」：先選紀錄任務、核對送給 AI 的來源，再生成草稿；預覽與修改後才能保存。來源版本變更會拒絕套用，保存不代表內容已驗收。
 - 命令「為目前資料夾的筆記加上分類標籤」可選筆記、輸入分類，再預覽完整變更。這會修改原筆記末尾的獨立標籤區塊，保留原文與 Properties，不使用 AI；Core 與 Mentor 任務不在修改範圍。
 - 同一個 AI 預寫入口可選「分類標籤建議」：先看理由與來源引文，再帶入可修改的標籤草稿及逐份變更預覽。資訊不足可不提出標籤；引文存在不等於分類正確。
+- 搬移／重新命名目前只有命令面板的只讀連結草稿，尚不可套用；索引完整性、寫入與復原仍待實作及驗證。
 - 「整理與復原紀錄」支援部分失敗重試及復原。後來被人修改的內容會保留並提示衝突。中斷先核對結果，不盲目重跑。
 
-停用 Theme／插件後，Markdown 仍可閱讀。套裝生成器不安裝到正式 Vault；`dist/` 是可重建產出，不要放正式筆記。升級前備份，插件需一併替換 main.js、organization.js、content-drafts.js、manifest.json、styles.css。[完整安裝、復原與限制](docs/obsidian-work-center.md)。
+停用 Theme／插件後，Markdown 仍可閱讀。套裝生成器不安裝到正式 Vault；`dist/` 是可重建產出，不要放正式筆記。升級前備份，插件需一併替換 main.js、organization.js、content-drafts.js、relocation.js、manifest.json、styles.css。[完整安裝、復原與限制](docs/obsidian-work-center.md)。
 
 ## 資料、權限與隱私
 

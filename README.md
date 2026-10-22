@@ -70,9 +70,10 @@ Open `dist/mentor-obsidian` as a **separate demonstration Vault** in Obsidian de
 - Prepare an AI knowledge card, weekly review or source note from an explicitly previewed excerpt and an existing task. Review and edit before saving; stale source versions are rejected. Saving does not accept the content.
 - Use the tag command to select notes in the current folder and preview classification tags. This edits a separate footer in original notes, preserving the body and Properties; it uses no AI and excludes Core and Mentor task records.
 - The AI draft entry also offers tag suggestions with reasons and verbatim source quotes. Review them before filling the editable tag preview; insufficient information can yield no suggestion. A matching quote does not prove a classification correct.
+- Move/rename currently has a command-palette, read-only link draft only. Applying it is unavailable; index coverage, writes and recovery are still incomplete.
 - Inspect organization history, retry partial failures and undo unchanged results. Later human edits remain intact as conflicts. Interrupted operations require explicit reconciliation before retrying.
 
-Markdown remains readable when the theme or plugin is disabled. The packager does not install into a real Vault; dist is rebuildable output. Back up before upgrading and replace main.js, organization.js, content-drafts.js, manifest.json and styles.css together. [Setup, recovery and limitations](docs/obsidian-work-center.md) (Traditional Chinese).
+Markdown remains readable when the theme or plugin is disabled. The packager does not install into a real Vault; dist is rebuildable output. Back up before upgrading and replace main.js, organization.js, content-drafts.js, relocation.js, manifest.json and styles.css together. [Setup, recovery and limitations](docs/obsidian-work-center.md) (Traditional Chinese).
 
 ## Data, permissions and privacy
 
