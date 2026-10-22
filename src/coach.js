@@ -36,8 +36,10 @@ function cardText(card) {
     `成功標準：${(card.success || []).join('；')}`, `限制：${(card.constraints || []).join('；')}`, `未知：${(card.unknowns || []).join('；')}`].join('\n');
 }
 
-function transcript(messages) {
+function transcript(messages,originalRequest) {
   messages=messages.filter(m=>m.kind!=='discussion');
+  // The common context already carries the initial request; keep later repetitions and all corrections.
+  if(messages[0]?.role==='user'&&messages[0].text===originalRequest)messages=messages.slice(1);
   const recentAi = new Set(messages.filter(m => m.role === 'ai').slice(-8));
   // 人的修正不能因為 AI 中間多回了幾次就被截掉；新指令的優先序在共同契約說明。
   return messages.filter(m => m.role === 'user' || recentAi.has(m)).map(m => m.role === 'user' ? `使用者：${m.text}` :
@@ -90,9 +92,6 @@ project 填這件事所屬的專案或主題名稱（10 字內），看不出來
 constraints 只寫這件任務本身的限制，不要寫「本階段不讀資料」這類階段規則；產出資料夾的路徑與檔案已經給你，不要再問使用者。
 另外寫一段 coaching：指出這個需求原本缺了什麼（例如讀者、要對方做的決定、成功標準），並示範一句更好的寫法，讓使用者下次可以直接這樣下 prompt。${diary}${rules}
 
-使用者需求：
-${task.planning.request}
-
 只輸出一個 JSON（放在 \`\`\`json 區塊）：
 {"card":{"title":"10 字內","project":"","goal":"","audience":"","deliverable":"","success":[""],"constraints":[""],"unknowns":[""]},"coaching":""${diaryField}}`;
   },
@@ -111,7 +110,7 @@ coaching 要具體：評論使用者剛才的回答哪裡好、哪裡還不夠�
 ${cardText(task.planning.card)}
 
 對話紀錄：
-${transcript(task.planning.messages)}
+${transcript(task.planning.messages,task.planning.request)}
 
 只輸出一個 JSON（放在 \`\`\`json 區塊）：
 {"questions":[{"q":"","why":""}],"coaching":"","card":{"title":"","goal":"","audience":"","deliverable":"","success":[""],"constraints":[""],"unknowns":[""]},"ready":false,"readyReason":""${diaryField}}`;
@@ -141,7 +140,7 @@ ${feedback}
 ${cardText(task.planning.card)}
 
 Grill 對話：
-${transcript(task.planning.messages)}
+${transcript(task.planning.messages,task.planning.request)}
 
 只輸出一個 JSON（放在 \`\`\`json 區塊）：
 {"outline":{"storyline":"","logic":[""],"sections":[{"no":1,"title":"","point":"","evidence":"",${profile.evidence ? '"risk":"",' : ''}"visual":{"type":"none","count":0,"note":""}}],"imageTotal":0},"workItems":[{"id":"W1","title":"","detail":"","owner":"ai","acceptance":[""],"dependsOn":[]}],"coaching":""${diaryField}}`;
