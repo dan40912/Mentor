@@ -82,6 +82,7 @@ module.exports = class MentorPlugin extends Plugin {
     this.organization=new Organization(this.organizationAdapter());
     this.addCommand({id:'preview-folder-index',name:'為目前資料夾預寫索引（先預覽）',callback:()=>this.prepareIndex().catch(e=>new Notice(e.message))});
     this.addCommand({id:'prepare-content-draft',name:'從目前筆記預寫知識卡、每週回顧或來源筆記',callback:()=>this.prepareContentDraft().catch(e=>new Notice(e.message))});
+    this.addCommand({id:'preview-note-tags',name:'為目前資料夾的筆記加上分類標籤（先預覽）',callback:()=>this.prepareTags().catch(e=>new Notice(e.message))});
     this.addCommand({id:'organization-history',name:'查看整理紀錄與復原',callback:()=>this.organizationHistory().catch(e=>new Notice(e.message))});
   }
   onunload() { this.token=null; }
@@ -157,6 +158,22 @@ module.exports = class MentorPlugin extends Plugin {
     const plan=await this.organization.previewIndex(paths,title,target);
     this.showOrganizationPlan(plan);
   }
+  async prepareTags(initialPaths=null,initialTags=[]) {
+    const file=this.app.workspace.getActiveViewOfType(MarkdownView)?.file;
+    if(!file)throw new Error('請先開啟一份一般 Markdown 筆記。');
+    const parent=file.path.includes('/')?file.path.slice(0,file.path.lastIndexOf('/')):'';
+    const paths=this.app.vault.getMarkdownFiles().map(f=>f.path).filter(name=>(name.includes('/')?name.slice(0,name.lastIndexOf('/')):'')===parent&&!name.startsWith(ORGANIZED_ROOT+'/')&&name.split('/')[0].toLowerCase()!=='core').sort();
+    if(!paths.length||paths.length>40)throw new Error('請選擇含 1～40 份一般筆記的資料夾。');
+    const selected=new Set(initialPaths||[file.path]);
+    new ReviewModal(this.app,'先選筆記與分類標籤',(host,modal)=>{
+      text(host,'p','只在你選的筆記末尾新增分類標籤區塊，保留原文、既有 Properties 與檔名。這是你指定的分類，不是 AI 判讀；不呼叫模型或傳送正文。');
+      text(host,'label','要加上的標籤');const tags=host.createEl('input',{type:'text',attr:{'aria-label':'要加上的分類標籤',placeholder:'例如：研究/閱讀 待核對'}});tags.value=initialTags.join(' ');
+      text(host,'p','用空白分開，最多 12 個；階層用 /。只新增，不移除原有標籤。Core、Mentor 任務與整理產出不在此功能的修改範圍。');
+      for(const name of paths){const label=host.createEl('label'),check=label.createEl('input',{type:'checkbox'});check.checked=selected.has(name);label.appendText(name);check.onchange=()=>check.checked?selected.add(name):selected.delete(name);}
+      button(host,'預覽分類標籤變更',async()=>{const plan=await this.organization.previewTags([...selected],tags.value.trim().split(/\s+/));modal.close();this.showOrganizationPlan(plan);},true);
+      button(host,'暫不處理',()=>modal.close());
+    }).open();
+  }
   async prepareContentDraft() {
     const view=this.app.workspace.getActiveViewOfType(MarkdownView),file=view?.file;
     if(!file)throw new Error('請先開啟來源 Markdown 筆記。');
@@ -194,18 +211,20 @@ module.exports = class MentorPlugin extends Plugin {
     await this.organization.verifySources(plan);this.showOrganizationPlan(plan);
   }
   showOrganizationPlan(plan) {
+    const tagging=plan.kind==='tags';
     new ReviewModal(this.app,plan.label+' · 先看變更',(host,modal)=>{
-      text(host,'p',`${plan.sources.length} 份來源，${plan.operations.length} 項產出。來源原文保持原位；這裡只預覽已準備的內容，套用不會再次呼叫 AI。AI 草稿的內容仍需你核對。`);
-      text(host,'p',`方案 ${plan.id} · ${plan.digest.slice(0,12)}`,'mentor-caption');const sourceList=host.createEl('details');text(sourceList,'summary','查看本次來源清單');for(const source of plan.sources)text(sourceList,'p',source.path);
+      text(host,'p',tagging?`將為 ${plan.operations.length} 份原筆記加上標籤；以下是完整修改前後內容。原文與既有 Properties 不改寫，不呼叫 AI。`:`${plan.sources.length} 份來源，${plan.operations.length} 項產出。來源原文保持原位；這裡只預覽已準備的內容，套用不會再次呼叫 AI。AI 草稿的內容仍需你核對。`);
+      text(host,'p',`方案 ${plan.id} · ${plan.digest.slice(0,12)}`,'mentor-caption');if(plan.sources.length){const sourceList=host.createEl('details');text(sourceList,'summary','查看本次來源清單');for(const source of plan.sources)text(sourceList,'p',source.path);}
       const selected=new Set(plan.operations.map(op=>op.id)),edits=new Map();
       for(const op of plan.operations){
         const box=host.createDiv({cls:'mentor-task'}),label=box.createEl('label'),check=label.createEl('input',{type:'checkbox'});check.checked=true;label.appendText((op.before===null?'建立：':'更新：')+op.path);check.onchange=()=>check.checked?selected.add(op.id):selected.delete(op.id);
-        if(op.before!==null){text(box,'h4','修改前');text(box,'pre',op.before,'mentor-source');}text(box,'h4','套用後');text(box,'pre',op.after,'mentor-source');const edit=box.createEl('details');text(edit,'summary','修改這份草稿');const area=edit.createEl('textarea',{attr:{'aria-label':'修改草稿：'+op.path}});area.value=op.after;edits.set(op.id,area);
+        if(op.before!==null){text(box,'h4','修改前');text(box,'pre',op.before,'mentor-source');}text(box,'h4','套用後');text(box,'pre',op.after,'mentor-source');if(tagging)continue;const edit=box.createEl('details');text(edit,'summary','修改這份草稿');const area=edit.createEl('textarea',{attr:{'aria-label':'修改草稿：'+op.path}});area.value=op.after;edits.set(op.id,area);
       }
       text(host,'p','可取消不想套用的項目。來源或目標有變更時會拒絕；套用後可在「整理紀錄與復原」撤回，後來的人工修改不會被覆寫。新建筆記撤回時移入 Vault 的 .trash，可再次取回。');
       const result=text(host,'p','','mentor-caption');
-      button(host,'套用已選的整理方案',async()=>{if(plan.operations.some(op=>edits.get(op.id).value!==op.after))throw new Error('草稿已修改，請先按「重新預覽修改後草稿」，再套用新版方案。');const log=await this.organization.apply(plan,[...selected]);result.textContent=log.status==='applied'?'已套用。原始筆記保持原位。':`部分完成：${log.error||'請查看紀錄'}。請先查看已完成項目，再決定是否重試。`;new Notice(result.textContent);},true);
-      button(host,'重新預覽修改後草稿',async()=>{const outputs=plan.operations.filter(op=>selected.has(op.id)).map(op=>({path:op.path,after:edits.get(op.id).value}));await this.organization.verifySources(plan);const revised=await this.organization.previewWrites(plan.sources,outputs,plan.label);modal.close();this.showOrganizationPlan(revised);});
+      button(host,'套用已選的整理方案',async()=>{if(!tagging&&plan.operations.some(op=>edits.get(op.id).value!==op.after))throw new Error('草稿已修改，請先按「重新預覽修改後草稿」，再套用新版方案。');const log=await this.organization.apply(plan,[...selected]);result.textContent=log.status==='applied'?'已套用。原始筆記保持原位。':`部分完成：${log.error||'請查看紀錄'}。請先查看已完成項目，再決定是否重試。`;new Notice(result.textContent);},true);
+      if(tagging)button(host,'修改標籤與筆記選擇',()=>{modal.close();return this.prepareTags(plan.operations.filter(op=>selected.has(op.id)).map(op=>op.path),plan.operations[0].tags);});
+      else button(host,'重新預覽修改後草稿',async()=>{const outputs=plan.operations.filter(op=>selected.has(op.id)).map(op=>({path:op.path,after:edits.get(op.id).value}));await this.organization.verifySources(plan);const revised=await this.organization.previewWrites(plan.sources,outputs,plan.label);modal.close();this.showOrganizationPlan(revised);});
       button(host,'暫不套用',()=>modal.close());
     }).open();
   }

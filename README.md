@@ -68,6 +68,7 @@ Open `dist/mentor-obsidian` as a **separate demonstration Vault** in Obsidian de
 - Preview a note or selection before sending it to AI. Oversized input is rejected, not silently truncated.
 - Preview an index for the current folder, edit and regenerate the preview, then apply selected operations. Writes stay within `Mentor 整理/`; source notes are not moved. This is a filename index, not an AI summary.
 - Prepare an AI knowledge card, weekly review or source note from an explicitly previewed excerpt and an existing task. Review and edit before saving; stale source versions are rejected. Saving does not accept the content.
+- Use the tag command to select notes in the current folder and preview classification tags. This edits a separate footer in original notes, preserving the body and Properties; it uses no AI and excludes Core and Mentor task records.
 - Inspect organization history, retry partial failures and undo unchanged results. Later human edits remain intact as conflicts. Interrupted operations require explicit reconciliation before retrying.
 
 Markdown remains readable when the theme or plugin is disabled. The packager does not install into a real Vault; dist is rebuildable output. Back up before upgrading and replace main.js, organization.js, content-drafts.js, manifest.json and styles.css together. [Setup, recovery and limitations](docs/obsidian-work-center.md) (Traditional Chinese).

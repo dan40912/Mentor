@@ -10,13 +10,39 @@ function safeNote(name) {
   return name;
 }
 function managed(name) { safeNote(name);if(!name.startsWith(ROOT+'/')||name.startsWith(HISTORY+'/'))fail('OUTPUT_SCOPE','整理只可寫入「Mentor 整理」中的 Markdown。');return name; }
+const TAG_BEGIN='<!-- mentor:tags:v1 -->', TAG_END='<!-- /mentor:tags -->';
+function normalizeTags(tags) {
+  if(!Array.isArray(tags)||!tags.length||tags.length>12)fail('TAGS_INVALID','請輸入 1～12 個標籤。');
+  const clean=tags.map(tag=>typeof tag==='string'?tag.replace(/^#/,''):'');
+  if(clean.some(tag=>tag.length>80||!tag.split('/').every(segment=>/^[\p{L}\p{N}_-]+$/u.test(segment))||!/[\p{L}_-]/u.test(tag)))fail('TAGS_INVALID','標籤使用文字、數字、底線或連字號，階層用 /；不可只有數字。');
+  return [...new Set(clean)].sort();
+}
+function tagText(name,before,tags) {
+  safeNote(name);
+  if(name.startsWith(ROOT+'/')||name.split('/')[0].toLowerCase()==='core'||typeof before!=='string'||before.includes('awc:begin'))fail('TAG_SCOPE','只為一般來源筆記加標籤，不修改 Core、Mentor 任務或整理產出。');
+  let body=before,existing=[];
+  if(before.includes(TAG_BEGIN)||before.includes(TAG_END)){
+    const start=before.indexOf(TAG_BEGIN),end=before.indexOf(TAG_END);
+    if(start<0||end<start||before.indexOf(TAG_BEGIN,start+1)>=0||before.indexOf(TAG_END,end+1)>=0||before.slice(end+TAG_END.length).trim())fail('TAG_BLOCK_CHANGED','分類區塊已被手動調整，請先人工整理，不自動覆寫。');
+    const lines=before.slice(start+TAG_BEGIN.length,end);
+    existing=normalizeTags(lines.trim().split(/\s+/));
+    if(lines!=='\n'+existing.map(tag=>'#'+tag).join(' ')+'\n')fail('TAG_BLOCK_CHANGED','分類區塊包含非標籤內容，不自動覆寫。');
+    body=before.slice(0,start);
+  }
+  // An unfinished code fence/comment would hide tags from Obsidian's index.
+  let fence=null;for(const line of body.split(/\r?\n/)){const match=line.match(/^ {0,3}(`{3,}|~{3,})(.*)$/);if(match){if(!fence)fence={char:match[1][0],length:match[1].length};else if(match[1][0]===fence.char&&match[1].length>=fence.length&&!match[2].trim())fence=null;}}
+  const lines=body.split(/\r?\n/),frontmatterOpen=lines[0]==='---'&&!lines.slice(1).some(line=>line==='---'||line==='...');
+  if(fence||frontmatterOpen||((body.match(/%%/g)||[]).length%2)||body.lastIndexOf('<!--')>body.lastIndexOf('-->'))fail('TAG_CONTEXT','筆記有尚未結束的 Properties、程式區塊或註解，請先修正再加標籤。');
+  const merged=normalizeTags([...new Set([...existing,...normalizeTags(tags)])]);
+  return body+(body.endsWith('\n\n')||!body?'':body.endsWith('\n')?'\n':'\n\n')+TAG_BEGIN+'\n'+merged.map(tag=>'#'+tag).join(' ')+'\n'+TAG_END+'\n';
+}
 function fingerprint(plan) { const {digest,...body}=plan;return hash(JSON.stringify(body)); }
 function validatePlan(plan) {
-  if(!plan||plan.version!==1||!/^[a-f0-9-]{36}$/.test(plan.id)||plan.digest!==fingerprint(plan))fail('PLAN_CHANGED','方案內容已改變，請重新產生預覽。');
+  if(!plan||![1,2].includes(plan.version)||!/^[a-f0-9-]{36}$/.test(plan.id)||plan.digest!==fingerprint(plan))fail('PLAN_CHANGED','方案內容已改變，請重新產生預覽。');
   if(!Array.isArray(plan.sources)||!Array.isArray(plan.operations)||!plan.operations.length||plan.operations.length>40||plan.sources.length>40)fail('PLAN_INVALID','方案數量不正確。');
   const seen=new Set();
   for(const source of plan.sources){safeNote(source.path);if(seen.has(source.path))fail('SOURCE_DUPLICATE','來源重複。');seen.add(source.path);}
-  const targets=new Set(),operationIds=new Set();for(const op of plan.operations){if(typeof op.id!=='string'||!/^op-[0-9]+$/.test(op.id)||operationIds.has(op.id))fail('PLAN_INVALID','操作識別重複或不正確。');operationIds.add(op.id);managed(op.path);if(seen.has(op.path)||targets.has(op.path))fail('OUTPUT_OVERLAP','來源與產出不可重疊，產出也不可重複。');targets.add(op.path);if(typeof op.after!=='string'||op.after.length>200000||!(op.before===null||typeof op.before==='string'))fail('PLAN_INVALID','產出內容不正確。');}
+  const targets=new Set(),operationIds=new Set();for(const op of plan.operations){if(typeof op.id!=='string'||!/^op-[0-9]+$/.test(op.id)||operationIds.has(op.id))fail('PLAN_INVALID','操作識別重複或不正確。');operationIds.add(op.id);if(plan.version===2){if(plan.kind!=='tags'||op.after!==tagText(op.path,op.before,op.tags))fail('PLAN_INVALID','標籤方案只能新增你預覽的分類區塊。');}else managed(op.path);if(seen.has(op.path)||targets.has(op.path))fail('OUTPUT_OVERLAP','來源與產出不可重疊，產出也不可重複。');targets.add(op.path);if(typeof op.after!=='string'||op.after.length>200000||!(op.before===null||typeof op.before==='string'))fail('PLAN_INVALID','產出內容不正確。');}
 }
 const markdownLabel = value => value.replace(/[\[\]\\]/g,'\\$&').replace(/[\r\n]/g,' ');
 function indexText(title, sources, target) {
@@ -31,6 +57,16 @@ class Organization {
     target=managed(target);const sources=[];
     for(const name of [...new Set(paths)].sort()){safeNote(name);if(name.startsWith(ROOT+'/'))fail('SOURCE_SCOPE','整理資料夾不作為自己的來源。');const content=await this.io.read(name);if(content===null)fail('SOURCE_MISSING','來源已不存在：'+name);sources.push({path:name,hash:hash(content)});}
     return this.previewWrites(sources,[{path:target,after:indexText(title,sources,target)}],'建立筆記索引');
+  }
+  async previewTags(paths,tags) {
+    tags=normalizeTags(tags);
+    if(!Array.isArray(paths)||!paths.length||paths.length>40)fail('SOURCE_LIMIT','請選 1～40 份筆記。');
+    const operations=[];for(const name of [...new Set(paths)].sort()){
+      safeNote(name);const before=await this.io.read(name);if(before===null)fail('SOURCE_MISSING','來源已不存在：'+name);
+      const after=tagText(name,before,tags);if(after!==before)operations.push({id:'op-'+operations.length,path:name,before,after,tags});
+    }
+    if(!operations.length)fail('NO_CHANGES','已選筆記已有這些分類標籤，不需重複套用。');
+    const plan={version:2,kind:'tags',id:randomUUID(),label:'加上分類標籤',createdAt:new Date().toISOString(),sources:[],operations};plan.digest=fingerprint(plan);validatePlan(plan);return plan;
   }
   async previewWrites(sources, outputs, label='保存整理內容') {
     if(!Array.isArray(outputs)||!outputs.length||outputs.length>40)fail('OUTPUT_LIMIT','一次最多準備 40 份產出。');

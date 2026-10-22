@@ -38,3 +38,25 @@ const f=fixture();f.files.set('Mentor 整理/筆記索引.md','舊索引');const
 test('index links encode filename fragments and queries; interrupted undo requires reconciliation',async()=>{
 const f=fixture();f.files.set('研究/問題 #1?.md','# note');const plan=await f.engine.previewIndex(['研究/問題 #1?.md']);assert.match(plan.operations[0].after,/%231%3F\.md/);await f.engine.apply(plan);let log=await f.engine.load(plan.id);log.status='reverting';await f.engine.save(log);await assert.rejects(f.engine.undo(plan.id),{code:'RECOVERY_REQUIRED'});await f.engine.reconcile(plan.id);assert.equal((await f.engine.undo(plan.id)).status,'reverted');
 });
+
+test('classification previews exact source additions, preserves Properties and body, excludes items and undoes byte for byte',async()=>{
+ const f=fixture(),original='---\ntags: [原標籤]\n# preserve comments\n---\n# 原文\n\n[[研究/第二篇]]';f.files.set('研究/第一篇.md',original);
+ const plan=await f.engine.previewTags(['研究/第一篇.md','研究/第二篇.md'],['#研究/閱讀','待核對']);
+ assert.equal(f.files.get('研究/第一篇.md'),original,'preview does not write');assert.equal(plan.version,2);
+ assert.ok(plan.operations[0].after.startsWith(original+'\n\n'));assert.match(plan.operations[0].after,/#待核對 #研究\/閱讀/);
+ assert.equal((await f.engine.apply(plan,['op-0'])).status,'applied');assert.equal((await f.engine.apply(plan,['op-0'])).replayed,true);assert.equal(f.files.get('研究/第二篇.md'),'# B');
+ await assert.rejects(f.engine.previewTags(['研究/第一篇.md'],['待核對']),{code:'NO_CHANGES'});
+ const add=await f.engine.previewTags(['研究/第一篇.md'],['第三類']);await f.engine.apply(add);assert.equal((f.files.get('研究/第一篇.md').match(/mentor:tags:v1/g)||[]).length,1);
+ await f.engine.undo(add.id);await f.engine.undo(plan.id);assert.equal(f.files.get('研究/第一篇.md'),original);
+});
+test('classification refuses protected notes, malformed metadata, hidden Markdown tags and arbitrary body rewrites',async()=>{
+ const f=fixture();for(const [name,body,code] of [['Core/rules.md','# rules','TAG_SCOPE'],['core/rules.md','# rules','TAG_SCOPE'],['task.md','<!-- awc:begin -->','TAG_SCOPE'],['open.md','```js\ncode','TAG_CONTEXT'],['comment.md','<!-- unfinished','TAG_CONTEXT'],['properties.md','---\ntitle: unfinished','TAG_CONTEXT'],['obsidian-comment.md','%% unfinished','TAG_CONTEXT'],['edited.md','<!-- mentor:tags:v1 -->\n#one notes\n<!-- /mentor:tags -->\n','TAG_BLOCK_CHANGED']]){f.files.set(name,body);await assert.rejects(f.engine.previewTags([name],['研究']),{code});}
+ for(const tag of ['123','has space','x//y','../escape','[link]','x\nnext'])await assert.rejects(f.engine.previewTags(['研究/第一篇.md'],[tag]),{code:'TAGS_INVALID'});
+ const plan=await f.engine.previewTags(['研究/第一篇.md'],['研究']);plan.operations[0].after='任意改寫原文';const {digest,...body}=plan;plan.digest=hash(JSON.stringify(body));await assert.rejects(f.engine.apply(plan),{code:'PLAN_INVALID'});
+ await assert.rejects(f.engine.previewWrites([],[{path:'研究/第一篇.md',after:'arbitrary'}]),{code:'OUTPUT_SCOPE'});
+});
+test('classification uses stale checks, partial retry and conflict-aware undo for original notes',async()=>{
+ const f=fixture();const stale=await f.engine.previewTags(['研究/第一篇.md'],['研究']);f.files.set('研究/第一篇.md','new');await assert.rejects(f.engine.apply(stale),{code:'TARGET_STALE'});f.files.set('研究/第一篇.md','# A');
+ const plan=await f.engine.previewTags(['研究/第一篇.md','研究/第二篇.md'],['研究']);f.failPath='研究/第二篇.md';assert.equal((await f.engine.apply(plan)).status,'partial');
+ f.failPath=null;assert.equal((await f.engine.apply(plan)).status,'applied');f.files.set('研究/第一篇.md','人工新內容');assert.equal((await f.engine.undo(plan.id)).status,'undo-partial');assert.equal(f.files.get('研究/第一篇.md'),'人工新內容');assert.equal(f.files.get('研究/第二篇.md'),'# B');
+});

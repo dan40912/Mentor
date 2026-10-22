@@ -132,3 +132,17 @@ test('correlated AI content enters reversible preview only; later task revisions
  await f.plugin.organization.undo(plan.id);assert.equal(files.get('測試.md'),'原始筆記');assert.equal(files.has(plan.operations[0].path),false);
  files.set('測試.md','來源更新');await assert.rejects(f.plugin.contentDraft(task.id,key),error=>error.code==='SOURCE_STALE');
 });
+
+test('native tag command previews selected notes without model calls and uses constrained, uneditable source previews',async()=>{
+ const f=fixture();await f.plugin.onload();f.plugin.app.vault.getMarkdownFiles=()=>[{path:'測試.md'},{path:'第二.md'}];
+ const files=new Map([['測試.md','---\ntags: [既有]\n---\n# 原文'],['第二.md','# 不選']]);
+ const io={read:async p=>files.get(p)??null,createJournal:async(p,v)=>files.set(p,v),writeJournal:async(p,v)=>files.set(p,v),compareWrite:async(p,b,a)=>{assert.equal(files.get(p),b);files.set(p,a);}};
+ f.plugin.organization=new organizationModule.exports.Organization(io);
+ await f.plugin.prepareTags();assert.equal(f.requests.length,0);const chooser=f.modal;
+ all(chooser.contentEl).find(e=>e.attrs['aria-label']==='要加上的分類標籤').value='研究/閱讀 待核對';
+ await all(chooser.contentEl).find(e=>e.text==='預覽分類標籤變更').onclick();
+ const preview=f.modal;assert.notEqual(preview,chooser);assert.equal(files.size,2);assert.equal(f.requests.length,0);assert.equal(all(preview.contentEl).filter(e=>e.tag==='textarea').length,0,'source body cannot be edited through a generic write');
+ assert.ok(all(preview.contentEl).some(e=>e.text.includes('將為 1 份原筆記加上標籤')));
+ await all(preview.contentEl).find(e=>e.text==='套用已選的整理方案').onclick();assert.match(files.get('測試.md'),/#待核對 #研究\/閱讀/);assert.equal(files.get('第二.md'),'# 不選');assert.equal(f.requests.length,0);
+ const history=[...files.keys()].find(p=>p.endsWith('.json'));await f.plugin.organization.undo(JSON.parse(files.get(history)).plan.id);assert.equal(files.get('測試.md'),'---\ntags: [既有]\n---\n# 原文');
+});
