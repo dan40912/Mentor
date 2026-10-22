@@ -1051,7 +1051,7 @@ export class Coach {
       // 再檢查一次，避免兩個請求之間狀態已變。
       const again = this.plan(t, { text, scope });
       if (again.route !== plan.route) throw new TaskError(409, 'STATE_CHANGED', '任務狀態已改變，請重新整理後再送出。');
-      (t.planning.instructions ||= []).push({ id: randomUUID().slice(0, 8), at: now(), route: plan.route, scope, itemId: plan.itemId || stopped?.itemId || null, text, reason, attachmentIds, impact: plan.impact });
+      (t.planning.instructions ||= []).push({ id: randomUUID().slice(0, 8), at: now(), route: plan.route, scope, itemId: plan.itemId || stopped?.itemId || null, text, reason, attachmentIds, impact: plan.impact, proposalId: plan.id, baseRevision: task.revision });
       if (text && plan.route !== 'outline' && plan.route !== 'replan') t.planning.messages.push({ id: randomUUID(), role: 'user', stage: plan.route === 'resume' ? stopped.stage : plan.route === 'execute' || plan.route === 'round' ? 'D' : 'F', text, reason: reason || undefined, at: now() });
       if (plan.route === 'resume' && text && stopped.itemId) {
         const item = this.item(t, stopped.itemId);
@@ -1071,7 +1071,7 @@ export class Coach {
       }
       return { status: planningStatus(t) };
     }, 'instruct', { text, scope, reason, route: plan.route });
-    await this.audit(id, 'INSTRUCTION', { route: plan.route, scope, text, reason, attachmentIds, impact: plan.impact });
+    await this.audit(id, 'INSTRUCTION', { route: plan.route, scope, text, reason, attachmentIds, impact: plan.impact, proposalId: plan.id, baseRevision: task.revision });
     if (plan.route === 'resume') {
       const extra = stopped.stage === 'C' ? { feedback: text, replan: stopped.replan, instruction: text } : { instruction: text };
       return this.run(id, stopped.stage, stopped.itemId, extra);

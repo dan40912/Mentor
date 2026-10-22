@@ -102,7 +102,7 @@ export function handoffHistory(task, { events = [], archive = {}, archivePath = 
       const text = [publicText(item.review.coaching), publicText(item.review.raw), ...rows(item.review.results, `${loc}.results`).map(r => `${publicText(r.criterion)}：${publicText(r.result)}｜${publicText(r.evidence)}`)].filter(Boolean).join('\n');
       add(item.review, 'AI 驗收結果', text, item.review.at, loc, 0);
     }
-    if (item.doneAt || item.humanNote) add(item, '人的確認', `${item.id} ${item.title || ''}\n${item.humanNote || '未記錄原因'}`, item.doneAt, `${taskPath}#planning.workItems[${i}].humanNote`, 0);
+    if (item.doneAt || item.humanNote) add(item, item.status==='DONE'&&!item.recheck?'人的確認':'過去的人工確認（目前尚未重新確認）', `${item.id} ${item.title || ''}\n${item.humanNote || '未記錄原因'}`, item.doneAt, `${taskPath}#planning.workItems[${i}].humanNote`, 0);
     for (const [j, fix] of (item.fixes || []).entries()) add({}, '退回原因', fix, null, `${taskPath}#planning.workItems[${i}].fixes[${j}]`, 0);
   }
   for (const { record, location } of events) {

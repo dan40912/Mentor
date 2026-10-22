@@ -1,3 +1,6 @@
+import {compactHandoff} from '../src/compact-handoff.js';
+import {buildHandoff} from '../src/handoffs.js';
+import {demoTask} from './fixtures/demo-task.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {downstreamItems,sameWorkDefinition,invalidateDownstream} from '../src/work-item-impact.js';
@@ -30,4 +33,11 @@ test('reopened upstream work is recommended before stale downstream review in ma
  assert.equal(planningAction(task).id,'A');
  const calls=[];const step=Coach.prototype.nextStep.call({execute:(id,itemId)=>calls.push(itemId),review:()=>assert.fail('must wait for upstream')},{id:'TASK-impact',...task},{full:false,fixRounds:{}});
  step.run();assert.deepEqual(calls,['A']);
+});
+
+test('handoff formats preserve current invalidation rather than presenting old PASS as current acceptance',()=>{
+ const task=demoTask();task.planning.workItems=[{id:'A',title:'表格',owner:'ai',status:'AWAITING_REVIEW',acceptance:['檢查新來源'],recheck:'前置來源已修改',review:{superseded:true},previousOutputs:[{file:'old.md'}]}];
+ const compact=compactHandoff(task).content,full=buildHandoff(task);
+ for(const text of [compact,full]){assert.match(text,/前置來源已修改/);assert.match(text,/已失效/);assert.match(text,/AWAITING_REVIEW/);}
+ assert.match(compact,/old\.md/);
 });

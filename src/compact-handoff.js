@@ -24,7 +24,7 @@ export function compactHandoff(task, receiver = 'unassigned') {
     '## 待核對', list(p.card?.unknowns),
     '## 事實與來源', list(task.facts?.map(f => `${f.label}：${f.value}｜${f.verified ? '已標記核對' : '未獨立核對'}｜${f.source || '來源未記錄'}`)),
     '## 任務狀態', `${task.status}｜${task.current?.summary || '未記錄'}`,
-    ...items.map(item => `### ${item.id} ${item.title}\n${item.status}｜${item.owner === 'human' ? '人處理' : item.executor || 'AI'}\n說明：${item.detail || '未記錄'}\n驗收：\n${list(item.acceptance)}\n依賴：${(item.dependsOn || []).join('、') || '無'}\n已登記成果：\n${list(item.outputs?.map(o => typeof o === 'string' ? o : o.file || o.path))}\n修正意見：\n${list(item.fixes)}`),
+    ...items.map(item => `### ${item.id} ${item.title}\n${item.status}｜${item.owner === 'human' ? '人處理' : item.executor || 'AI'}\n說明：${item.detail || '未記錄'}\n驗收：\n${list(item.acceptance)}\n依賴：${(item.dependsOn || []).join('、') || '無'}\n已登記成果：\n${list(item.outputs?.map(o => typeof o === 'string' ? o : o.file || o.path))}\n修正意見：\n${list(item.fixes)}\n重新核對原因：${item.recheck||'未標記'}\n舊審閱：${item.review?.superseded?'已失效，不作為本輪通過證據':'依目前狀態核對'}\n先前成果（僅供追查，不等於新成果）：\n${list(item.previousOutputs?.map(o=>typeof o==='string'?o:o.file||o.path))}`),
     '## 驗收證據', list(task.checks?.map(c => `${c.result}｜${c.label}｜${c.path || ''}｜${c.note || ''}`)),
     '## 最近執行結果', list(cards.slice(-3).map(c => `${c.stage}｜${c.agent}｜${c.label}｜${c.outcome}（來源：${c.source}）`)),
     ...(p.running ? ['## 尚有執行中的工作', `${p.running.agent}｜${p.running.stage}。未確認停止前，禁止另一個 AI 重複寫入。`] : []),

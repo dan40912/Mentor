@@ -134,6 +134,7 @@ test('editing accepted work previews and invalidates transitive acceptances with
  assert.equal(saved.planning.workItems[2].outputs[0].file,'C.md');assert.equal(saved.planning.workItems[2].doneAt,undefined);
  await assert.rejects(app.coach.confirm(task.id,saved.revision,'impact-confirm-key',{itemId:'C',accept:true}),{code:'DEPENDENCY_PENDING'});
  await assert.rejects(app.coach.review(task.id,'C'),{code:'DEPENDENCY_PENDING'});
+ assert.equal(saved.planning.instructions.at(-1).proposalId,plan.id);assert.equal(saved.planning.instructions.at(-1).baseRevision,current.revision);
  assert.equal(saved.planning.request,task.planning.request);
 });
 

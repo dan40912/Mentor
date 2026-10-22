@@ -45,7 +45,7 @@ export function buildHandoff(task, sources = {}, root = task.workspace?.root) {
     '## 事實與口徑', locate('facts', (task.facts || []).map(f => `${f.label}：${f.value}（${f.verified ? '已標記核對' : '未獨立核對'}；原始來源：${f.source || '未記錄'}）`)), '',
     '## 驗收清單', locate('checks', (task.checks || []).map(c => `${c.result}｜${c.label}${c.note ? `｜${c.note}` : ''}`)),
     locate('planning.card.success', card.success || []),
-    ...(p.workItems || []).map((w, i) => `### ${w.id} ${w.title || ''}\n${locate(`planning.workItems[${i}].acceptance`, w.acceptance || [])}`), '',
+    ...(p.workItems || []).map((w, i) => `### ${w.id} ${w.title || ''}\n目前狀態：${w.status||'未記錄'}；重新核對：${w.recheck||'未標記'}；舊審閱${w.review?.superseded?'已失效，不作本輪通過證據':'依目前狀態核對'}。\n${locate(`planning.workItems[${i}].acceptance`, w.acceptance || [])}`), '',
     '## 唯一下一步', task.next || '未記錄', `來源：${taskPath}#next`, '',
     '## 產出檔清單（絕對路徑）', list(outputs), '',
     '## 過去的教訓', list(lessons), '',
