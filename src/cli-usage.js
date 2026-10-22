@@ -15,7 +15,7 @@ export function claudeResult(stdout) {
   let result;try{result=JSON.parse(stdout);}catch{return null;}
   if(result?.type!=='result'||typeof result.result!=='string')return null;
   const u=result.usage;
-  return {text:result.result,isError:result.is_error===true,usage:u&&typeof u==='object'?{source:'claude.print.result',inputTokens:count(u.input_tokens),cachedInputTokens:count(u.cache_read_input_tokens),cacheCreationInputTokens:count(u.cache_creation_input_tokens),outputTokens:count(u.output_tokens),reasoningOutputTokens:null,costEstimateUsd:cost(result.total_cost_usd)}:null};
+  return {text:result.result,isError:result.is_error===true,usage:u&&typeof u==='object'?{source:'claude.print.result',models:result.modelUsage&&typeof result.modelUsage==='object'?Object.keys(result.modelUsage).filter(name=>/^claude-[A-Za-z0-9._:-]{1,90}$/.test(name)).slice(0,10):[],inputTokens:count(u.input_tokens),cachedInputTokens:count(u.cache_read_input_tokens),cacheCreationInputTokens:count(u.cache_creation_input_tokens),outputTokens:count(u.output_tokens),reasoningOutputTokens:null,costEstimateUsd:cost(result.total_cost_usd)}:null};
 }
 export function usageLabel(usage) {
   if(!usage)return 'Token 與費用：未取得 CLI 用量。';

@@ -107,3 +107,7 @@ npm run measure:handoff -- /absolute/MENTOR_HOME/vault/TASK-id.md
 - [Claude 程式化執行](https://code.claude.com/docs/en/headless)：--output-format json 的 result／metadata；total_cost_usd 是 client-side estimate。
 
 只保存白名單數值，不保存 CLI envelope 中的 session／帳號 metadata。此變更不會啟用 resume 或改變工具權限。比較兩個 Prompt 的真實用量仍需同模型、相同任務與品質驗證，不能用這次短句 smoke test 宣稱節省比例。
+
+### 真實交接比較基準
+
+`npm run benchmark:handoff` 只預覽虛構任務與大小；加上 --run、--provider、--model 與 --pairs 才呼叫真實 CLI。兩組為四次呼叫，會使用額度，不讀正式 Vault。[2026-10-22 實測](benchmarks/handoff-2026-10-22.md)保留四個樣本，資訊保留通過，但未證明穩定 Token 節省。

@@ -33,3 +33,8 @@ test('real runner unwraps structured CLI output and persists usage without treat
  const codex=buildArgs({provider:'codex',mode:'read',cwd:dir,outputFile:'out'});assert.ok(codex.includes('--json'));
  const claude=buildArgs({provider:'claude',mode:'read'});assert.equal(claude[claude.indexOf('--output-format')+1],'json');
 });
+
+test('usage model identity copies only Claude model names, never arbitrary metadata keys',()=>{
+ const r=claudeResult(JSON.stringify({type:'result',result:'ok',usage:{input_tokens:1},modelUsage:{'claude-sonnet-fixture':{},'private@example.invalid':{},'session_secret':{}}}));
+ assert.deepEqual(r.usage.models,['claude-sonnet-fixture']);
+});

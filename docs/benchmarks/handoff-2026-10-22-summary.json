@@ -1,0 +1,9 @@
+{
+  "source": "handoff-2026-10-22.json",
+  "sourceSha256": "7919b0d1110592ca64ec2c969bdb560ad8684d6fbcc1b64bc72549fcc9acf7fc",
+  "allQualityPassed": true,
+  "allMeasurementsAvailable": true,
+  "consistentObservedInputReduction": false,
+  "causalAttribution": "Not established: CLI background context and cache state were not held fixed.",
+  "conclusion": "Repeatable input-token reduction was not demonstrated. Preserve both favorable and unfavorable pairs."
+}

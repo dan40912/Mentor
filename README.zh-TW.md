@@ -90,6 +90,7 @@ npm run package:obsidian
 ```sh
 npm test
 npm run measure:handoff -- /absolute/MENTOR_HOME/vault/TASK-id.md
+npm run benchmark:handoff     # 只預覽，不呼叫模型
 ```
 
 一般測試使用虛構資料與 fake CLI，不消耗模型額度。完整 CI 定義在 [.github/workflows/ci.yml](.github/workflows/ci.yml)，涵蓋三個作業系統與 Node 20／22／24；綠燈不代表真實 CLI 或 Obsidian 實機驗收通過。
@@ -101,6 +102,8 @@ node scripts/live-cross-ai.mjs --run
 ```
 
 這會呼叫已登入的 Codex 與 Claude、消耗額度，並在隔離 `.lab-home/` 產生虛構 CSS 任務與證據；不會替人驗收，也不證明 Theme 的實際外觀。[測試範圍](docs/implementation/mentor-obsidian-status.md)。
+
+[真實交接比較報告](docs/benchmarks/handoff-2026-10-22.md)的四次資訊保留檢查都通過，但兩組 Token 趨勢相反，**尚未證明可重複的節省**。報告保留有利與不利結果，不以文字變短推論整輪用量下降。
 
 ## 常見問題與限制
 

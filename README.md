@@ -90,6 +90,7 @@ Round cards expose prompt/response character and UTF-8 byte counts. Successful C
 ```sh
 npm test
 npm run measure:handoff -- /absolute/MENTOR_HOME/vault/TASK-id.md
+npm run benchmark:handoff     # preview only; no model calls
 ```
 
 Normal tests use fictional fixtures and fake CLIs without spending model quota. [CI](.github/workflows/ci.yml) defines Linux/macOS/Windows with Node 20/22/24; a passing matrix does not verify live providers or Obsidian desktop.
@@ -101,6 +102,8 @@ node scripts/live-cross-ai.mjs --run
 ```
 
 This consumes logged-in Codex and Claude quota, creates an isolated fictional CSS task in .lab-home, and saves evidence. It never accepts work on your behalf or proves Obsidian visual quality. See the [evidence tracker](docs/implementation/mentor-obsidian-status.md).
+
+The [paired real-provider benchmark](docs/benchmarks/handoff-2026-10-22.md) passed all fact-retention checks but showed opposite token trends across two pairs. Repeatable token savings have **not** been demonstrated. The report retains both favorable and unfavorable observations.
 
 ## Troubleshooting and current limits
 
