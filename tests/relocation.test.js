@@ -23,7 +23,7 @@ test('relocation blocks stale indexes, unknown source links, protected backlinks
  const stale=note('B.md','[[A]]',[['[[A]]','A',from]]);stale.references[0].start=1;assert.match(compileRelocation([note(from,'原文'),stale],from,'新/A.md').blockers[0].reason,/索引位置/);
 });
 test('relocation rejects collisions, duplicate basenames, hidden paths and task records without silently changing scope',()=>{
- const notes=[note('A.md','original')];for(const to of ['A.md','a.md','../A.md','.obsidian/A.md','Core/A.md','Mentor 整理/A.md'])assert.throws(()=>compileRelocation(notes,'A.md',to));
+ const notes=[note('A.md','original')];for(const to of ['A.md','a.md','C:/A.md','C:A.md','../A.md','.obsidian/A.md','Core/A.md','Mentor 整理/A.md'])assert.throws(()=>compileRelocation(notes,'A.md',to));
  assert.throws(()=>compileRelocation(notes,'A.md','新.md',['A.md','新.md']),/已存在/);
  assert.throws(()=>compileRelocation([...notes,note('其他/A.md','other')],'A.md','新.md'),/同名/);
  assert.ok(compileRelocation([note('A.md','<!-- awc:begin -->')],'A.md','新.md').blockers.length);

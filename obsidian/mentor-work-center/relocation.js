@@ -7,7 +7,7 @@ const key=value=>value.normalize('NFC').toLowerCase();
 const protectedNote=name=>name.startsWith(ROOT+'/')||name.split('/')[0].toLowerCase()==='core';
 function fail(message){throw new Error(message);}
 function referencePath(name){
- if(typeof name!=='string'||name.startsWith('/')||name.includes('\\')||/[\x00-\x1f]/.test(name)||name.split('/').some(p=>!p||p==='.'||p==='..'||p.startsWith('.')))fail('連結目的地不是可核對的筆記庫路徑。');
+ if(typeof name!=='string'||name.startsWith('/')||name.includes('\\')||name.includes(':')||/[\x00-\x1f]/.test(name)||name.split('/').some(p=>!p||p==='.'||p==='..'||p.startsWith('.')))fail('連結目的地不是可核對的筆記庫路徑。');
  return name;
 }
 function replacement(ref,from,to,movingNote){
