@@ -3,7 +3,7 @@ const { Plugin, ItemView, Modal, Notice, MarkdownView, requestUrl, Setting, Plug
 const { randomUUID, createHash } = require('node:crypto');
 const { Organization, ROOT: ORGANIZED_ROOT, HISTORY: ORGANIZATION_HISTORY } = require('./organization');
 const ContentDrafts = require('./content-drafts');
-const {compileRelocation}=require('./relocation');
+const {compileRelocation,Relocation}=require('./relocation');
 const VIEW = 'mentor-work-center';
 
 function localAddress(value) {
@@ -81,10 +81,11 @@ module.exports = class MentorPlugin extends Plugin {
     this.addCommand({id:'pair-local-service',name:'配對本機服務',callback:()=>this.pair()});
     this.addSettingTab(new MentorSettings(this.app,this));
     this.organization=new Organization(this.organizationAdapter());
+    this.relocations=new Relocation(this.organizationAdapter(),this.organization);
     this.addCommand({id:'preview-folder-index',name:'為目前資料夾預寫索引（先預覽）',callback:()=>this.prepareIndex().catch(e=>new Notice(e.message))});
     this.addCommand({id:'prepare-content-draft',name:'從目前筆記預寫內容或建議分類標籤',callback:()=>this.prepareContentDraft().catch(e=>new Notice(e.message))});
     this.addCommand({id:'preview-note-tags',name:'為目前資料夾的筆記加上分類標籤（先預覽）',callback:()=>this.prepareTags().catch(e=>new Notice(e.message))});
-    this.addCommand({id:'preview-note-relocation',name:'檢視搬移或重新命名與連結草稿（尚不可套用）',callback:()=>this.previewRelocation().catch(e=>new Notice(e.message))});
+    this.addCommand({id:'preview-note-relocation',name:'搬移或重新命名筆記（先預覽連結變更）',callback:()=>this.previewRelocation().catch(e=>new Notice(e.message))});
     this.addCommand({id:'organization-history',name:'查看整理紀錄與復原',callback:()=>this.organizationHistory().catch(e=>new Notice(e.message))});
   }
   onunload() { this.token=null; }
@@ -140,6 +141,16 @@ module.exports = class MentorPlugin extends Plugin {
     const fileAt=name=>{const file=vault.getAbstractFileByPath(name);if(file&&!file.stat)throw new Error('預期檔案卻遇到資料夾：'+name);return file;};
     return {
       read:async name=>{const file=fileAt(name);return file?await vault.read(file):null;},
+      listFiles:async()=>vault.getFiles().map(file=>file.path),
+      rename:async(from,to,expected)=>{
+        if(vault.getAbstractFileByPath(to))throw new Error('搬移目標已存在，停止操作。');
+        await folder(to.includes('/')?to.slice(0,to.lastIndexOf('/')):'');
+        const file=fileAt(from);if(!file||await vault.read(file)!==expected)throw new Error('搬移前來源已變更，保留目前內容。');
+        if(vault.getAbstractFileByPath(to))throw new Error('搬移目標已被建立，停止操作。');
+        await vault.rename(file,to);
+        const moved=fileAt(to);if(!moved||await vault.read(moved)!==expected)throw new Error('搬移後內容有變動，結果需核對，不繼續改寫。');
+      },
+
       createJournal:async(name,content)=>{await folder(name.slice(0,name.lastIndexOf('/')));await vault.create(name,content);},
       writeJournal:async(name,content)=>{const file=fileAt(name);if(!file)throw new Error('復原紀錄已消失，停止整理。');await vault.process(file,()=>content);},
       compareWrite:async(name,before,after)=>{
@@ -163,13 +174,13 @@ module.exports = class MentorPlugin extends Plugin {
   async previewRelocation() {
     const file=this.app.workspace.getActiveViewOfType(MarkdownView)?.file;
     if(!file)throw new Error('請先開啟要搬移的一般 Markdown 筆記。');
-    new ReviewModal(this.app,'搬移／重新命名 · 只讀草稿',(host,modal)=>{
-      text(host,'p','這一步只計算來源、目標與連結變更，不改檔、不呼叫 AI。會獨立掃描受支援的 Markdown，再與索引逐筆核對。尚未提供套用與復原，草稿不能當作改檔授權。');
+    new ReviewModal(this.app,'搬移／重新命名 · 先準備方案',(host,modal)=>{
+      text(host,'p','這一步只計算來源、目標與連結變更，不改檔、不呼叫 AI。會獨立掃描受支援的 Markdown，再與索引核對；確認完整預覽後才搬移、更新連結並保存復原紀錄。');
       text(host,'p','來源：'+file.path);text(host,'label','目標筆記路徑');const target=host.createEl('input',{type:'text',attr:{'aria-label':'搬移目標筆記路徑',placeholder:'例如：知識庫/主題.md'}});target.value=file.path;
       text(host,'p','填寫筆記庫內的完整相對路徑，以 .md 結尾。需核對整個庫，最多 200 份 Markdown；不略過剩餘筆記。');
       button(host,'計算搬移與連結草稿',async()=>{
-        const vault=this.app.vault,files=vault.getMarkdownFiles();if(files.length>200)throw new Error('超過 200 份 Markdown，尚不支援完整掃描，不產生部分方案。');
-        const allFiles=vault.getFiles().map(f=>f.path).sort();if(vault.getAbstractFileByPath(target.value))throw new Error('目標位置已有檔案或資料夾。');
+        const targetPath=target.value,vault=this.app.vault,files=vault.getMarkdownFiles();if(files.length>200)throw new Error('超過 200 份 Markdown，尚不支援完整掃描，不產生部分方案。');
+        const allFiles=vault.getFiles().map(f=>f.path).sort();if(vault.getAbstractFileByPath(targetPath))throw new Error('目標位置已有檔案或資料夾。');
         const notes=[];
         for(const note of files){
           const content=await vault.read(note),cache=this.app.metadataCache.getFileCache(note);
@@ -182,12 +193,17 @@ module.exports = class MentorPlugin extends Plugin {
         }
         if(JSON.stringify(vault.getFiles().map(f=>f.path).sort())!==JSON.stringify(allFiles))throw new Error('掃描期間檔案清單已改變，請重新計算。');
         for(const note of notes){const current=vault.getAbstractFileByPath(note.path);if(!current||await vault.read(current)!==note.content)throw new Error('掃描期間筆記已變更，請重新計算：'+note.path);}
-        const plan=compileRelocation(notes,file.path,target.value,allFiles);modal.close();
-        new ReviewModal(this.app,'搬移與連結草稿 · 尚不可套用',(preview)=>{
+        const plan=compileRelocation(notes,file.path,targetPath,allFiles);modal.close();
+        new ReviewModal(this.app,'搬移與連結變更 · 先預覽',(preview,review)=>{
           text(preview,'p',`${plan.from} → ${plan.to}；掃描 ${plan.sources.length} 份筆記、${plan.referenceCount} 筆索引連結。`);
-          text(preview,'p',plan.indexCoverage==='VERIFIED_SUPPORTED_MARKDOWN'?'受支援語法的獨立掃描與索引核對通過。此結論只涵蓋受支援的 Markdown，不代表所有外掛或外部參照；此版仍只讀，沒有套用、重試或復原。':'本次索引涵蓋核對未通過，請處理下列阻擋。此版只讀，沒有套用、重試或復原。');
+          text(preview,'p',plan.indexCoverage==='VERIFIED_SUPPORTED_MARKDOWN'?'受支援語法的獨立掃描與索引核對通過。此結論只涵蓋受支援的 Markdown，不代表所有外掛或外部參照。套用不是跨裝置交易；請先停止其他同步整理。':'本次索引涵蓋核對未通過，請處理下列阻擋。這份方案不能套用。');
           if(plan.blockers.length){text(preview,'h3',`需先處理 ${plan.blockers.length} 項阻擋`);for(const item of plan.blockers)text(preview,'p',item.path+'：'+item.reason);}
           for(const change of plan.changes){const box=preview.createEl('details');text(box,'summary',change.path+' → '+change.targetPath);text(box,'h4','修改前');text(box,'pre',change.before,'mentor-source');text(box,'h4','草稿修改後');text(box,'pre',change.after,'mentor-source');for(const link of change.replacements)text(box,'p',link.before+' → '+link.after);}
+          if(plan.application==='REQUIRES_CONFIRMATION'){
+            const label=preview.createEl('label'),check=label.createEl('input',{type:'checkbox'});label.appendText('我已核對這份方案，且沒有其他視窗或裝置同時整理筆記庫。');
+            const result=text(preview,'p','');button(preview,'搬移這份筆記並更新預覽的連結',async()=>{if(!check.checked)throw new Error('請先核對方案並確認沒有其他整理執行。');const log=await this.relocations.apply(plan);await this.syncRelocationSources(log);result.textContent=log.status==='applied'?'已搬移並更新連結；可從搬移紀錄復原。':'結果需核對：'+log.error+'。請先查看搬移紀錄，不直接重跑。';new Notice(result.textContent);},true);
+            button(preview,'查看搬移紀錄與復原',()=>{review.close();return this.relocationRecord(plan.id);});
+          }
         }).open();
       },true);
       button(host,'暫不處理',()=>modal.close());
@@ -277,10 +293,40 @@ module.exports = class MentorPlugin extends Plugin {
       button(host,'暫不套用',()=>modal.close());
     }).open();
   }
+  async syncRelocationSources(log) {
+    if(!['applied','reverted','partial','undo-partial'].includes(log.status))return;
+    const from=log.moved?log.plan.from:log.plan.to,to=log.moved?log.plan.to:log.plan.from;let changed=false;
+    const sources={...this.sources};for(const [id,source] of Object.entries(sources))if(source.path===from){sources[id]={...source,path:to};changed=true;}
+    if(changed){await this.saveData({address:this.address,sources});this.sources=sources;}this.refresh();
+  }
+  async relocationRecord(id) {
+    const log=await this.relocations.inspect(id);
+    new ReviewModal(this.app,'搬移結果與復原',(host,modal)=>{
+      text(host,'p',log.plan.from+' → '+log.plan.to);text(host,'p','狀態：'+({applied:'已套用',reverted:'已復原',partial:'已核對，部分完成','undo-partial':'已核對，部分復原',unknown:'結果未知，需先核對',applying:'先前搬移中，需核對',reverting:'先前復原中，需核對',conflict:'保留後來變更，不能自動繼續',prepared:'尚未開始'}[log.status]||log.status));
+      if(log.error)text(host,'p',log.error);
+      for(const file of log.files)text(host,'p',file.currentPath+'：'+({before:'符合原內容',after:'符合套用內容',conflict:'與前後版本都不同，保留目前內容'}[file.state]));
+      const details=host.createEl('details');text(details,'summary','查看這份方案的完整前後內容');for(const change of log.plan.changes){text(details,'h4',change.path);text(details,'pre',change.before,'mentor-source');text(details,'h4','套用後：'+change.targetPath);text(details,'pre',change.after,'mentor-source');}
+      if(['unknown','applying','reverting'].includes(log.status)){
+        const label=host.createEl('label'),check=label.createEl('input',{type:'checkbox'});label.appendText('我已確認先前搬移／復原已停止，其他視窗與裝置沒有繼續執行。');
+        button(host,'核對實際檔案並更新搬移紀錄',async()=>{const result=await this.relocations.reconcile(id,check.checked);await this.syncRelocationSources(result);modal.close();return this.relocationRecord(id);});
+      }
+      if(['prepared','partial'].includes(log.status))button(host,'繼續這份已核對的搬移方案',async()=>{const result=await this.relocations.apply(log.plan);await this.syncRelocationSources(result);modal.close();return this.relocationRecord(id);});
+      if(['applied','partial','undo-partial'].includes(log.status))button(host,'預覽復原搬移與連結',async()=>{
+        const preview=await this.relocations.previewUndo(id);
+        new ReviewModal(this.app,'先核對搬移復原範圍',(body,review)=>{
+          text(body,'p','這是相依的一整組路徑與連結變更。筆記或檔案清單有後來變動時會停止，保留目前內容，不只撤回其中一半。確認其他整理已停止再復原。新建的空資料夾不會自動刪除。');
+          for(const change of preview.plan.changes){text(body,'h4',change.targetPath+' → '+change.path);text(body,'pre',change.after,'mentor-source');text(body,'h4','復原為');text(body,'pre',change.before,'mentor-source');}
+          button(body,'復原這次搬移與連結',async()=>{const result=await this.relocations.undo(id,preview.plan.digest);await this.syncRelocationSources(result);review.close();modal.close();return this.relocationRecord(id);},true);
+        }).open();
+      });
+    }).open();
+  }
   async organizationHistory() {
+    const moveIds=this.app.vault.getFiles().filter(f=>f.path.startsWith(ORGANIZATION_HISTORY+'/')).map(f=>f.path.match(/\/relocation-([a-f0-9-]{36})\.json$/)?.[1]).filter(Boolean);
     const ids=this.app.vault.getFiles().filter(f=>f.path.startsWith(ORGANIZATION_HISTORY+'/')&&/\/[a-f0-9-]{36}\.json$/.test(f.path)).map(f=>f.basename);
     new ReviewModal(this.app,'整理紀錄與復原',(host,modal)=>{
-      if(!ids.length)text(host,'p','尚無已確認的整理操作。預覽方案不會寫入紀錄。');
+      if(!ids.length&&!moveIds.length)text(host,'p','尚無已確認的整理操作。預覽方案不會寫入紀錄。');
+      if(moveIds.length){text(host,'h3','搬移與連結紀錄');for(const id of moveIds)button(host,'查看搬移紀錄 '+id.slice(0,8),()=>{modal.close();return this.relocationRecord(id);});}
       for(const id of ids){const box=host.createDiv({cls:'mentor-task'});text(box,'h3',id);
         button(box,'檢查這次結果',async()=>{const log=await this.organization.inspect(id);text(box,'p',`${log.plan.label} · ${log.status}`);for(const file of log.files)text(box,'p',`${file.path} · ${{'matches-after':'符合套用後內容','matches-before':'符合套用前內容',conflict:'後來有變更，不能直接復原'}[file.state]}`);});
         button(box,'重新核對中斷結果',async()=>{

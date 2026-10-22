@@ -6,7 +6,7 @@ function scanReferences(content){
   if(typeof content!=='string')stop('筆記內容不是文字');if(content.length>200000)stop('筆記超過 200,000 字');
   if(content.startsWith('---\n')||content.startsWith('---\r\n')){
    const close=/^(?:---|\.\.\.)\r?$/gm;close.lastIndex=content.indexOf('\n')+1;const match=close.exec(content);if(!match)stop('Properties 尚未結束');
-   const yaml=content.slice(0,match.index);if(/\[|\]|<|obsidian:|file:/i.test(yaml))stop('Properties 含需另外解析的參照或集合');i=match.index+match[0].length;
+   const yaml=content.slice(0,match.index).replace(/^(?:cssclasses|tags):[ \t]*\[[\p{L}\p{N}_\/#, \t-]*\][ \t]*\r?$/gmu,'');if(/\[|\]|<|obsidian:|file:/i.test(yaml))stop('Properties 含需另外解析的參照或集合');i=match.index+match[0].length;
   }
   while(i<content.length){
    const tail=content.slice(i),lineStart=i===0||content[i-1]==='\n';

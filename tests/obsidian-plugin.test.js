@@ -178,11 +178,29 @@ test('native relocation command reads a full snapshot and exposes link differenc
  f.plugin.app.metadataCache={getFileCache:file=>({links:file.path==='引用.md'?[{original:'[[測試]]',link:'測試',position:{start:{offset:0},end:{offset:6}}}]:[]}),getFirstLinkpathDest:link=>link==='測試'?entries[0]:null};
  await f.plugin.previewRelocation();assert.equal(f.requests.length,0);all(f.modal.contentEl).find(e=>e.attrs['aria-label']==='搬移目標筆記路徑').value='知識/新名字.md';
  await all(f.modal.contentEl).find(e=>e.text==='計算搬移與連結草稿').onclick();
- assert.equal(f.modal.title,'搬移與連結草稿 · 尚不可套用');assert.ok(all(f.modal.contentEl).some(e=>e.text.includes('[[知識/新名字]]')));assert.ok(all(f.modal.contentEl).some(e=>e.text.includes('只涵蓋受支援的 Markdown')));assert.equal(all(f.modal.contentEl).filter(e=>e.tag==='button').length,0);assert.equal(f.requests.length,0);assert.equal(files.get('測試.md'),'原文');assert.equal(files.get('引用.md'),'[[測試]]');
+ assert.equal(f.modal.title,'搬移與連結變更 · 先預覽');assert.ok(all(f.modal.contentEl).some(e=>e.text.includes('[[知識/新名字]]')));assert.ok(all(f.modal.contentEl).some(e=>e.text.includes('只涵蓋受支援的 Markdown')));assert.ok(all(f.modal.contentEl).some(e=>e.text==='搬移這份筆記並更新預覽的連結'));assert.equal(f.requests.length,0);assert.equal(files.get('測試.md'),'原文');assert.equal(files.get('引用.md'),'[[測試]]');
  f.plugin.app.metadataCache.getFileCache=()=>({links:[]});await f.plugin.previewRelocation();all(f.modal.contentEl).find(e=>e.attrs['aria-label']==='搬移目標筆記路徑').value='知識/新名字.md';await all(f.modal.contentEl).find(e=>e.text==='計算搬移與連結草稿').onclick();assert.ok(all(f.modal.contentEl).some(e=>e.text.includes('本次索引涵蓋核對未通過')));assert.ok(all(f.modal.contentEl).some(e=>e.text.includes('連結數與索引不同')));
 });
 test('native relocation discards a snapshot if note contents change during scanning',async()=>{
  const f=fixture();await f.plugin.onload();const entry={path:'測試.md',stat:{}};let reads=0;
  Object.assign(f.plugin.app.vault,{getMarkdownFiles:()=>[entry],getFiles:()=>[entry],getAbstractFileByPath:p=>p===entry.path?entry:null,read:async()=>++reads===1?'原文':'後來修改'});f.plugin.app.metadataCache={getFileCache:()=>({}),getFirstLinkpathDest:()=>null};
- await f.plugin.previewRelocation();all(f.modal.contentEl).find(e=>e.attrs['aria-label']==='搬移目標筆記路徑').value='新.md';await all(f.modal.contentEl).find(e=>e.text==='計算搬移與連結草稿').onclick();assert.match(f.notices.at(-1),/掃描期間筆記已變更/);assert.equal(f.modal.title,'搬移／重新命名 · 只讀草稿');
+ await f.plugin.previewRelocation();all(f.modal.contentEl).find(e=>e.attrs['aria-label']==='搬移目標筆記路徑').value='新.md';await all(f.modal.contentEl).find(e=>e.text==='計算搬移與連結草稿').onclick();assert.match(f.notices.at(-1),/掃描期間筆記已變更/);assert.equal(f.modal.title,'搬移／重新命名 · 先準備方案');
+});
+
+test('native relocation confirms the preview, journals Vault writes, updates source shortcuts and restores the same plan',async()=>{
+ const f=fixture(),files=new Map([['測試.md','[引用](引用.md)'],['引用.md','[[測試]]']]),folders=new Set(),renames=[];
+ const entries=()=>[...files.keys()].map(path=>({path,basename:path.split('/').at(-1).replace(/\.json$|\.md$/g,''),stat:{}}));
+ Object.assign(f.plugin.app.vault,{getMarkdownFiles:()=>entries().filter(e=>e.path.endsWith('.md')),getFiles:entries,getAbstractFileByPath:p=>entries().find(e=>e.path===p)||(folders.has(p)?{path:p}:null),read:async file=>files.get(file.path),createFolder:async p=>folders.add(p),create:async(p,text)=>{assert.equal(files.has(p),false);files.set(p,text);},process:async(file,update)=>files.set(file.path,update(files.get(file.path))),rename:async(file,to)=>{assert.equal(files.has(to),false);files.set(to,files.get(file.path));files.delete(file.path);renames.push([file.path,to]);file.path=to;}});
+ f.plugin.app.metadataCache={getFileCache:file=>({links:coverageModule.exports.scanReferences(files.get(file.path)).references.map(ref=>({...ref,position:{start:{offset:ref.start},end:{offset:ref.end}}}))}),getFirstLinkpathDest:link=>entries().find(e=>e.path===link||e.path===link+'.md')||null};
+ await f.plugin.onload();f.plugin.sources={'TASK-old':{path:'測試.md',hash:'original-version'}};
+ await f.plugin.previewRelocation();all(f.modal.contentEl).find(e=>e.attrs['aria-label']==='搬移目標筆記路徑').value='整理後/新名字.md';await all(f.modal.contentEl).find(e=>e.text==='計算搬移與連結草稿').onclick();
+ const preview=f.modal,apply=all(preview.contentEl).find(e=>e.text==='搬移這份筆記並更新預覽的連結');await apply.onclick();assert.equal(renames.length,0,'confirmation precedes actual moves');assert.match(f.notices.at(-1),/核對方案/);
+ all(preview.contentEl).find(e=>e.tag==='input').checked=true;await apply.onclick();assert.equal(files.has('測試.md'),false);assert.equal(files.get('引用.md'),'[[整理後/新名字]]');assert.equal(f.plugin.sources['TASK-old'].path,'整理後/新名字.md');assert.equal(f.saved.sources['TASK-old'].hash,'original-version');assert.equal(f.requests.length,0);
+ await apply.onclick();assert.equal(renames.length,1,'duplicate click replays the same journal');await all(preview.contentEl).find(e=>e.text==='查看搬移紀錄與復原').onclick();
+ await all(f.modal.contentEl).find(e=>e.text==='預覽復原搬移與連結').onclick();await all(f.modal.contentEl).find(e=>e.text==='復原這次搬移與連結').onclick();assert.equal(files.get('測試.md'),'[引用](引用.md)');assert.equal(files.get('引用.md'),'[[測試]]');assert.equal(files.has('整理後/新名字.md'),false);assert.equal(f.plugin.sources['TASK-old'].path,'測試.md');assert.equal(renames.length,2);
+});
+
+test('source shortcut persistence can be retried if preference storage fails after a successful relocation',async()=>{
+ const f=fixture();await f.plugin.onload();f.plugin.sources={'TASK-old':{path:'A.md',hash:'original'}};const save=f.plugin.saveData.bind(f.plugin);let attempts=0;f.plugin.saveData=async data=>{if(++attempts===1)throw Error('preference storage unavailable');return save(data);};
+ const result={status:'applied',moved:true,plan:{from:'A.md',to:'新/A.md'}};await assert.rejects(f.plugin.syncRelocationSources(result),/unavailable/);assert.equal(f.plugin.sources['TASK-old'].path,'A.md');await f.plugin.syncRelocationSources(result);assert.equal(f.saved.sources['TASK-old'].path,'新/A.md');assert.equal(f.plugin.sources['TASK-old'].hash,'original');
 });
