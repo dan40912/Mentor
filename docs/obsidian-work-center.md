@@ -9,6 +9,7 @@
 ```sh
 npm test
 npm run package:obsidian
+npm run verify:obsidian -- --vault dist/mentor-obsidian
 npm start
 ```
 
@@ -21,7 +22,11 @@ npm start
 5. 若 Mentor 不是預設 4317，輸入實際 `http://127.0.0.1:連接埠`。
 6. 打開「00 工作首頁」，從筆記開始。
 
-生成器只寫 repo 的 `dist/mentor-obsidian`，不接受正式 Vault 路徑；不要把自己的筆記放進這個 build 目錄。未提供自動安裝／升級腳本去覆寫現有 Vault。
+生成器只寫 repo 的 `dist/mentor-obsidian`，不接受正式 Vault 路徑。只打包明確列出的插件／Theme 檔案與非隱藏 Markdown 範例，不複製來源目錄中的 data.json 或其他本機狀態。
+
+`.obsidian/mentor-build.json` 記錄本次產生檔案的 hash；它是所有權追蹤資料，不是備份。重新建置前會先檢查全部預期輸出，人工改過的範本、範例或 runtime 不會被默默覆寫。沒有舊追蹤檔且內容與新來源不同，也會停止，因為無法判斷它是舊產出或人工內容。建置路徑的 symlink、寫入時的替換與 hard link 也會拒絕。
+
+請勿把正式筆記放入 build 目錄。若示範庫已實際使用，先停止 Obsidian、備份並將整個舊庫另存，再建立新的示範庫；不要為了通過檢查而刪除自己的修改。未提供覆寫正式 Vault 的自動安裝器。
 
 ## 第一個任務
 
@@ -143,7 +148,19 @@ Theme 使用系統字型、Obsidian 變數與原創紙色／森林綠配色，�
 
 停用 Theme 回到其他外觀；停用插件不影響筆記原文。人工整理的範本與側欄保存的接手包仍可閱讀。正式 Mentor 任務檔仍在 MENTOR_HOME/vault，不因插件停用而搬移。
 
-要升級，先備份示範庫與你保存的筆記，再手動替換插件的 main.js、organization.js、content-drafts.js、relocation.js、reference-coverage.js、manifest.json、styles.css 或 Theme；不覆寫範本中已填寫的內容。正式庫升級流程仍待實機驗收。
+要升級，先停止 Obsidian 與其他整理／同步寫入，備份整個 Vault（另備份 Mentor home），並保留目前插件與 Theme 的 runtime 副本。用要安裝的 Git checkout 執行測試、建置及驗證，再手動替換插件的 main.js、organization.js、content-drafts.js、relocation.js、reference-coverage.js、manifest.json、styles.css；若升級 Theme，替換該 Theme 的 manifest.json、theme.css。
+
+不要整包覆寫 `.obsidian`，也不要覆寫 data.json、appearance.json、其他插件設定、已填範本、筆記或整理日誌。重新開啟 Obsidian 後需重新配對，因為憑證只存在記憶體。
+
+從同一份預期版本的 checkout 執行唯讀驗證：
+
+```sh
+npm run verify:obsidian -- --vault "/path/to/你的示範庫"
+```
+
+驗證器只比對上述 9 個 runtime 檔案與目前 checkout 的 SHA-256，不讀寫筆記、data.json 或憑證；不會安裝、啟用、覆寫或修復任何檔案。缺檔、混版、修改版、symlink 或不安全路徑會回報失敗。`PASS runtime files match this checkout.` 只代表檔案一致，不能證明 Obsidian API、畫面、Theme 或人工流程已通過驗收，也不保證這份 checkout 是遠端最新版。
+
+若升級後需回復，停止 Obsidian，從備份還原整組舊 runtime，保留目前筆記與日誌，再按舊版本的 checkout 驗證。拿新版 checkout 檢查舊 runtime 會正確顯示不同，不能當成資料壞掉。建置與手動替換不是多檔原子交易；中斷或同時編輯後先檢查檔案，不盲目重跑。隔離檔案系統測試已覆蓋這條流程，正式 Obsidian 升級／回復仍待實機驗收。
 
 ## 使用量
 

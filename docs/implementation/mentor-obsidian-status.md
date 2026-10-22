@@ -5,7 +5,7 @@
 ## 工作基準
 
 - Repo：dan40912/Mentor；基於既有 lab-zero-touch 的 commit `5b8c7e89eadf6e1a833651a695037b184109864b`。
-- 目前分支：codex/mentor-relocation-apply；前一批 codex/mentor-obsidian-workflow 的 PR #2 已由外部操作合併（來源 9e75eea，main merge 94a4aa2）。
+- 目前分支：codex/mentor-obsidian-upgrade-verification（以搬移 PR #3 為前置）；搬移分支為 codex/mentor-relocation-apply；前一批 codex/mentor-obsidian-workflow 的 PR #2 已由外部操作合併（來源 9e75eea，main merge 94a4aa2）。
 - 獨立 worktree；原始 checkout 的 agents／coach／handoffs／server／web 修改，以及 Body-release、POC 與其他未追蹤檔均未覆蓋或帶入。
 - 基線：npm test，276 pass／0 fail。
 
@@ -192,3 +192,14 @@
 - 本批完整自動測試：344 pass／0 fail；npm run package:obsidian 與 git diff --check 通過。原生隔離操作與實際檔案系統均有覆蓋，未操作正式 Vault，Obsidian 桌面與真人驗收仍未完成。
 
 - PR 交付：原 PR #2 在開發期間由外部操作合併；後續搬移提交已改以 `codex/mentor-relocation-apply` 開 [Draft PR #3](https://github.com/dan40912/Mentor/pull/3)，不更動 main 或自行合併。先前誤寫到已合併 PR 的本批說明已還原為 #2 的歷史內容。
+
+
+## 第十五批：安裝核對與保留人工內容的重建
+
+- 套裝改為明確 runtime 檔案清單，只分發非隱藏 Markdown 範例；來源資料夾的 data.json／其他狀態不會夾帶。建置追蹤檔保存產生檔案 hash，先核對全部輸出；已改過或無法確認所有權的檔案停止，不覆寫。
+- 改善 dist symlink 檢查順序，在建立子目錄之前拒絕外部連結；寫入拒絕晚到的替換及 hard link。新工具不接受正式 Vault 作為建置目標，也不提供強制覆寫旗標。
+- 新增 verify:obsidian -- --vault，唯讀比對 9 個 runtime 檔案與此 checkout，找出漏裝、混版及不安全路徑。不讀筆記、data.json 或憑證，不自動安裝或啟用；PASS 只是檔案比對，並非實機驗收。
+- 隔離真實檔案系統驗證追蹤升級、人工範本拒絕、手動只換 runtime 再回復、設定／筆記／日誌保留、舊版未追蹤產出、symlink 目標與 hard link。正式庫與 Obsidian 實機仍未操作。
+- 此批另開依賴 PR #3 的 Draft PR，維持獨立審查。完整目標仍包含真人／桌面／跨平台真實 CLI 驗收及可靠 Token 效率證據，尚未完成。
+
+- 本批完整自動測試：349 pass／0 fail；套裝建置、verify:obsidian（9 個 runtime matched）與 git diff --check 通過。這是隔離檔案系統／checksum 證據，未替代 Obsidian 實機升級與真人驗收。
