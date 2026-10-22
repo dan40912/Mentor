@@ -15,7 +15,7 @@ function controlBar(t){
  const text=element('div',undefined,'control-text');
  if(p.running){
   const s=p.running.stopping;bar.classList.add(s?(s.unconfirmed?'is-unconfirmed':'is-stopping'):'is-running');
-  const line=element('span',undefined,'small');line.append(`${stageLabel(p.running.stage)}${p.running.workItemId?` ${itemName(p.running.workItemId)}`:''} · ${p.running.agent} · 已 `);const since=element('span','');since.dataset.since=p.running.startedAt;line.append(since);
+  const line=element('span',undefined,'small');line.append(`${p.running.discussion?'任務問答':stageLabel(p.running.stage)}${p.running.workItemId?` ${itemName(p.running.workItemId)}`:''} · ${p.running.agent} · 已 `);const since=element('span','');since.dataset.since=p.running.startedAt;line.append(since);
   text.append(element('strong',s?(s.unconfirmed?'尚未確認停止':'正在停止…'):'AI 執行中'),line);if(s)text.append(element('span',stopNote(s),'small muted'));
   bar.append(element('span','',s?'pulse amber':'pulse'),text);
   if(!s){const stop=focusKey(element('button','停止這次執行','btn'),'stop');stop.onclick=busy(stop,()=>stopRun(t));bar.append(stop);}
@@ -168,4 +168,23 @@ async function confirmProjectTrash(p,host,from){
  box.onsubmit=e=>{e.preventDefault();busy(ok,async()=>{try{const r=await request(`/api/projects/${encodeURIComponent(p.id)}/trash`,{reason:reason.value,name:p.name});clearInterval(timer);projectState.id=null;await loadTasks();await renderJourney();tell(`已把專案「${r.trashed.name}」與 ${r.trashed.taskIds.length} 個任務移到回收桶。產出資料夾不動，可以在「回收桶」還原。`);}catch(error){err.textContent=`沒有移動：${error.message}`;err.hidden=false;await refresh();throw error;}})();};
  box.append(element('strong',`把專案「${p.name}」移到回收桶？`),element('p','專案說明、專案規則，以及所屬任務的對話與事件會一起移到回收桶，可以還原。產出資料夾不動；這個專案的規則暫停帶入新任務，團隊規則保留。','small'),status,l,err);
  const row=element('div',undefined,'buttons');row.append(ok,stopAll,cancel);box.append(row);ok.disabled=true;stopAll.hidden=true;await refresh();reason.focus();
+}
+
+function questionBox(t){
+ const box=element('details',undefined,'task-question');box.append(element('summary','有疑問？先問，不改成果'));
+ box.append(element('p','只根據任務紀錄回答，不讀寫成果，也不接續自動流程。建議需另經修改預覽確認。','small muted'));
+ const labels={question:'提問與解釋',change:'可能希望修改，尚未執行',cancel:'可能希望暫停，尚未變更工作狀態',unclear:'意圖尚待釐清'};
+ for(const message of (t.planning.messages||[]).filter(m=>m.kind==='discussion').slice(-4)){
+  box.append(element('strong',message.role==='user'?'你的問題':labels[message.discussion?.intent]||'問答紀錄'),element('p',message.text));
+  if(message.role==='ai'&&message.discussion?.proposedChange){const use=element('button','帶入修改草稿','btn');use.type='button';use.onclick=()=>focusInstruct(message.discussion.scope,message.discussion.proposedChange);box.append(use);}
+ }
+ const form=element('form'),area=element('textarea');area.maxLength=6000;area.setAttribute('aria-label','只提問，不修改成果');area.placeholder='例如：這一輪為什麼改了表格？有哪些還沒驗證？';
+ const draftKey='question:'+t.id;area.value=composerDrafts[draftKey]||'';area.oninput=()=>{composerDrafts[draftKey]=area.value;};
+ const send=element('button','先回答這個問題','btn');send.type='submit';send.disabled=Boolean(t.planning.running||t.planning.stopped);const error=element('p','','field-error');error.setAttribute('role','alert');
+ let sent=null;form.append(area,error,send);form.onsubmit=event=>{event.preventDefault();return busy(send,async()=>{
+  const question=area.value.trim();if(!question){error.textContent='請先填入問題。';return;}
+  if(!sent||sent.question!==question)sent={question,key:crypto.randomUUID()};
+  area.disabled=true;
+  try{const result=await request(`/api/tasks/${t.id}/ask`,{revision:t.revision,question},{'Idempotency-Key':sent.key});area.value='';delete composerDrafts[draftKey];replaceTask(result.task);ensurePolling();tell('已送出問答；原工作與驗收不會因此變更。');}catch(e){error.textContent=e.message;}finally{area.disabled=false;}
+ })();};box.append(form);return box;
 }

@@ -99,3 +99,11 @@ test('native correction previews a captured request before applying its exact re
  await all(preview.contentEl).find(e=>e.text==='確認：請 AI 改計畫').onclick();
  assert.equal(calls.length,2);assert.equal(calls[1].input.proposalId,'proposal-1234567890');assert.equal(calls[1].input.revision,7);assert.equal(calls[1].input.text,'只改表格');assert.ok(calls[1].key);
 });
+
+test('native question entry submits only ask and keeps one request identity for a retry',async()=>{
+ const f=fixture();await f.plugin.onload();f.plugin.token='test-token';const calls=[];
+ f.plugin.api=async(route,input,key)=>{calls.push({route,input,key});throw new Error('network unavailable');};
+ f.plugin.ask({id:'TASK-question',revision:3});const modal=f.modal;all(modal.contentEl).find(e=>e.attrs['aria-label']==='只提問，不修改成果').value='這輪改了什麼？';
+ const ask=all(modal.contentEl).find(e=>e.text==='先回答這個問題');await ask.onclick();await ask.onclick();
+ assert.equal(calls.length,2);assert.ok(calls.every(c=>c.route==='/tasks/TASK-question/ask'));assert.equal(calls[0].key,calls[1].key);assert.equal(calls[0].input.question,'這輪改了什麼？');assert.ok(f.notices.includes('network unavailable'));
+});

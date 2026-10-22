@@ -33,6 +33,7 @@ function context(extra = {}) {
     focusKey: b => b, busy: (b, fn) => fn, state: { profiles: [], providers: [], stages },
     agentOfTask: () => 'AI', agentOf: () => 'AI', stageLabel: id => stages.find(s => s.id === id)?.name,
     agentChoices: () => [], agentValue: () => 'inherit', options() {},
+    questionBox: () => node('details'),
     instructionBox: (t, { extraButtons = [] } = {}) => { const form = node('form');form.append(...extraButtons);return form; }, learningPanel: () => null, cardPanel: () => node('div'),
     auditPanel: () => node('details'), itemStatus: {}, visualIcon: {}, tell() {},
     ...extra });

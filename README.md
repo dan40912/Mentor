@@ -47,7 +47,7 @@ Without arguments, npm start uses this checkout’s `vault/` and `outputs/`. `ME
 ## Complete one task
 
 1. Choose 新任務 and state the goal, allowed changes and restrictions.
-2. Check the task card and follow-up questions. Correct any mismatch between your original request and the AI’s interpretation.
+2. Check the task card and follow-up questions. Use 有疑問？先問，不改成果 for record-based questions without changing work. AI intent interpretations and suggestions require your review; only an explicitly confirmed correction becomes an instruction.
 3. Choose 預覽計畫. Read the exact scope, work items, output location and acceptance conditions before approving that revision.
 4. Execute, then read round cards and open the actual artifacts. Agent claims, machine checks and human acceptance remain separate.
 5. Before switching agents, confirm the prior run stopped. Change the subsequent assignment or prepare a compact handoff containing the goal, human corrections, boundaries, revision, evidence and next action. Full history remains available through indexes.
@@ -116,7 +116,7 @@ The [paired real-provider benchmark](docs/benchmarks/handoff-2026-10-22.md) pass
 | Uncertain result after stopping | Inspect artifacts and history before restarting work |
 | Removing the integration | Disable plugin/theme, revoke pairing and back up notes/journals before removing plugin files |
 
-Still pending: correction impact analysis, additional organization flows, reliable before/after token benchmarks, human onboarding tests, desktop reading/Live Preview, full upgrade recovery and cross-platform live CLI acceptance. Windows .cmd CLIs have path/argument restrictions; automated CI is not a real Windows CLI session. English UI and automatic quota switching are not complete features.
+Still pending: broader natural-language intent validation, additional organization flows, reliable before/after token benchmarks, human onboarding tests, desktop reading/Live Preview, full upgrade recovery and cross-platform live CLI acceptance. Windows .cmd CLIs have path/argument restrictions; automated CI is not a real Windows CLI session. English UI and automatic quota switching are not complete features.
 
 ## Contributing
 

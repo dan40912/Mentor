@@ -202,8 +202,10 @@ module.exports = class MentorPlugin extends Plugin {
     new ReviewModal(this.app,task.title,(host,modal)=>{
       text(host,'p',`第 ${task.revision} 版 · ${task.nextAction?.label||task.status}`);text(host,'h3','原始要求');text(host,'p',p?.request||task.goal);text(host,'h3','目前理解');text(host,'p',task.goal);
       text(host,'p',task.current?.summary||'');
-      for(const c of task.workCards||[]){const box=host.createDiv({cls:'mentor-task'});text(box,'h3',`${c.stage} · ${c.label}`);text(box,'p',c.outcome);if(c.aiClaims?.change)text(box,'p',`AI 自述：${c.aiClaims.change}`);for(const check of c.checks)text(box,'p',`${check.result} · ${check.label||check.id}`);}
+      for(const c of task.workCards||[]){const box=host.createDiv({cls:'mentor-task'});text(box,'h3',`${c.roleLabel||c.stage} · ${c.label}`);text(box,'p',c.outcome);if(c.aiClaims?.change)text(box,'p',`AI 自述：${c.aiClaims.change}`);for(const check of c.checks)text(box,'p',`${check.result} · ${check.label||check.id}`);}
       const invoke=async(action,input={})=>{await this.api(`/tasks/${task.id}/${action}`,{revision:task.revision,...input});modal.close();this.refresh();};
+      for(const message of (p?.messages||[]).filter(m=>m.kind==='discussion').slice(-4)){text(host,'h3',message.role==='user'?'你的問題':'問答回答（不是修改授權）');text(host,'p',message.text);if(message.discussion?.proposedChange)button(host,'帶入修正草稿',()=>{modal.close();this.instruction(task,{text:message.discussion.proposedChange,scope:message.discussion.scope});});}
+      if(p&&!p.running&&!p.stopped)button(host,'先問問題，不修改成果',()=>{modal.close();this.ask(task);});
       if(p?.running){button(host,'停止這次執行',()=>invoke('stop'));return;}
       if(p)button(host,'補充或修正這個任務',()=>{modal.close();this.instruction(task);});
       if(p?.phase==='grill'){
@@ -228,6 +230,13 @@ module.exports = class MentorPlugin extends Plugin {
       const who=host.createEl('select',{attr:{'aria-label':'下一步 AI'}});for(const [v,n] of [['inherit','沿用設定'],['codex|default','Codex'],['claude|default','Claude Code'],['copilot|default','Copilot']])who.createEl('option',{text:n,value:v});
       button(host,'保存後續 AI 指派',()=>invoke('agents',{all:who.value}));
       button(host,'準備跨 AI 接手包',()=>this.handoff(task));
+    }).open();
+  }
+  ask(task) {
+    new ReviewModal(this.app,'先問問題，不修改成果',(host,modal)=>{
+      text(host,'p','只根據保存的任務紀錄回答。這個按鍵不會讀寫成果、不會自動修改或取消任務；會使用問答階段 AI 的帳號額度。');
+      const input=host.createEl('textarea',{attr:{'aria-label':'只提問，不修改成果'}}),key=randomUUID();
+      button(host,'先回答這個問題',async()=>{if(!input.value.trim())throw new Error('請先填入問題。');await this.api(`/tasks/${task.id}/ask`,{revision:task.revision,question:input.value},key);modal.close();this.refresh();},true);
     }).open();
   }
   instruction(task,draft={}) {

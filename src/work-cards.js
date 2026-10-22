@@ -19,14 +19,14 @@ export function turnContext(task) {
 const states = { running: '執行中', completed: '已回覆，仍需核對', failed: '未完成', unknown: '結果未知', stopped: '已停止，未完成' };
 export function workCards(task) {
   return (task.planning?.learningTurns || []).map(turn => ({
-    id: turn.id, stage: turn.stage, status: turn.status, label: states[turn.status] || '未知狀態',
+    id: turn.id, stage: turn.stage, roleLabel: turn.inputKind==='question'?'任務問答':turn.stage, status: turn.status, label: states[turn.status] || '未知狀態',
     provider: turn.provider || null, model: turn.modelId || null, agent: turn.agent || '未記錄',
     startedAt: turn.startedAt, completedAt: turn.completedAt || null,
     baseRevision: turn.beforeRevision, resultRevision: turn.afterRevision || null,
     userInput: turn.userInput || '',
     // Historical turns without a snapshot must not be rewritten using today's goal.
     context: turn.context || null,
-    outcome: turn.error || (turn.status === 'completed' ? '本輪 AI 回覆已保存；成果與驗收請分別核對。' : states[turn.status] || '尚無可核對結果'),
+    outcome: turn.error || (turn.status === 'completed' ? (turn.inputKind==='question'?'問答已保存；未修改成果，也未變更驗收。':'本輪 AI 回覆已保存；成果與驗收請分別核對。') : states[turn.status] || '尚無可核對結果'),
     aiClaims: turn.status === 'completed' ? { change: turn.learning?.change || '', evidence: turn.learning?.evidence || '' } : null,
     outputs: turn.outputs || [],
     checks: turn.checks || [],

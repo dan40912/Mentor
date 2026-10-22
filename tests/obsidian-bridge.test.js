@@ -15,6 +15,7 @@ test('pairing is single use, short lived, rate limited and revocable; credential
   assert.equal(bridge.authorize(request(access.token)).route,'/api/tasks');
   assert.throws(()=>bridge.exchange(pairing.code),{code:'PAIRING_INVALID'});
   assert.ok(!JSON.stringify(bridge.list()).includes(access.token));
+  assert.equal(bridge.authorize(request(access.token,'/api/obsidian/tasks/TASK-a/ask','POST')).route,'/api/tasks/TASK-a/ask');
   for(const route of ['/api/obsidian/settings','/api/obsidian/handoffs','/api/obsidian/tasks/TASK-a/trash','/api/obsidian/tasks/TASK-a/../../settings'])assert.throws(()=>bridge.authorize(request(access.token,route,'POST')),{code:'BRIDGE_SCOPE'});
   bridge.revoke(access.id);assert.throws(()=>bridge.authorize(request(access.token)),{code:'BRIDGE_AUTH_REQUIRED'});
   const expiring=bridge.prepare();clock+=120001;assert.throws(()=>bridge.exchange(expiring.code),{code:'PAIRING_INVALID'});

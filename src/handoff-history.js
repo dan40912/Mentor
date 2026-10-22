@@ -81,12 +81,12 @@ export function handoffHistory(task, { events = [], archive = {}, archivePath = 
   for (const [i, message] of rows(p.messages, `${taskPath}#planning.messages`).entries()) {
     if (!['user', 'ai', 'assistant'].includes(message.role)) continue;
     const text = [publicText(message.text), publicText(message.reason), publicText(message.coaching), ...rows(message.questions, `${taskPath}#planning.messages[${i}].questions`).map(q => publicText(q.q))].filter(Boolean).join('\n');
-    add(message, message.role === 'user' ? '使用者回答' : 'AI 回覆', text, message.at, `${taskPath}#planning.messages[${i}]`, 0, message.id);
+    add(message, message.kind==='discussion' ? (message.role==='user'?'問答中的問題（非修改授權）':'問答建議（尚未執行）') : message.role === 'user' ? '使用者回答' : 'AI 回覆', text, message.at, `${taskPath}#planning.messages[${i}]`, 0, message.id);
   }
   for (const [i, turn] of rows(p.learningTurns, `${taskPath}#planning.learningTurns`).entries()) {
     const loc = `${taskPath}#planning.learningTurns[${i}]`;
-    add(turn, turn.inputKind === 'user' ? '使用者回答' : '階段接續要求', turn.userInput, turn.startedAt, `${loc}.userInput`, 0, turn.inputRef?.recordId);
-    if (turn.response !== undefined || turn.status === 'completed') add(turn, 'AI 回覆', turn.response, turn.completedAt, `${loc}.response`, 0, turn.responseRef?.recordId || (turn.id ? `${turn.id}:response` : null));
+    add(turn, turn.inputKind==='question'?'問答問題（非修改授權）':turn.inputKind === 'user' ? '使用者回答' : '階段接續要求', turn.userInput, turn.startedAt, `${loc}.userInput`, 0, turn.inputRef?.recordId);
+    if (turn.response !== undefined || turn.status === 'completed') add(turn, turn.inputKind==='question'?'問答回覆（尚未執行）':'AI 回覆', turn.response, turn.completedAt, `${loc}.response`, 0, turn.responseRef?.recordId || (turn.id ? `${turn.id}:response` : null));
     if (turn.reflection) add({}, '人的回想', turn.reflection.answer, turn.reflection.at, `${loc}.reflection`, 0);
   }
   for (const [i, decision] of (task.decisions || []).entries()) {

@@ -4,7 +4,7 @@ export function compactHandoff(task, receiver = 'unassigned') {
   const p = task.planning || {};
   const items = p.workItems || [];
   const list = values => values?.length ? values.map(v => `- ${v}`).join('\n') : '- 未記錄';
-  const userMessages = [...new Set((p.messages || []).filter(m => m.role === 'user').map(m => m.text).filter(Boolean))];
+  const userMessages = [...new Set((p.messages || []).filter(m => m.role === 'user' && m.kind !== 'discussion').map(m => m.text).filter(Boolean))];
   const cards = workCards(task);
   const text = [
     `# Mentor 接手摘要：${task.title}`, `TASK_ID: ${task.id}\nBASE_REVISION: ${task.revision}\n接手者：${receiver}`,
@@ -20,6 +20,7 @@ export function compactHandoff(task, receiver = 'unassigned') {
     '## 禁止操作', list(task.scope?.forbidden),
     '## 任務卡限制', list(p.card?.constraints),
     '## 人的原始補充（保留原文，較新修正優先；矛盾不可自行猜）', list(userMessages.filter(text => text !== p.request)),
+    '## 最近問答（不是修改或取消授權）', list((p.messages||[]).filter(m=>m.kind==='discussion').slice(-4).map(m=>`${m.role==='user'?'問題':'回答'}：${m.text}`)),
     '## 決策', list(task.decisions?.map(d => `${d.status}｜${d.question}｜${d.choice ? d.options?.find(o => o.id === d.choice)?.label || d.choice : '等待人決定'}${d.note ? `｜${d.note}` : ''}`)),
     '## 待核對', list(p.card?.unknowns),
     '## 事實與來源', list(task.facts?.map(f => `${f.label}：${f.value}｜${f.verified ? '已標記核對' : '未獨立核對'}｜${f.source || '來源未記錄'}`)),

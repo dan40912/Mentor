@@ -530,6 +530,7 @@ dialog.sheet [data-anchor],dialog.sheet [data-item]{scroll-margin-top:0}
 .instruct-label{font-weight:600;font-size:14px}
 .instruct-field{display:grid;gap:4px}.instruct-field input,.instruct-field select{width:100%;max-width:520px;min-height:36px;padding:6px 12px;border:1px solid var(--border-default);border-radius:var(--radius-button);background:#fff;color:var(--content-primary);font:inherit;font-size:14px}
 .instruct-field input:focus,.instruct-field select:focus{outline:0;border-color:var(--content-highlight);box-shadow:0 0 0 3px #4f44c340}.instruct .buttons{align-items:center}.instruct .counter{margin-left:auto}
+.task-question{margin:16px 0;padding:16px;border:1px solid var(--border-default);border-radius:var(--radius-container);background:#ffffffb3}.task-question form{display:grid;gap:12px}.task-question textarea{width:100%;min-height:96px;padding:12px;border:1px solid var(--border-default);border-radius:var(--radius-button);resize:vertical;background:#fff}.task-question form .btn{justify-self:start}
 .impact{border-left:3px solid var(--content-highlight);background:var(--highlight-wash);border-radius:var(--radius-button);padding:12px 16px;display:grid;gap:8px;font-size:14px}.impact p{margin:0}
 .field-error{color:var(--status-error);font-size:13px;margin:0}
 .sheet-actions{display:flex;flex-wrap:nowrap;align-items:center;gap:var(--space-s);--task-action-height:32px}
@@ -1147,6 +1148,7 @@ function renderPlanning(t,detail){
  const prof=state.profiles?.find(x=>x.id===p.profile);const meta=element('div',undefined,'assignees');if(prof)meta.append(element('span',`${prof.name}流程`,'badge blue'));const groups={};for(const id of ['A','B','C','D','E','F']){const a=agentOfTask(t,id);(groups[a]||=[]).push(id);}for(const [agent,ids] of Object.entries(groups)){const chip=element('span',undefined,'assignee');chip.append(element('strong',ids.join('')),` ${agent}`);chip.title=ids.map(stageLabel).join('、');meta.append(chip);}
  {const pick=element('label',undefined,'task-agent');const sel=element('select');sel.setAttribute('aria-label','這個任務用的 AI');options(sel,agentChoices());sel.value=agentValue(t);sel.disabled=Boolean(p.running);sel.dataset.focus='task-agent';sel.onchange=async()=>{const v=sel.value;sel.disabled=true;try{await coachAct(t,'agents',{all:v});tell(v==='inherit'?'這個任務改回沿用「角色與設定」。':'已更換這個任務的 AI，從下一步開始生效。');}catch(error){sel.value=agentValue(t);tell(`未完成：${error.message}`);}finally{if(sel.isConnected)sel.disabled=false;}};pick.append(element('span','這個任務用的 AI','small muted'),sel);meta.append(pick);}
  const assignment=element('details',undefined,'assignment-detail');assignment.append(element('summary','查看或調整後續 AI 指派'),meta);detail.append(assignment);
+ detail.append(questionBox(t));
  if(p.stopped||p.phase!=='grill')detail.append(instructionBox(t));
  if(p.phase==='grill'&&!p.stopped){
   const grid=element('div',undefined,'coach-grid');const chat=element('section',undefined,'chat');chat.setAttribute('aria-label','和 AI 教練的對話');chat.dataset.anchor='grill';
@@ -1229,7 +1231,7 @@ function openTask(id,{background=false}={}){
  if(t.error){detail.append(element('p',t.error,'notice'));if(!dialog.open)dialog.showModal();return;}
  if(t.workCards?.length){
   const latest=t.workCards.at(-1),round=section('這一輪，實際做了什麼');round.classList.add('work-round');
-  round.append(element('span',`${latest.stage} · ${latest.label} · ${latest.agent}${latest.simulated?'（測試 CLI）':''}`,'badge'),definition([['你的要求',latest.userInput||'未記錄'],['當時理解',latest.context?.interpretation||'舊紀錄未保存，不以目前目標回填'],['目前結果',latest.outcome]]));
+  round.append(element('span',`${latest.roleLabel||latest.stage} · ${latest.label} · ${latest.agent}${latest.simulated?'（測試 CLI）':''}`,'badge'),definition([['你的要求',latest.userInput||'未記錄'],['當時理解',latest.context?.interpretation||'舊紀錄未保存，不以目前目標回填'],['目前結果',latest.outcome]]));
   if(latest.aiClaims?.change)round.append(element('p',`AI 自述：${latest.aiClaims.change}`,'small muted'));
   round.append(element('p',`開始版本 ${latest.baseRevision??'未知'} → 結果版本 ${latest.resultRevision??'尚無'}；${latest.outputs.length} 份已登記成果；${latest.checks.length} 項已保存機器檢查。沒有檢查不代表通過。`,'small muted'));
   const history=element('button','閱讀每輪工作卡','btn');history.onclick=busy(history,async()=>showRoundCards(t));round.append(history);detail.append(round);
@@ -1335,7 +1337,7 @@ async function previewPlan(t){
 async function showRoundCards(t){
  const {cards}=await request(`/api/tasks/${t.id}/work-cards`);const d=workDialog('每輪工作卡');
  for(const c of [...cards].reverse()){
-  const box=section(`${c.stage} · ${c.label} · ${c.agent}`);
+  const box=section(`${c.roleLabel||c.stage} · ${c.label} · ${c.agent}`);
   box.append(definition([['本輪要求',c.userInput||'未記錄'],['當時理解',c.context?.interpretation||'舊紀錄未保存'],['實際結果',c.outcome],['版本',`${c.baseRevision??'未知'} → ${c.resultRevision??'尚無'}`],['當輪下一步',c.next?.label||'未記錄，請查看任務目前狀態']]));
   if(c.aiClaims?.change)box.append(element('p',`AI 自述改動：${c.aiClaims.change}`,'small'));
   if(c.aiClaims?.evidence)box.append(element('p',`AI 聲稱的證據（非獨立驗證）：${c.aiClaims.evidence}`,'small muted'));
