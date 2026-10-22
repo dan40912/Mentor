@@ -1,3 +1,4 @@
+import { extractJson } from './agents.js';
 import { usageLabel } from './cli-usage.js';
 // These projections use persisted state, never another AI call to invent a summary.
 export function measureText(text = '') {
@@ -24,6 +25,7 @@ export function workCards(task) {
     startedAt: turn.startedAt, completedAt: turn.completedAt || null,
     baseRevision: turn.beforeRevision, resultRevision: turn.afterRevision || null,
     userInput: turn.userInput || '',
+    answer: turn.inputKind==='question'&&turn.status==='completed' ? extractJson(turn.response||'')?.answer||null : null,
     // Historical turns without a snapshot must not be rewritten using today's goal.
     context: turn.context || null,
     outcome: turn.error || (turn.status === 'completed' ? (turn.inputKind==='question'?'問答已保存；未修改成果，也未變更驗收。':'本輪 AI 回覆已保存；成果與驗收請分別核對。') : states[turn.status] || '尚無可核對結果'),
@@ -47,6 +49,7 @@ export function workCardsMarkdown(task) {
       `- 本輪要求：${card.userInput || '未記錄'}`,
       `- 當時理解：${card.context?.interpretation || '舊紀錄未保存，不以目前目標回填'}`,
       `- 結果：${card.outcome}`,
+      ...(card.answer ? [`- 問答回答（不是修改授權）：${card.answer}`] : []),
       ...(card.aiClaims?.change ? [`- AI 自述改動：${card.aiClaims.change}`] : []),
       ...card.outputs.map(output => `- 已登記成果：${typeof output === 'string' ? output : output.file || output.path}`),
       ...card.checks.map(check => `- 機器檢查：${check.result}｜${check.label || check.id}｜${check.detail || check.note || '未附說明'}`),

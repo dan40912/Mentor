@@ -9,6 +9,7 @@ import {serializeTask} from '../src/tasks.js';
 import {discussionResult} from '../src/task-discussion.js';
 import {compactHandoff} from '../src/compact-handoff.js';
 import {buildHandoff} from '../src/handoffs.js';
+import {workCardsMarkdown} from '../src/work-cards.js';
 import {prompts} from '../src/coach.js';
 
 async function setup(t,runner){
@@ -36,6 +37,7 @@ test('authenticated questions run chat-only once, retain source state, do not re
  assert.equal((await f.app.fetch(`/api/tasks/${f.task.id}/ask`,{method:'POST',body:JSON.stringify(request)})).status,403);
  const responses=await Promise.all([f.post(request),f.post(request)]);assert.ok(responses.every(r=>r.status===202));await f.app.settle();
  const current=await f.app.coach.latest(f.task.id);assert.equal(calls,1);assert.equal(resumes,0);assert.equal(seen[0].mode,'chat');assert.equal(current.goal,f.task.goal);assert.deepEqual(current.scope,f.task.scope);assert.deepEqual(current.planning.workItems,f.task.planning.workItems);assert.equal(current.planning.phase,'execute');assert.equal(await readFile(path.join(f.out,'note.md'),'utf8'),'UNCHANGED');
+ assert.match(workCardsMarkdown(current),/問答回答（不是修改授權）：可以先調整間距/);
  assert.equal(current.planning.messages.at(-1).discussion.intent,'change');assert.equal(current.planning.learningTurns.at(-1).inputKind,'question');
  f.app.coach.questions.clear();const replay=await f.post(request);assert.equal(replay.status,200);assert.equal(calls,1,'persisted request record prevents restart replay from launching another CLI');
  assert.equal((await f.post({...request,question:'different'})).status,409);
