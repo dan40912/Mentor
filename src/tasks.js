@@ -1,3 +1,4 @@
+import { workCardsMarkdown } from './work-cards.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { readFile, writeFile, rename, readdir, realpath, stat, lstat, unlink } from 'node:fs/promises';
 import path from 'node:path';
@@ -82,6 +83,7 @@ function renderHuman(task) {
     `**你現在要做的一件事**：${action.label}`,
     '',
     ...planning,
+    workCardsMarkdown(task),
     `## 驗收清單`,
     list(task.checks.map(c => `${c.result}｜${c.label}${c.note ? `（${c.note}）` : ''}`)),
     '',
@@ -135,20 +137,21 @@ export const ready = (items, item, unlock = ['DONE']) => (item.dependsOn || []).
 export function planningAction(task) {
   const p = task.planning;
   if (!p) return null;
-  if (p.running?.stopping?.unconfirmed) return { kind: 'stopping', label: `尚未確認停止：${stageName(p.running.stage)}（${p.running.agent}）`, button: '查看狀態' };
-  if (p.running?.stopping) return { kind: 'stopping', label: `正在停止${stageName(p.running.stage)}：${p.running.agent}`, button: '查看狀態' };
-  if (p.running) return { kind: 'running', label: `${stageName(p.running.stage)}進行中：${p.running.agent}`, button: '查看進度' };
+  const activeName=p.running?.discussion?'任務問答':p.running?stageName(p.running.stage):'';
+  if (p.running?.stopping?.unconfirmed) return { kind: 'stopping', label: `尚未確認停止：${activeName}（${p.running.agent}）`, button: '查看狀態' };
+  if (p.running?.stopping) return { kind: 'stopping', label: `正在停止${activeName}：${p.running.agent}`, button: '查看狀態' };
+  if (p.running) return { kind: 'running', label: `${activeName}進行中：${p.running.agent}`, button: '查看進度' };
   if (p.autopilot && !p.autopilot.waitingFor && !p.stopped) return { kind: 'auto', label: 'AI 自己在跑。需要你時會停下來叫你。', button: '查看進度' };
   if (p.stopped) return { kind: 'stopped', label: `已停止${stageName(p.stopped.stage)}${p.stopped.itemId ? ` ${itemName(p.stopped.itemId)}` : ''}，成果已保留`, button: '繼續任務' };
   if (p.phase === 'grill') {
-    const last = p.messages.filter(m => m.role !== 'system').at(-1);
+    const last = p.messages.filter(m => m.role !== 'system' && m.kind !== 'discussion').at(-1);
     const turn = p.learningTurns?.at(-1);
     if (turn?.status === 'failed' || turn?.status === 'unknown' || last?.parseError) return { kind: 'retry', label: 'AI 沒有完成需求釐清，查看原因後重試', button: '查看與重試' };
     if (p.readyForOutline) return { kind: 'grill', label: '需求問清楚了，可以讓 AI 擬計畫', button: '讓 AI 擬計畫' };
     if (last?.role === 'ai' && last.questions?.length) return { kind: 'grill', label: `回答 AI 的 ${last.questions.length} 個問題`, button: '回答' };
     return { kind: 'grill', label: '補充需求，讓 AI 繼續問', button: '回答' };
   }
-  if (p.phase === 'outline') return { kind: 'outline', label: '看 AI 的計畫，沒問題就核准', button: '核准計畫' };
+  if (p.phase === 'outline') return { kind: 'outline', label: '看 AI 的計畫，沒問題就核准', button: '預覽計畫' };
   if (p.phase === 'done') return { kind: 'none', label: '全部工作項目都已由你確認', button: '查看' };
   const items = p.workItems;
   const pick = (status, extra = () => true) => items.find(i => i.status === status && extra(i));
@@ -157,7 +160,7 @@ export function planningAction(task) {
   if ((item = pick('REVIEWED'))) return { kind: 'item', id: item.id, label: `確認驗收：${item.title}`, button: '確認驗收' };
   if ((item = pick('BLOCKED'))) return { kind: 'item', id: item.id, label: `AI 需要你補資訊：${item.title}`, button: '查看' };
   if ((item = pick('TODO', i => i.owner === 'human' && ready(items, i)))) return { kind: 'item', id: item.id, label: `輪到你：${item.title}`, button: '完成這項' };
-  if ((item = pick('AWAITING_REVIEW'))) return { kind: 'item', id: item.id, label: `讓 AI 檢查：${item.title}`, button: '讓 AI 檢查' };
+  if ((item = pick('AWAITING_REVIEW', i => !i.recheck || ready(items,i,p.autopilot?.full?['DONE','REVIEWED']:['DONE'])))) return { kind: 'item', id: item.id, label: `讓 AI 檢查：${item.title}`, button: '讓 AI 檢查' };
   if ((item = pick('TODO', i => i.owner === 'ai' && ready(items, i)))) return { kind: 'item', id: item.id, label: `交給 AI 做：${item.title}`, button: '交給 AI 做' };
   return { kind: 'none', label: '等待前置項目完成', button: '查看' };
 }

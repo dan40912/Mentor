@@ -114,17 +114,19 @@ test('stopping D keeps partial files as unverified, item stays TODO, resume chec
 test('a CLI that will not exit is marked unconfirmed and blocks removal until close', async () => {
   const ctx = await setup();
   const { store, coach, trash } = ctx;
-  mode('hang');
-  process.env.FAKE_HANG_MS = '4000';
+  // Deterministic runner whose completion is explicitly held: Windows taskkill
+  // cannot reproduce POSIX inherited-pipe/SIGTERM behavior.
+  let finish;
+  coach.runAgent = () => new Promise((resolve, reject) => { finish = () => reject(Object.assign(new Error('test run ended'), { code: 'AGENT_INTERRUPTED' })); });
   const created = await coach.create({ request: '我要做一份新品簡報給主管', profile: 'quick' });
   const id = created.task.id;
-  assert.ok(await waitFor(() => coach.children.has(id)));
-  await new Promise(r => { const out = coach.children.get(id).stderr; out.on('data', b => { if (String(b).includes('HANG_READY')) r(); }); });
+  assert.ok(await waitFor(() => Boolean(finish)));
   await coach.stop(id, { graceMs: 100, confirmMs: 300 });
   assert.ok(await waitFor(async () => (await latest(store, id)).planning.running?.stopping?.unconfirmed, 2000), '超過時間仍未確認結束');
   const pending = await latest(store, id);
   assert.match(planningAction(pending).label, /尚未確認停止/);
   await assert.rejects(trash.trashTask(id), { code: 'TASK_STOPPING' });
+  finish();
   await created.done;
   const task = await latest(store, id);
   assert.equal(task.planning.stopped.stage, 'A');

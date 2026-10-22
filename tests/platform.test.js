@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { spawnPlan, resolveBin, quoteForCmd, UnsafeArgError } from '../src/platform.js';
+import { spawnPlan, resolveBin, quoteForCmd, UnsafeArgError, killTree, wasTerminationRequested } from '../src/platform.js';
 
 const win = { platform: 'win32', env: { PATH: 'C:\\npm;C:\\bin', PATHEXT: '.COM;.EXE;.CMD' } };
 
@@ -32,4 +32,13 @@ test('non-windows and script bins are untouched or run with node', () => {
   const plan = spawnPlan('/t/fake-cli.mjs', ['x'], { platform: 'win32' });
   assert.equal(plan.command, process.execPath);
   assert.deepEqual(plan.args, ['/t/fake-cli.mjs', 'x']);
+});
+
+test('requested process termination remains distinguishable when the OS supplies only an exit code', () => {
+  const calls=[], child={pid:1234,kill:signal=>calls.push(signal)};
+  assert.equal(wasTerminationRequested(child),false);
+  killTree(child,'SIGTERM',{platform:'linux'});
+  assert.equal(wasTerminationRequested(child),true);
+  assert.deepEqual(calls,['SIGTERM']);
+  assert.equal(wasTerminationRequested({pid:1234}),false);
 });

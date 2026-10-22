@@ -92,10 +92,12 @@ test('原始碼保留開頭空行，補償 HTML pre 吃掉第一個換行的規�
   }
 });
 
-test('package.json 保持素材雜湊，未增加套件或外部前端資源', async () => {
-  const { createHash } = await import('node:crypto');
-  const pkg = await readFile(new URL('../package.json', import.meta.url));
-  assert.equal(createHash('sha256').update(pkg).digest('hex'), '5ca6c8782983e3ddef7bf11421a5e2c53f40ed0aaaf94903ec154c8fcfac4bd7');
+test('package.json 維持零 runtime 套件與原本啟動入口，不載入外部前端資源', async () => {
+  const pkg = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
+  assert.deepEqual(pkg.dependencies || {}, {});
+  assert.equal(pkg.type, 'module');
+  assert.equal(pkg.scripts.start, 'node src/server.js');
+  assert.equal(pkg.scripts.test, 'node scripts/test.mjs');
   assert.doesNotMatch(html, /<script[^>]+src="https?:/);
 });
 

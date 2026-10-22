@@ -11,3 +11,5 @@ node_modules/
 *.log
 .claude/
 .lab-home/
+
+/dist/

@@ -42,9 +42,13 @@ export function spawnPlan(bin, args, { platform = process.platform, env = proces
   return { command: resolved, args, options: {} };
 }
 
+const terminationRequests = new WeakSet();
+export const wasTerminationRequested = child => terminationRequests.has(child);
+
 // Windows 的 child.kill() 只會停掉外層 cmd.exe，要用 taskkill 連同子程序一起停。
 export function killTree(child, signal = 'SIGTERM', { platform = process.platform } = {}) {
   if (!child?.pid) return;
+  terminationRequests.add(child);
   if (platform === 'win32') {
     try { spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true }).on('error', () => child.kill()); }
     catch { child.kill(); }

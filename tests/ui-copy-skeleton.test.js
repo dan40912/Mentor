@@ -27,7 +27,7 @@ function node(tag, text, className = '') {
   };
 }
 
-function card(task, coachAct) {
+function card(task, coachAct, previewPlan = async () => {}) {
   const one = node('div'), jump = node('button'), eyebrow = node('span'), label = node('strong');
   const positioned = [];
   const outline = { scrollIntoView: options => positioned.push(options), contains: () => false, querySelector: () => null };
@@ -38,7 +38,7 @@ function card(task, coachAct) {
   const context = vm.createContext({
     element: node, focusKey: (button, key) => { button.dataset.focus = key; return button; },
     trackOf: () => ({ nodes: [{ state: 'now', name: '計畫' }] }),
-    state: { stages: [], providers: [] }, coachAct, tell() {},
+    state: { stages: [], providers: [] }, coachAct, previewPlan, tell() {},
     $: () => detail, matchMedia: () => ({ matches: true }), task,
     one, jump, oneText: { querySelector: selector => selector === '.eyebrow' ? eyebrow : label }
   });
@@ -49,7 +49,7 @@ function card(task, coachAct) {
 const approvalTask = () => ({
   id: 'TASK-skeleton',
   planning: { phase: 'outline', autopilot: { full: false, waitingFor: { kind: 'approve', label: '看 AI 的計畫，沒問題就核准' } }, workItems: [] },
-  nextAction: { kind: 'outline', label: '看 AI 的計畫，沒問題就核准', button: '核准計畫' }
+  nextAction: { kind: 'outline', label: '看 AI 的計畫，沒問題就核准', button: '預覽計畫' }
 });
 
 test('規格 1、2：計畫動作與自動停點採用原文，kind 與 phase 不變', () => {
@@ -63,28 +63,18 @@ test('規格 1、2：計畫動作與自動停點採用原文，kind 與 phase �
   assert.equal(full.run(), task.id, '完全自動仍走原本自動核准分支');
 });
 
-test('規格 11 計畫分支：主按鈕呼叫 approve，次按鈕只定位計畫', async () => {
-  const task = approvalTask(), calls = [];
-  const view = card(task, async (...args) => calls.push(args));
-  const [approve, look, off] = view.buttons;
-  assert.equal(approve.textContent, '核准，讓 AI 繼續跑');
-  assert.equal(approve.className, 'btn primary');
-  assert.equal(look.textContent, '先看計畫');
-  assert.equal(look.className, 'btn');
-  assert.equal(off.textContent, '關閉自動');
-  assert.equal(view.label.textContent, task.planning.autopilot.waitingFor.label);
-  assert.ok(view.jump.removed);
-  look.onclick();
-  assert.equal(view.positioned.length, 1);
-  assert.equal(calls.length, 0, '看計畫不核准、不啟動 AI');
-  await approve.onclick();
-  assert.deepEqual(calls, [[task, 'approve']]);
-  assert.equal(view.positioned.length, 1, '核准不只是捲動');
+test('自動流程的兩個計畫入口只開預覽，不直接核准', async () => {
+  const task=approvalTask(),calls=[],previews=[];
+  const view=card(task,async(...args)=>calls.push(args),async current=>previews.push(current));
+  const [approve,look]=view.buttons;
+  look.onclick();await approve.onclick();
+  assert.deepEqual(previews,[task,task]);assert.equal(calls.length,0);
+  assert.equal(view.positioned.length,0);
 });
 
 test('核准按鈕沿用 busy：執行中不重送，失敗後可重試', async () => {
   let release, calls = 0;
-  const view = card(approvalTask(), () => { calls++; return new Promise((resolve, reject) => { release = reject; }); });
+  const view = card(approvalTask(), () => assert.fail('不可直接核准'), () => { calls++; return new Promise((resolve, reject) => { release = reject; }); });
   const approve = view.buttons[0];
   const pending = approve.onclick();
   assert.equal(approve.disabled, true);
@@ -93,7 +83,7 @@ test('核准按鈕沿用 busy：執行中不重送，失敗後可重試', async 
   release(new Error('測試錯誤'));
   await pending;
   assert.equal(approve.disabled, false);
-  assert.equal(approve.textContent, '核准，讓 AI 繼續跑');
+  assert.equal(approve.textContent, '預覽計畫，再核准');
 });
 
 async function waitFor(check) {
@@ -124,14 +114,18 @@ test('無連接埠完整路徑：後端停在 approve → 點卡片核准 → �
   assert.equal(task.planning.phase, 'outline');
   assert.equal(task.planning.autopilot.waitingFor.label, '看 AI 的計畫，沒問題就核准');
   task.nextAction = planningAction(task);
-  const view = card(task, async (current, action) => {
-    assert.equal(action, 'approve');
+  let confirmPreview;
+  const view = card(task, () => assert.fail('不可直接核准'), async current => {
+    confirmPreview = async () => {
     await coach.approveOutline(current.id, current.revision, 'skeleton-approve-001');
     coach.resumeAuto(current.id); // 與 server.js 的 approve 路由相同接續方式。
+    };
   });
   view.buttons[1].onclick();
   assert.equal((await latest()).planning.phase, 'outline');
   await view.buttons[0].onclick();
+  assert.equal((await latest()).planning.phase, 'outline');
+  await confirmPreview();
   await waitFor(async () => (await latest()).planning.autopilot?.waitingFor?.kind === 'confirm' && idle());
   const approved = await latest();
   assert.equal(approved.planning.phase, 'execute');

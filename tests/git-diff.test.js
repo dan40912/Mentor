@@ -11,6 +11,8 @@ import { isGitRoot, gitHead, itemDiff, itemChanges } from '../src/git-diff.js';
 import { requestApp } from './fixtures/request.js';
 import { demoTask } from './fixtures/demo-task.js';
 const exec = promisify(execFile);
+const specialName = process.platform === 'win32' ? 'special[1].txt' : 'special*.txt';
+const literalNames = process.platform === 'win32' ? [specialName, '-flag.txt'] : [specialName, ':(glob)*.txt', '-flag.txt'];
 async function fixture(t) {
   const root = await mkdtemp(path.join(process.cwd(), '.git-diff-test.'));
   t.after(() => rm(root, { recursive: true, force: true }));
@@ -19,8 +21,8 @@ async function fixture(t) {
   t.after(() => { if (ceiling === undefined) delete process.env.GIT_CEILING_DIRECTORIES; else process.env.GIT_CEILING_DIRECTORIES = ceiling; });
   const dir = path.join(root, 'repo');await mkdir(dir);
   const git = (...args) => exec('git', args, { cwd: dir, env: { ...process.env, GIT_CONFIG_GLOBAL: path.join(root,'no-global'), GIT_CONFIG_NOSYSTEM: '1' } });
-  await git('init');await git('config','user.name','Fixture');await git('config','user.email','fixture@example.test');
-  for (const file of ['edit.txt','delete.txt','other.txt','special*.txt',':(glob)*.txt','-flag.txt']) await writeFile(path.join(dir,file), 'before\n');
+  await git('init');await git('config','core.autocrlf','false');await git('config','user.name','Fixture');await git('config','user.email','fixture@example.test');
+  for (const file of ['edit.txt','delete.txt','other.txt',...literalNames]) await writeFile(path.join(dir,file), 'before\n');
   await git('add','--all');await git('commit','-m','baseline');
   const baseline = await gitHead(dir), task = demoTask('TASK-git-0001',dir);task.gitBaseline=baseline;
   task.planning.workItems[0].outputs=['edit.txt','delete.txt','new.txt'].map(file=>({file}));task.planning.workItems[1].outputs=[{file:'other.txt'}];
@@ -53,7 +55,7 @@ test('差異僅含本項登記檔案：已追蹤修改、刪除、staged 與未�
 
 test('拒絕越界、失效 symlink、資料夾與不存在項目，刪除檔父路徑也檢查', async t => {
   const f=await fixture(t);await writeFile(path.join(f.root,'outside.txt'),'outside');
-  await symlink(f.root,path.join(f.dir,'escape'));await symlink(path.join(f.root,'absent'),path.join(f.dir,'dangling'));
+  await symlink(f.root,path.join(f.dir,'escape'),'junction');await symlink(path.join(f.root,'absent'),path.join(f.dir,'dangling'),'junction');
   await mkdir(path.join(f.dir,'directory'));
   for(const file of ['../outside.txt',path.join(f.root,'outside.txt'),'bad\\name','bad\0name','escape/outside.txt','escape/deleted.txt','dangling/deleted.txt','directory','.git/config']){
     f.task.planning.workItems[0].outputs=[{file}];await assert.rejects(itemDiff(f.task,'W1'),error=>[400,403,415].includes(error.status),file);
@@ -64,9 +66,9 @@ test('拒絕越界、失效 symlink、資料夾與不存在項目，刪除檔父
 
 test('Git 參數為 execFile 陣列且 shell:false；特殊檔名與 pathspec 不擴大範圍', async t => {
   const f=await fixture(t), weird='$(touch HACKED); `touch HACKED`.txt';
-  for(const file of ['special*.txt',':(glob)*.txt','-flag.txt',weird]) await writeFile(path.join(f.dir,file),'safe-new\n');
+  for(const file of [...literalNames,weird]) await writeFile(path.join(f.dir,file),'safe-new\n');
   await writeFile(path.join(f.dir,'special-other.txt'),'secret\n');
-  for(const file of ['special*.txt',':(glob)*.txt','-flag.txt',weird]){
+  for(const file of [...literalNames,weird]){
     f.task.planning.workItems[0].outputs=[{file}];const result=await itemDiff(f.task,'W1');assert.match(result.diff,/\+safe-new/);assert.doesNotMatch(result.diff,/special-other|\+secret/);
   }
   await assert.rejects(readFile(path.join(f.dir,'HACKED')),{code:'ENOENT'});
@@ -97,10 +99,10 @@ test('非 Git 與不存在資料夾不提供基準；根目錄沒有 commit 或�
 
 
 test('repo 根目錄比較含前後空白子路徑，從 index 移除的檔案不重複列新增',async t=>{
-  const f=await fixture(t),dir=path.join(f.dir,' nested ');await mkdir(dir);await writeFile(path.join(dir,'base.txt'),'before\n');
+  const f=await fixture(t),folder=process.platform==='win32'?' nested folder':' nested ',dir=path.join(f.dir,folder);await mkdir(dir);await writeFile(path.join(dir,'base.txt'),'before\n');
   await f.git('add','--all');await f.git('commit','-m','nested baseline');f.task.gitBaseline=await gitHead(f.dir);
-  await f.git('rm','--cached','--',' nested /base.txt');await writeFile(path.join(dir,'new.txt'),'new nested\n');
-  f.task.planning.workItems[0].outputs=[{file:' nested /base.txt'},{file:' nested /new.txt'}];
+  await f.git('rm','--cached','--',`${folder}/base.txt`);await writeFile(path.join(dir,'new.txt'),'new nested\n');
+  f.task.planning.workItems[0].outputs=[{file:`${folder}/base.txt`},{file:`${folder}/new.txt`}];
   const result=await itemDiff(f.task,'W1');assert.match(result.diff,/deleted file mode/);assert.match(result.diff,/\+new nested/);
   assert.equal((result.diff.match(/new file mode/g)||[]).length,1);
 });
@@ -120,7 +122,7 @@ test('規格 5：改動數僅計去重登記路徑，包含刪除、新增空檔
 
 test('規格 5：改動數處理換行檔名、子目錄與 rename 的登記範圍',async t=>{
   const f=await fixture(t),dir=path.join(f.dir,'nested');await mkdir(dir);
-  const special='line\nbreak.txt';await writeFile(path.join(dir,special),'before\n');await f.git('add','--all');await f.git('commit','-m','nested');
+  const special=process.platform==='win32'?'line break.txt':'line\nbreak.txt';await writeFile(path.join(dir,special),'before\n');await f.git('add','--all');await f.git('commit','-m','nested');
   f.task.gitBaseline=await gitHead(f.dir);await writeFile(path.join(dir,special),'after\n');
   f.task.planning.workItems[0].outputs=[{file:`nested/${special}`},{file:`nested/${special}`}];assert.equal((await itemDiff(f.task,'W1')).changedFileCount,1);
   f.task.allowedRoots=[f.dir];await f.git('mv','other.txt','renamed.txt');
@@ -132,7 +134,7 @@ test('規格 5：改動數處理換行檔名、子目錄與 rename 的登記範�
 test('根目錄判定：repo、worktree 與 symlink 可比較；子資料夾、ignored 與非 Git 不保存基準，舊基準也回 409', async t => {
   const f=await fixture(t), worktree=path.join(f.root,'worktree'), alias=path.join(f.root,'alias');
   await f.git('worktree','add','--detach',worktree);
-  await symlink(f.dir,alias);
+  await symlink(f.dir,alias,'junction');
   const nested=path.join(f.dir,'nested'), ignored=path.join(f.dir,'ignored'), plain=path.join(f.root,'plain');
   for(const dir of [nested,ignored,plain])await mkdir(dir);
   await writeFile(path.join(f.dir,'.gitignore'),'ignored/\n');
@@ -164,7 +166,7 @@ test('替代 changes 僅列實際登記異動，涵蓋新增、修改、刪除�
   await rm(path.join(f.dir, 'delete.txt'));
   await writeFile(path.join(f.dir, 'new.txt'), 'new\n');
   await writeFile(path.join(f.dir, 'other.txt'), 'private\n');
-  f.task.planning.workItems[0].outputs.push({ file: 'special*.txt' });
+  f.task.planning.workItems[0].outputs.push({ file: specialName });
   const listing = await itemChanges(f.task, 'W1');
   assert.equal(listing.baselineSource, 'task.gitBaseline');
   assert.deepEqual(listing.changes.map(c => c.where).sort(), ['delete.txt', 'edit.txt', 'new.txt']);

@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { constants } from 'node:fs';
-import { mkdir, open, realpath, unlink } from 'node:fs/promises';
+import { mkdir, open, realpath, unlink, lstat } from 'node:fs/promises';
 import path from 'node:path';
 import { TaskError, sha256 } from './tasks.js';
 import { extract, IMAGE_TYPES } from './extract.js';
@@ -23,13 +23,21 @@ const unlinked = async dir => await realpath(dir) === path.join(await realpath(p
 async function readSafe(root, file) {
   if (typeof file !== 'string' || path.basename(file) !== file || /[\\/]/.test(file)) throw new TaskError(403, 'ATTACHMENT_OUTSIDE_TASK', '附件超出此任務的產出資料夾。');
   if (!(await unlinked(root))) throw new TaskError(403, 'ATTACHMENT_OUTSIDE_TASK', '附件資料夾路徑已變更。');
-  const handle = await open(path.join(root, file), constants.O_RDONLY | constants.O_NOFOLLOW).catch(error => {
+  const target = path.join(root, file);
+  // O_NOFOLLOW is unavailable on Windows; reject links explicitly on every platform.
+  const before = await lstat(target).catch(error => {
+    if (error.code === 'ENOENT') throw new TaskError(404, 'ATTACHMENT_MISSING', '附件檔已不存在。');
+    throw error;
+  });
+  if (before.isSymbolicLink()) throw new TaskError(403, 'ATTACHMENT_OUTSIDE_TASK', '附件不可使用 symlink。');
+  const handle = await open(target, constants.O_RDONLY | (constants.O_NOFOLLOW || 0)).catch(error => {
     if (error.code === 'ENOENT') throw new TaskError(404, 'ATTACHMENT_MISSING', '附件檔已不存在。');
     if (error.code === 'ELOOP') throw new TaskError(403, 'ATTACHMENT_OUTSIDE_TASK', '附件不可使用 symlink。');
     throw error;
   });
   try {
-    const info = await handle.stat();
+    const info = await handle.stat(), current = await lstat(target);
+    if (current.isSymbolicLink() || before.dev !== info.dev || before.ino !== info.ino || current.dev !== info.dev || current.ino !== info.ino) throw new TaskError(403, 'ATTACHMENT_OUTSIDE_TASK', '附件路徑在讀取時已變更。');
     if (!info.isFile() || info.size > MAX_ATTACHMENT_BYTES) throw new TaskError(413, 'ATTACHMENT_TOO_LARGE', '附件大小或檔案類型不符合限制。');
     const content = await handle.readFile();
     if (content.length > MAX_ATTACHMENT_BYTES) throw new TaskError(413, 'ATTACHMENT_TOO_LARGE', '附件超過大小限制。');

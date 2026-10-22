@@ -1,0 +1,220 @@
+{
+  "version": 1,
+  "at": "2026-10-22T01:17:09.300Z",
+  "provider": "claude",
+  "requestedModel": "sonnet",
+  "fixtureSha256": "4e8346f3434fd00c76e6735a1aeb73693bda63b1a56ef37ea5d459a728848400",
+  "method": "Paired full/compact fictional handoff fact recovery; alternate order per pair. Input includes provider CLI context, not only supplied text. Claude logical input = input + cache read + cache creation; Codex input includes cached input.",
+  "samples": [
+    {
+      "pair": 1,
+      "name": "full",
+      "promptSha256": "5acd8b8fcbf42a2a409ef10278d1773b1d96ef2189b5d1f69acecbf192c7f612",
+      "textMetrics": {
+        "characters": 13723,
+        "utf8Bytes": 35171,
+        "tokens": null,
+        "tokenSource": "unavailable"
+      },
+      "usage": {
+        "source": "claude.print.result",
+        "models": [
+          "claude-sonnet-5-5"
+        ],
+        "inputTokens": 2,
+        "cachedInputTokens": 649,
+        "cacheCreationInputTokens": 18322,
+        "outputTokens": 179,
+        "reasoningOutputTokens": null,
+        "costEstimateUsd": 0.0751469
+      },
+      "elapsedMs": 9932,
+      "quality": {
+        "pass": true,
+        "failedFields": [],
+        "answer": {
+          "taskId": "TASK-benchmark",
+          "revision": 7,
+          "goal": "OBSIDIAN_TABLE_ONLY",
+          "next": "DRAFT_TABLE_CSS",
+          "forbidden": [
+            "NO_MENTOR_UI",
+            "NO_NETWORK_PUBLISH"
+          ],
+          "locked": [
+            "KEEP_SOURCE_NOTES"
+          ],
+          "latestCorrection": "只調整表格，保留原始筆記與 Mentor UI。",
+          "period": "2026-Q3",
+          "humanAccepted": false,
+          "budget": null
+        }
+      }
+    },
+    {
+      "pair": 1,
+      "name": "compact",
+      "promptSha256": "13750bee97887873c3791bcb5c7de041ff2d1d95ac2bd849001d2ed3c6df03ef",
+      "textMetrics": {
+        "characters": 1415,
+        "utf8Bytes": 2597,
+        "tokens": null,
+        "tokenSource": "unavailable"
+      },
+      "usage": {
+        "source": "claude.print.result",
+        "models": [
+          "claude-sonnet-5-5"
+        ],
+        "inputTokens": 2,
+        "cachedInputTokens": 3262,
+        "cacheCreationInputTokens": 5769,
+        "outputTokens": 179,
+        "reasoningOutputTokens": null,
+        "costEstimateUsd": 0.0251962
+      },
+      "elapsedMs": 5842,
+      "quality": {
+        "pass": true,
+        "failedFields": [],
+        "answer": {
+          "taskId": "TASK-benchmark",
+          "revision": 7,
+          "goal": "OBSIDIAN_TABLE_ONLY",
+          "next": "DRAFT_TABLE_CSS",
+          "forbidden": [
+            "NO_MENTOR_UI",
+            "NO_NETWORK_PUBLISH"
+          ],
+          "locked": [
+            "KEEP_SOURCE_NOTES"
+          ],
+          "latestCorrection": "只調整表格，保留原始筆記與 Mentor UI。",
+          "period": "2026-Q3",
+          "humanAccepted": false,
+          "budget": null
+        }
+      }
+    },
+    {
+      "pair": 2,
+      "name": "compact",
+      "promptSha256": "13750bee97887873c3791bcb5c7de041ff2d1d95ac2bd849001d2ed3c6df03ef",
+      "textMetrics": {
+        "characters": 1415,
+        "utf8Bytes": 2597,
+        "tokens": null,
+        "tokenSource": "unavailable"
+      },
+      "usage": {
+        "source": "claude.print.result",
+        "models": [
+          "claude-sonnet-5-5"
+        ],
+        "inputTokens": 2,
+        "cachedInputTokens": 0,
+        "cacheCreationInputTokens": 44271,
+        "outputTokens": 179,
+        "reasoningOutputTokens": null,
+        "costEstimateUsd": 0.17887799999999998
+      },
+      "elapsedMs": 6646,
+      "quality": {
+        "pass": true,
+        "failedFields": [],
+        "answer": {
+          "taskId": "TASK-benchmark",
+          "revision": 7,
+          "goal": "OBSIDIAN_TABLE_ONLY",
+          "next": "DRAFT_TABLE_CSS",
+          "forbidden": [
+            "NO_MENTOR_UI",
+            "NO_NETWORK_PUBLISH"
+          ],
+          "locked": [
+            "KEEP_SOURCE_NOTES"
+          ],
+          "latestCorrection": "只調整表格，保留原始筆記與 Mentor UI。",
+          "period": "2026-Q3",
+          "humanAccepted": false,
+          "budget": null
+        }
+      }
+    },
+    {
+      "pair": 2,
+      "name": "full",
+      "promptSha256": "5acd8b8fcbf42a2a409ef10278d1773b1d96ef2189b5d1f69acecbf192c7f612",
+      "textMetrics": {
+        "characters": 13723,
+        "utf8Bytes": 35171,
+        "tokens": null,
+        "tokenSource": "unavailable"
+      },
+      "usage": {
+        "source": "claude.print.result",
+        "models": [
+          "claude-sonnet-5-5"
+        ],
+        "inputTokens": 2,
+        "cachedInputTokens": 3262,
+        "cacheCreationInputTokens": 19244,
+        "outputTokens": 179,
+        "reasoningOutputTokens": null,
+        "costEstimateUsd": 0.0790962
+      },
+      "elapsedMs": 6155,
+      "quality": {
+        "pass": true,
+        "failedFields": [],
+        "answer": {
+          "taskId": "TASK-benchmark",
+          "revision": 7,
+          "goal": "OBSIDIAN_TABLE_ONLY",
+          "next": "DRAFT_TABLE_CSS",
+          "forbidden": [
+            "NO_MENTOR_UI",
+            "NO_NETWORK_PUBLISH"
+          ],
+          "locked": [
+            "KEEP_SOURCE_NOTES"
+          ],
+          "latestCorrection": "只調整表格，保留原始筆記與 Mentor UI。",
+          "period": "2026-Q3",
+          "humanAccepted": false,
+          "budget": null
+        }
+      }
+    }
+  ],
+  "comparisons": [
+    {
+      "pair": 1,
+      "qualityPassed": true,
+      "reportedModelsMatch": true,
+      "fullLogicalInputTokens": 18973,
+      "compactLogicalInputTokens": 9033,
+      "comparable": true,
+      "inputTokenDifference": 9940,
+      "inputReductionPercent": 52.39023876034364,
+      "note": "Fixture fact-recovery test only. No claim about artifact quality, account billing, statistical significance, or typical savings. Codex effective model identity is unavailable, so its ratio remains unproven."
+    },
+    {
+      "pair": 2,
+      "qualityPassed": true,
+      "reportedModelsMatch": true,
+      "fullLogicalInputTokens": 22508,
+      "compactLogicalInputTokens": 44273,
+      "comparable": true,
+      "inputTokenDifference": -21765,
+      "inputReductionPercent": -96.69895148391683,
+      "note": "Fixture fact-recovery test only. No claim about artifact quality, account billing, statistical significance, or typical savings. Codex effective model identity is unavailable, so its ratio remains unproven."
+    }
+  ],
+  "limitations": [
+    "Small synthetic sample, no general savings claim",
+    "Cache state/startup and output length vary",
+    "Quality gate checks fixed facts, not finished artifacts",
+    "CLI cost is an estimate, never account billing"
+  ]
+}

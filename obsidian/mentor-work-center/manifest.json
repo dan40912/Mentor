@@ -1,0 +1,10 @@
+{
+  "id": "mentor-work-center",
+  "name": "Mentor Work Center",
+  "version": "0.2.0",
+  "minAppVersion": "1.5.0",
+  "description": "把筆記交給 AI，預覽計畫、追蹤每輪工作並驗收成果。需要本機 Mentor 服務。",
+  "author": "Mentor contributors",
+  "authorUrl": "https://github.com/dan40912/Mentor",
+  "isDesktopOnly": true
+}

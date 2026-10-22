@@ -530,6 +530,7 @@ dialog.sheet [data-anchor],dialog.sheet [data-item]{scroll-margin-top:0}
 .instruct-label{font-weight:600;font-size:14px}
 .instruct-field{display:grid;gap:4px}.instruct-field input,.instruct-field select{width:100%;max-width:520px;min-height:36px;padding:6px 12px;border:1px solid var(--border-default);border-radius:var(--radius-button);background:#fff;color:var(--content-primary);font:inherit;font-size:14px}
 .instruct-field input:focus,.instruct-field select:focus{outline:0;border-color:var(--content-highlight);box-shadow:0 0 0 3px #4f44c340}.instruct .buttons{align-items:center}.instruct .counter{margin-left:auto}
+.task-question{margin:16px 0;padding:16px;border:1px solid var(--border-default);border-radius:var(--radius-container);background:#ffffffb3}.task-question form{display:grid;gap:12px}.task-question textarea{width:100%;min-height:96px;padding:12px;border:1px solid var(--border-default);border-radius:var(--radius-button);resize:vertical;background:#fff}.task-question form .btn{justify-self:start}
 .impact{border-left:3px solid var(--content-highlight);background:var(--highlight-wash);border-radius:var(--radius-button);padding:12px 16px;display:grid;gap:8px;font-size:14px}.impact p{margin:0}
 .field-error{color:var(--status-error);font-size:13px;margin:0}
 .sheet-actions{display:flex;flex-wrap:nowrap;align-items:center;gap:var(--space-s);--task-action-height:32px}
@@ -602,6 +603,8 @@ dialog.sheet [data-anchor],dialog.sheet [data-item]{scroll-margin-top:0}
 .attach-remove:hover{background:var(--bg-warning-subtle);color:var(--content-primary)}
 .attach-saved h3{font-size:14px;margin:0 0 4px}
 .attach-saved{margin:var(--space-m) 0}
+.work-preview{width:min(860px,94vw);max-height:88vh;padding:28px;overflow:auto;border:1px solid var(--border);border-radius:18px}.work-preview .card{margin-top:18px}.work-round{border-inline-start:3px solid #648370}.work-preview .contract{white-space:pre-wrap;overflow-wrap:anywhere}
+.more-tools{margin-top:16px;border-top:1px solid var(--line);padding-top:14px}.more-tools>summary{padding:10px 12px;color:var(--muted);font-size:13px;cursor:pointer}.more-tools button{width:100%;margin:4px 0}.home-work{display:grid;gap:12px}.home-work-card{padding:16px 20px}.home-work-card .btn{text-align:left;white-space:normal;overflow-wrap:anywhere}.home-work-card p{margin:8px 0 0}.learning-detail,.assignment-detail,.task-facts{margin:18px 0}.learning-detail>summary,.assignment-detail>summary,.task-facts>summary{padding:12px 0;cursor:pointer;color:var(--muted)}
 </style>
 </head>
 <body>
@@ -610,31 +613,37 @@ dialog.sheet [data-anchor],dialog.sheet [data-item]{scroll-margin-top:0}
 <aside class="sidebar">
  <div class="brand"><span class="brand-mark" aria-hidden="true"><img src="/assets/mentor.svg" alt="" width="34" height="34"></span><div><strong>Mentor</strong><small>人與 AI 的接力台</small></div></div>
  <nav aria-label="主要導覽">
-  <button data-view="overview" aria-current="page"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 13h6v7H4zM14 4h6v7h-6zM4 4h6v5H4zM14 15h6v5h-6z"/></svg>工作總覽</button>
+  <button data-view="overview" aria-current="page"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 13h6v7H4zM14 4h6v7h-6zM4 4h6v5H4zM14 15h6v5h-6z"/></svg>現在</button>
+  <button data-view="tasks"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M5 4h14v16H5zM8 8h8M8 12h8M8 16h5"/></svg>任務</button>
+  <button data-view="knowledge"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4.5A1.5 1.5 0 0 1 6.5 3H19v16H6.5A1.5 1.5 0 0 0 5 20.5v-16Z"/><path d="M5 19.5A1.5 1.5 0 0 1 6.5 18H19M9 7h6"/></svg>成果與知識</button>
+  <details class="more-tools"><summary>更多工具</summary>
   <button data-view="conversations"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 4h16v12H9l-5 4V4Z"/><path d="M8 8h8M8 12h5"/></svg>對話紀錄</button>
-  <button data-view="workspaces"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 3 8l9 5 9-5-9-5Z"/><path d="m3 13 9 5 9-5"/></svg>工作區與 Session</button>
   <button data-view="handoff"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h12l-3-3M17 17H5l3 3"/></svg>交接中心</button>
   <button data-view="journeys"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M6 4v16M6 6h12M6 12h8M6 18h12"/><circle cx="6" cy="6" r="2"/><circle cx="6" cy="12" r="2"/><circle cx="6" cy="18" r="2"/></svg>專案歷程</button>
-  <button data-view="knowledge"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4.5A1.5 1.5 0 0 1 6.5 3H19v16H6.5A1.5 1.5 0 0 0 5 20.5v-16Z"/><path d="M5 19.5A1.5 1.5 0 0 1 6.5 18H19M9 7h6"/></svg>工作記憶</button>
+  <button data-view="workspaces"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 3 8l9 5 9-5-9-5Z"/><path d="m3 13 9 5 9-5"/></svg>工作區與 Session</button>
   <button data-view="trash"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg>回收桶</button>
   <button data-view="settings"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 6h9M18 6h1M5 12h3M12 12h7M5 18h11M20 18h-1"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>角色與設定</button>
+  </details>
  </nav>
- <div class="sidebar-foot"><p><span class="dot"></span>資料留在本機</p>Markdown × Obsidian<br>不需資料庫或社群外掛</div>
+ <div class="sidebar-foot"><p><span class="dot"></span>資料留在本機</p>Markdown × Obsidian<br>不需資料庫 · Obsidian 插件選用</div>
 </aside>
 <div class="main">
  <header class="topbar"><span class="breadcrumb" hidden><span id="breadcrumb">工作總覽</span></span><div class="top-actions"><span class="connection" id="connection">正在連接本機服務…</span><input type="checkbox" id="demo" hidden><button class="btn subtle icon-btn" id="refresh" aria-label="重新整理"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg>重新整理</button></div></header>
  <main id="content" tabindex="-1">
  <div id="demo-banner" class="notice" hidden>示範模式：任務、session、驗證與事件皆為固定假資料，不代表本機 AI 已執行。設定與交接保存仍使用真實後端。</div>
  <section data-page="overview">
-  <header class="hero"><div><p class="hero-date" id="hero-date"></p><h1>任務有條理，學到的記得住。</h1><p class="hero-sub" id="hero-sub">正在讀取任務…</p></div><button class="btn primary" id="new-task"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>新任務</button></header>
+  <header class="hero"><div><p class="hero-date" id="hero-date"></p><h1>先把下一步，看清楚。</h1><p class="hero-sub" id="hero-sub">正在讀取任務…</p></div><button class="btn primary" id="new-task"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>新任務</button></header>
   <div class="baton loading" id="recommend"><span class="sk sk-avatar"></span><div><span class="sk sk-line short"></span><span class="sk sk-line"></span><span class="sk sk-line mid"></span></div></div>
+  <div class="buttons" style="margin:12px 0"><button class="btn" id="obsidian-connect">連接 Obsidian</button><span class="small muted">從筆記建立任務，在 Obsidian 裡閱讀進度與驗收。</span></div>
   <div class="relay-bar" id="stats" aria-label="任務分布"></div>
+  <section aria-label="最近的工作"><div class="section-heading"><h2>最近的工作</h2><button class="btn subtle" data-go="tasks">查看全部任務</button></div><div id="home-work" class="home-work"></div></section>
+
+ </section>
+ <section data-page="tasks" hidden>
+  <header class="page-heading"><div><div class="eyebrow">工作進度與下一步</div><h1>每件事，都有接下去的方法。</h1><p>查看任務、處理阻擋或打開成果。狀態來自任務正本，不用拖曳猜進度。</p></div><button class="btn primary" data-new-task>建立任務</button></header>
   <div class="section-heading"><h2>任務看板 <span class="muted small" id="task-count"></span></h2><label class="small filter-label">顯示 <select id="filter" class="btn" aria-label="篩選任務"><option value="all">全部</option><option value="you">在你手上</option><option value="ai-ready">可交給 AI</option><option value="ai">AI 在跑</option><option value="wait">等前置項目</option><option value="done">已完成</option></select></label></div>
   <div id="tasks" class="kanban"><div class="task-row lane skeleton"><span class="sk sk-avatar small"></span><div><span class="sk sk-line"></span><span class="sk sk-line short"></span></div><span class="sk sk-line"></span><span class="sk sk-line short"></span></div><div class="task-row lane skeleton"><span class="sk sk-avatar small"></span><div><span class="sk sk-line"></span><span class="sk sk-line short"></span></div><span class="sk sk-line"></span><span class="sk sk-line short"></span></div></div>
   <button class="btn subtle" id="show-all" hidden>展開全部工作</button>
-  <article class="card" id="feedback-trend" style="margin-top:20px"><div class="section-heading" style="margin-top:0"><h2>你的回饋</h2><span class="small muted">讓 AI 知道下次怎麼做</span></div><div id="feedback-body"><p class="small muted">正在讀取回饋…</p></div></article>
-  <article class="card" style="margin-top:20px"><div class="section-heading" style="margin-top:0"><h2>今日回想</h2><span class="small muted">先自己想，再看答案</span></div><div id="recall"></div></article>
-  <div class="split lower"><article class="card"><h2>最近動態</h2><div id="activity"></div></article><article class="card"><h2>現在學什麼</h2><div id="recent-rules"><p class="small muted">還沒有規則。完成任務時在「學習迴圈」勾選，就會出現在這裡。</p></div><button class="btn" data-go="knowledge">查看工作記憶</button></article></div>
  </section>
  <section data-page="conversations" hidden>
   <div class="page-heading"><div><div class="eyebrow">從紀錄到下一次的做法</div><h1>每輪問答，都有接下去的線索。</h1><p>先掌握進度，再查提問、回覆與修改原因。保留的原則會帶進同專案的新任務。</p></div></div>
@@ -660,10 +669,16 @@ dialog.sheet [data-anchor],dialog.sheet [data-item]{scroll-margin-top:0}
   </article>
  </section>
  <section data-page="knowledge" hidden>
-  <div class="page-heading"><div><div class="eyebrow">知識</div><h1>你的工作記憶。</h1><p>每次你糾正 AI，都可以變成下一次的規則。全部存成 Markdown，Obsidian 直接讀得到。</p></div></div>
+  <div class="page-heading"><div><div class="eyebrow">知識</div><h1>做出的成果，留下的理解。</h1><p>每次你糾正 AI，都可以變成下一次的規則。全部存成 Markdown，Obsidian 直接讀得到。</p></div></div>
+  <section aria-label="已登記成果"><div class="section-heading"><h2>最近成果</h2><span class="small muted">已登記不等於已驗收</span></div><div id="outcomes" class="home-work"></div></section>
   <article class="card rules-card"><div class="section-heading" style="margin-top:0"><h2>規則與學習</h2><span class="small muted">任務開始時讀一次，中途不變</span></div><div id="rules" class="rules-grid"></div></article>
   <div class="split lower"><article class="card"><h2>交接紀錄</h2><div id="memory-recent"><p class="muted">尚無交接檔。</p></div><button class="btn" data-go="handoff">建立交接</button></article>
   <article class="card"><h2>保存位置</h2><p class="path" id="memory-path">正在讀取…</p><p class="small muted">任務、事件紀錄、規則與交接都在這個資料夾。把它放在 Vault 裡，就能用 Obsidian 閱讀和連結。後端不改寫你的其他筆記。</p><details><summary>備份與還原</summary><p class="small muted">停止服務後，備份整個工作記憶資料夾與 .settings.json；放回原位置後重新啟動。</p></details></article></div>
+  <details class="learning-detail"><summary>回饋、回想與工作足跡</summary>
+  <article class="card" id="feedback-trend" style="margin-top:20px"><div class="section-heading" style="margin-top:0"><h2>你的回饋</h2><span class="small muted">讓 AI 知道下次怎麼做</span></div><div id="feedback-body"><p class="small muted">正在讀取回饋…</p></div></article>
+  <article class="card" style="margin-top:20px"><div class="section-heading" style="margin-top:0"><h2>今日回想</h2><span class="small muted">先自己想，再看答案</span></div><div id="recall"></div></article>
+  <div class="split lower"><article class="card"><h2>最近動態</h2><div id="activity"></div></article><article class="card"><h2>現在學什麼</h2><div id="recent-rules"><p class="small muted">還沒有規則。完成任務時在「學習迴圈」勾選，就會出現在這裡。</p></div><button class="btn" data-go="knowledge">查看工作記憶</button></article></div>
+  </details>
  </section>
  <section data-page="journeys" hidden>
   <div class="page-heading"><div><div class="eyebrow">專案資料夾</div><h1>先知道為什麼做，再看怎麼改。</h1><p>直接查看各專案的任務、成果與每輪問答，也可以補寫專案說明與改版原因。</p></div></div>
@@ -698,7 +713,7 @@ dialog.sheet [data-anchor],dialog.sheet [data-item]{scroll-margin-top:0}
 <script src="/assets/upload.js"></script>
 <script>
 const $=selector=>document.querySelector(selector);
-const names={overview:'工作總覽',workspaces:'工作區與 Session',handoff:'交接中心',knowledge:'工作記憶',settings:'角色與設定',journeys:'專案歷程',conversations:'對話紀錄',trash:'回收桶'};
+const names={overview:'現在',tasks:'任務',workspaces:'工作區與 Session',handoff:'交接中心',knowledge:'成果與知識',settings:'角色與設定',journeys:'專案歷程',conversations:'對話紀錄',trash:'回收桶'};
 const statuses={DRAFT:['草稿','gray'],READY:['可以接續','blue'],RUNNING:['AI 推進中',''],BLOCKED:['等你處理','amber'],VERIFYING:['驗證中','blue'],AWAITING_ACCEPTANCE:['待驗收','blue'],COMPLETED:['已完成',''],PAUSED:['已暫停','gray'],INTERRUPTED:['額度中斷','red']};
 const demos=[
  {id:'DEMO-1',project:'Mentor',goal:'核對跨 AI 接續與權限範圍',status:'BLOCKED',step:'確認是否允許新增來源讀取器',checks:'2 / 3 項檢查通過',block:'需要你確認允許讀取的目錄',provider:'GitHub Copilot',scope:'僅讀取核准的 session 來源，不修改原檔。',acceptance:'來源可定位；重複匯入不重複；未知事件有診斷。',next:'確認來源讀取範圍',action:'查看決策'},
@@ -712,7 +727,7 @@ function element(tag,text,className){const node=document.createElement(tag);if(t
 function providerMark(id,text){const box=element('span',undefined,'provider-mark');const image=element('img');image.src={codex:'/assets/openai.svg',claude:'/assets/claude.svg',copilot:'/assets/copilot.svg'}[id]||'/assets/mentor.svg';image.alt='';image.className='provider-logo';image.onerror=()=>image.hidden=true;box.append(image,element('span',text||state?.providers.find(p=>p.id===id)?.name||id,'provider-text'));return box;}
 function taskAgent(t){const p=t.planning;if(!p){const source=t.current?.sources?.[0]?.provider;const provider=/copilot/i.test(source||'')?'copilot':/claude/i.test(source||'')?'claude':/codex/i.test(source||'')?'codex':null;return {provider,id:'',label:source?`來源：${source}`:'執行者尚未指定',hint:'交接來源，尚未啟動執行'};}const id=p?.running?.stage||({grill:'B',outline:'C',execute:/驗收|讓 AI 檢查/.test(t.nextAction?.label)?'E':'D',done:'E'}[p?.phase]||'D');let saved=state?.settings.stages[id];if(saved?.provider==='same-as-D')saved=state.settings.stages.D;const last=p?.messages?.filter(m=>m.role==='ai').at(-1);const label=p?.running?.agent||((holderOf(t)==='done'||holderOf(t)==='you')&&last?.agent)||agentOfTask(t,id);const provider=p?.running?.provider||(/copilot/i.test(label)?'copilot':/claude/i.test(label)?'claude':/codex/i.test(label)?'codex':saved?.provider);return {provider,id,label:`${id} · ${label}`,hint:p?.running?'本次執行':holderOf(t)==='done'||holderOf(t)==='you'?'最近回報／目前指派':'下一步指派'};}
 function tell(text){const msg=$('#message'),host=document.querySelector('dialog[open]')||document.body;if(msg.parentElement!==host)host.append(msg);msg.textContent=text;clearTimeout(toastTimer);toastTimer=setTimeout(()=>{$('#message').textContent='';},12000);}
-function go(view){document.querySelectorAll('[data-page]').forEach(p=>p.hidden=p.dataset.page!==view);document.querySelectorAll('[data-view]').forEach(b=>{if(b.dataset.view===view)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');});$('#breadcrumb').textContent=names[view];history.replaceState(null,'','#'+view);window.scrollTo(0,0);$('#content').focus({preventScroll:true});if(view==='journeys')renderJourney();if(view==='conversations')renderConversations();if(view==='trash')renderTrash();}
+function go(view){document.querySelectorAll('[data-page]').forEach(p=>p.hidden=p.dataset.page!==view);document.querySelectorAll('[data-view]').forEach(b=>{if(b.dataset.view===view)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');});$('#breadcrumb').textContent=names[view];const activeTool=document.querySelector(`.more-tools [data-view="${view}"]`);if(activeTool)activeTool.closest('details').open=true;history.replaceState(null,'','#'+view);window.scrollTo(0,0);$('#content').focus({preventScroll:true});if(view==='journeys')renderJourney();if(view==='conversations')renderConversations();if(view==='trash')renderTrash();}
 function options(select,items){select.replaceChildren(...items.map(([value,label])=>{const option=element('option',label);option.value=value;return option;}));}
 function selectors(provider,model,saved){
  options(provider,state.providers.map(p=>[p.id,p.name]));provider.value=saved?.provider||'codex';
@@ -740,7 +755,7 @@ async function request(url,data,headers={},raw=false){
   if(attempt===0&&response.status===403&&['CSRF_FAILED','SESSION_REQUIRED'].includes(result.code)){
    const token=await refreshSession();if(data)options.headers['X-CSRF-Token']=token;continue;
   }
-  if(!response.ok)throw Object.assign(new Error(result.message||(['CSRF_FAILED','SESSION_REQUIRED'].includes(result.code)?'連線驗證已失效，請保留輸入並再試一次。':`${result.code}；請重新整理後比對最新版本。`)),{code:result.code,status:response.status});
+  if(!response.ok)throw Object.assign(new Error(result.message||(['CSRF_FAILED','SESSION_REQUIRED'].includes(result.code)?'連線驗證已失效，請保留輸入並再試一次。':`${result.code}；請重新整理後比對最新版本。`)),{code:result.code,status:response.status,plan:result.plan});
   return result;
  }
 }
@@ -794,6 +809,8 @@ function renderOverview(){
  else if(counts.ai){text.append(element('p','AI 正在跑','baton-eyebrow'),element('h2','現在沒有需要你的事'),element('p','AI 完成後，這裡會告訴你下一步。','baton-task'));}
  else if(counts.wait){text.append(element('p','等前置項目','baton-eyebrow'),element('h2','暫時沒有可以動的事'),element('p','有工作項目在等前一項完成。打開跑道看看是哪一項卡住。','baton-task'));}
  else{text.append(element('p',real.length&&counts.done===real.length?'全部完成':'從這裡開始','baton-eyebrow'),element('h2',real.length?'沒有卡在你這裡的事':'說一件你想完成的事'),element('p','AI 會先整理成任務卡，再反問你，直到講清楚才開始做。','baton-task'));const go=element('button','新任務','btn primary');go.onclick=()=>$('#new-task').click();actions.append(go);}
+ const homeWork=$('#home-work');if(homeWork){homeWork.replaceChildren();for(const t of [...real].sort((a,b)=>(b.updatedAt||'').localeCompare(a.updatedAt||'')).slice(0,3)){const row=element('article',undefined,'card home-work-card'),open=element('button',t.title,'btn subtle');open.onclick=()=>openTask(t.id);row.append(open,element('p',t.nextAction.label,'small muted'));homeWork.append(row);}if(!real.length)homeWork.append(element('p','建立第一個任務後，進度與下一步會出現在這裡。','small muted'));}
+ const outcomes=$('#outcomes');if(outcomes){outcomes.replaceChildren();let count=0;const seen=new Set();for(const t of [...real].sort((a,b)=>(b.updatedAt||'').localeCompare(a.updatedAt||''))){for(const item of t.planning?.workItems||[]){for(const output of item.outputs||[]){const key=t.id+':'+output.file;if(seen.has(key))continue;seen.add(key);if(count++>=12)continue;const row=element('article',undefined,'card home-work-card'),read=element('button',output.file,'btn subtle');read.onclick=busy(read,async()=>openPreview(t.id,output.file,read,'preview',item));row.append(read,element('p',`${t.title} · ${item.status==='DONE'?'已由人確認':'尚待人工驗收'}`,'small muted'));outcomes.append(row);}}}if(!count)outcomes.append(element('p','尚無已登記的成果。AI 完成檔案後會列在這裡，再由你確認。','small muted'));if(count>12)outcomes.append(element('p',`顯示最近 12 份，全部 ${count} 份可從任務頁開啟。`,'small muted'));}
  rec.classList.remove('loading');$('#new-task').className=actions.querySelector('.btn.primary')?'btn':'btn primary';rec.append(mascot,text,actions);rec.dataset.state=top?holderOf(top):counts.ai?'ai':'idle';
  // 四欄看板，任務狀態仍由正本決定；不允許拖曳跳過驗收。
  const filter=$('#filter').value,filtered=all.filter(t=>filter==='all'||holderOf(t)===filter);$('#task-count').textContent=`${filtered.length} 件`;const list=$('#tasks');list.replaceChildren();
@@ -1130,7 +1147,8 @@ function renderPlanning(t,detail){
  const p=t.planning;
  const prof=state.profiles?.find(x=>x.id===p.profile);const meta=element('div',undefined,'assignees');if(prof)meta.append(element('span',`${prof.name}流程`,'badge blue'));const groups={};for(const id of ['A','B','C','D','E','F']){const a=agentOfTask(t,id);(groups[a]||=[]).push(id);}for(const [agent,ids] of Object.entries(groups)){const chip=element('span',undefined,'assignee');chip.append(element('strong',ids.join('')),` ${agent}`);chip.title=ids.map(stageLabel).join('、');meta.append(chip);}
  {const pick=element('label',undefined,'task-agent');const sel=element('select');sel.setAttribute('aria-label','這個任務用的 AI');options(sel,agentChoices());sel.value=agentValue(t);sel.disabled=Boolean(p.running);sel.dataset.focus='task-agent';sel.onchange=async()=>{const v=sel.value;sel.disabled=true;try{await coachAct(t,'agents',{all:v});tell(v==='inherit'?'這個任務改回沿用「角色與設定」。':'已更換這個任務的 AI，從下一步開始生效。');}catch(error){sel.value=agentValue(t);tell(`未完成：${error.message}`);}finally{if(sel.isConnected)sel.disabled=false;}};pick.append(element('span','這個任務用的 AI','small muted'),sel);meta.append(pick);}
- detail.append(meta);
+ const assignment=element('details',undefined,'assignment-detail');assignment.append(element('summary','查看或調整後續 AI 指派'),meta);detail.append(assignment);
+ detail.append(questionBox(t));
  if(p.stopped||p.phase!=='grill')detail.append(instructionBox(t));
  if(p.phase==='grill'&&!p.stopped){
   const grid=element('div',undefined,'coach-grid');const chat=element('section',undefined,'chat');chat.setAttribute('aria-label','和 AI 教練的對話');chat.dataset.anchor='grill';
@@ -1188,7 +1206,7 @@ function renderPlanning(t,detail){
    }
    if(buttons.children.length)card.append(buttons);board.append(card);
   }
-  if(p.phase==='outline'){const row=element('div',undefined,'buttons');const ok=focusKey(element('button','核准，開始做','btn primary'),'approve');ok.disabled=Boolean(p.running);ok.onclick=busy(ok,async()=>{await coachAct(t,'approve');tell('計畫已核准。從第一個工作項目開始。');});const again=focusKey(element('button','我要改','btn'),'outline');again.type='button';again.onclick=()=>focusInstruct();row.append(ok,again);board.append(row);}
+  if(p.phase==='outline'){const row=element('div',undefined,'buttons');const ok=focusKey(element('button','預覽並核准計畫','btn primary'),'approve');ok.disabled=Boolean(p.running);ok.onclick=busy(ok,async()=>{await previewPlan(t);});const again=focusKey(element('button','我要改','btn'),'outline');again.type='button';again.onclick=()=>focusInstruct();row.append(ok,again);board.append(row);}
   detail.append(board);
  }
  const learn=learningPanel(t);if(learn)detail.append(learn);
@@ -1211,13 +1229,20 @@ function openTask(id,{background=false}={}){
  if(sharePanel.dataset.task!==id||!dialog.open){sharePanel.hidden=true;shareToggle.setAttribute('aria-expanded','false');}sharePanel.dataset.task=id;sharePanel.replaceChildren();shareToggle.hidden=!!t.error;
  shareToggle.onclick=()=>{sharePanel.hidden=!sharePanel.hidden;shareToggle.setAttribute('aria-expanded',String(!sharePanel.hidden));};
  if(t.error){detail.append(element('p',t.error,'notice'));if(!dialog.open)dialog.showModal();return;}
+ if(t.workCards?.length){
+  const latest=t.workCards.at(-1),round=section('這一輪，實際做了什麼');round.classList.add('work-round');
+  round.append(element('span',`${latest.roleLabel||latest.stage} · ${latest.label} · ${latest.agent}${latest.simulated?'（測試 CLI）':''}`,'badge'),definition([['你的要求',latest.userInput||'未記錄'],['當時理解',latest.context?.interpretation||'舊紀錄未保存，不以目前目標回填'],['目前結果',latest.outcome]]));
+  if(latest.aiClaims?.change)round.append(element('p',`AI 自述：${latest.aiClaims.change}`,'small muted'));
+  round.append(element('p',`開始版本 ${latest.baseRevision??'未知'} → 結果版本 ${latest.resultRevision??'尚無'}；${latest.outputs.length} 份已登記成果；${latest.checks.length} 項已保存機器檢查。沒有檢查不代表通過。`,'small muted'));
+  const history=element('button','閱讀每輪工作卡','btn');history.onclick=busy(history,async()=>showRoundCards(t));round.append(history);detail.append(round);
+ }
  const control=controlBar(t);if(control)detail.append(control);
  const one=focusKey(element('div',undefined,'one-thing'),'one');one.tabIndex=-1;const oneText=element('div');oneText.append(element('div','你現在要做的一件事','eyebrow'),element('strong',t.nextAction.label));one.append(oneText);
- const jump=element('button',`前往：${t.nextAction.button}`,'btn');jump.onclick=()=>{const target=(t.nextAction.kind==='item'&&detail.querySelector(`[data-item="${t.nextAction.id}"]`))||detail.querySelector(`[data-anchor="${t.nextAction.kind}"]`)||detail.querySelector('.running')||(t.nextAction.kind==='handoff'?shareToggle:null);if(target===shareToggle&&sharePanel.hidden)shareToggle.onclick();target?.scrollIntoView({block:'start',behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth'});if(t.nextAction.kind==='running'){target?.focus({preventScroll:true});return;}const buttons=[...detail.querySelectorAll('button:not(:disabled)')].filter(b=>!one.contains(b));(buttons.find(b=>target?.contains(b)&&b.textContent.startsWith(t.nextAction.button))||buttons.find(b=>b.textContent.startsWith(t.nextAction.button))||target?.querySelector('.btn.primary:not(:disabled)')||target?.querySelector('textarea,input,button'))?.focus({preventScroll:true});};
- if(!['none','stopping'].includes(t.nextAction.kind))one.append(jump);decorateOneThing(t,{one,oneText,jump});detail.append(one);{const fb=feedbackCard(t);if(fb)detail.append(fb);}const historyButton=element('button','閱讀每輪問答與改善','btn');historyButton.onclick=()=>showConversations(t.id);detail.append(historyButton);
+ const jump=element('button',`前往：${t.nextAction.button}`,'btn');jump.onclick=()=>{if(t.nextAction.kind==='outline'){previewPlan(t).catch(e=>tell(e.message));return;}const target=(t.nextAction.kind==='item'&&detail.querySelector(`[data-item="${t.nextAction.id}"]`))||detail.querySelector(`[data-anchor="${t.nextAction.kind}"]`)||detail.querySelector('.running')||(t.nextAction.kind==='handoff'?shareToggle:null);if(target===shareToggle&&sharePanel.hidden)shareToggle.onclick();target?.scrollIntoView({block:'start',behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth'});if(t.nextAction.kind==='running'){target?.focus({preventScroll:true});return;}const buttons=[...detail.querySelectorAll('button:not(:disabled)')].filter(b=>!one.contains(b));(buttons.find(b=>target?.contains(b)&&b.textContent.startsWith(t.nextAction.button))||buttons.find(b=>b.textContent.startsWith(t.nextAction.button))||target?.querySelector('.btn.primary:not(:disabled)')||target?.querySelector('textarea,input,button'))?.focus({preventScroll:true});};
+ if(!['none','stopping'].includes(t.nextAction.kind))one.append(jump);decorateOneThing(t,{one,oneText,jump});detail.append(one);{const fb=feedbackCard(t);if(fb)detail.append(fb);}const historyButton=element('button','閱讀每輪問答與改善','btn');historyButton.onclick=()=>showConversations(t.id);detail.append(historyButton);const compact=element('button','準備精簡接手包','btn');compact.onclick=busy(compact,async()=>showCompactHandoff(t));detail.append(compact);
  const open=t.decisions.filter(d=>d.status!=='DECIDED');const [label]=statuses[t.status]||[t.status];
  const facts=definition(t.planning?[['狀態',`${label} · 第 ${t.revision} 版 · 最後更新 ${when(t.updatedAt)}`],['目前成果',t.current.summary],['產出資料夾',t.allowedRoots[0]]]:[['狀態',`${label} · 第 ${t.revision} 版 · 最後更新 ${when(t.updatedAt)}`],['目標',t.goal],['目前成果',t.current.summary],['卡點',open.length?open.map(d=>d.question).join('\n'):'沒有待決策'],...t.decisions.filter(d=>d.status==='DECIDED').map(d=>['已確認決策',`${d.options.find(o=>o.id===d.choice)?.label}（${when(d.decidedAt)}）${d.note?`\n${d.note}`:''}`]),['AI 的唯一下一步',t.next]]);
- detail.append(facts);
+ const factsDetail=element('details',undefined,'task-facts');factsDetail.append(element('summary','任務資料與儲存位置'),facts);detail.append(factsDetail);
  if(t.attachments?.length)detail.append(attachmentList(t));
  if(t.planning)renderPlanning(t,detail);
  for(const d of open){
@@ -1296,6 +1321,39 @@ function openTask(id,{background=false}={}){
  dialog.scrollTop=scroll;const back=focused&&dialog.querySelector(`[data-focus="${focused}"]`);
  if(back&&!back.disabled){back.focus({preventScroll:true});if(caret&&back.setSelectionRange&&caret[0]!=null)back.setSelectionRange(...caret);}else if(!background){dialog.scrollTop=0;one.focus({preventScroll:true});}else if(focusInSheet&&!dialog.contains(document.activeElement))$('#task-title').focus({preventScroll:true});
 }
+function workDialog(title){
+ const d=element('dialog');d.classList.add('work-preview');d.setAttribute('aria-label',title);const head=element('div',undefined,'dialog-heading'),close=element('button','關閉','btn');close.onclick=()=>d.close();head.append(element('h2',title),close);d.append(head);document.body.append(d);d.addEventListener('close',()=>d.remove(),{once:true});d.showModal();return d;
+}
+async function previewPlan(t){
+ const {plan}=await request(`/api/tasks/${t.id}/plan`);if(!plan)throw new Error('目前沒有待核准的方案。');
+ const d=workDialog('確認這份方案，再開始工作');
+ d.append(definition([['原始要求',plan.request],['AI 的理解',plan.interpretation],['產出範圍',plan.outputRoot],['套用效果',plan.effect],['復原方式',plan.recovery],['方案版本',`revision ${plan.revision} · ${plan.id.slice(0,12)}`]]));
+ for(const [heading,values] of [['可以修改',plan.scope?.allowed],['禁止操作',plan.scope?.forbidden],['鎖定條件',plan.scope?.locked?.map(v=>v.text)],['任務限制',plan.constraints],['尚待核對',plan.unknowns]]){d.append(element('h3',heading),element('p',(values||[]).join('；')||'未記錄','small'));}
+ for(const item of plan.items)d.append(element('h3',`${item.id} ${item.title} · ${item.owner==='human'?'由你處理':'由 AI 處理'}`),element('p',item.detail||'未記錄'),element('p',`驗收：${(item.acceptance||[]).join('；')}`,'small muted'));
+ const error=element('p','','notice'),ok=element('button',`核准這 ${plan.items.length} 項工作`,'btn primary'),edit=element('button','先修改方案','btn');edit.onclick=()=>{d.close();focusInstruct();};
+ ok.onclick=async()=>{ok.disabled=true;try{await coachAct({...t,revision:plan.revision},'approve',{proposalId:plan.id});d.close();tell('已核准你看過的方案。成果仍需人工驗收。');}catch(e){error.textContent=e.message;ok.disabled=false;}};
+ d.append(error,ok,edit);
+}
+async function showRoundCards(t){
+ const {cards}=await request(`/api/tasks/${t.id}/work-cards`);const d=workDialog('每輪工作卡');
+ for(const c of [...cards].reverse()){
+  const box=section(`${c.roleLabel||c.stage} · ${c.label} · ${c.agent}`);
+  box.append(definition([['本輪要求',c.userInput||'未記錄'],['當時理解',c.context?.interpretation||'舊紀錄未保存'],['實際結果',c.outcome],['版本',`${c.baseRevision??'未知'} → ${c.resultRevision??'尚無'}`],['當輪下一步',c.next?.label||'未記錄，請查看任務目前狀態']]));
+  if(c.aiClaims?.change)box.append(element('p',`AI 自述改動：${c.aiClaims.change}`,'small'));
+  if(c.aiClaims?.evidence)box.append(element('p',`AI 聲稱的證據（非獨立驗證）：${c.aiClaims.evidence}`,'small muted'));
+  for(const o of c.outputs){const file=typeof o==='string'?o:o.file||o.path,b=element('button',`開啟成果：${file}`,'btn');b.onclick=busy(b,async()=>{d.close();await openPreview(t.id,file,b);});box.append(b);}
+  if(c.checks.length)box.append(sensorList(c.checks));else box.append(element('p','機器檢查未記錄，不視為通過。','small muted'));
+  box.append(element('p',`本輪輸入 ${c.contextMetrics.input.characters} 字元／${c.contextMetrics.input.utf8Bytes} UTF-8 bytes；輸出 ${c.contextMetrics.output.characters} 字元。${c.contextMetrics.usageLabel||'Token 與費用未知。'}`,'small muted'),element('p',`來源：${c.source}`,'small muted'));d.append(box);
+ }
+ const brief=element('button','準備精簡接手包','btn primary');brief.onclick=busy(brief,async()=>showCompactHandoff(t));d.append(brief);
+}
+async function showCompactHandoff(t){
+ const r=await request(`/api/tasks/${t.id}/handoff-summary`),d=workDialog('接手摘要 · 完整資料按需閱讀');
+ d.append(element('p',r.note,'small muted'),element('pre',r.content,'contract'));
+ d.append(element('p',`摘要 ${r.metrics.summary.characters} 字元；目前保存的全部 Prompt／回覆 ${r.metrics.recordedPromptAndReply.characters} 字元。這是文字大小比較，不是 Token 節省或費用量測。`,'small muted'));
+ if(r.overRecommendedSize)d.append(element('p','超過建議 8,000 字元，必要條件未被截斷。請先確認可摘要範圍。','notice'));
+ const save=element('button','下載這份接手摘要','btn primary');save.onclick=()=>download(`${t.id}-r${r.revision}-summary.md`,r.content);d.append(save);
+}
 function renderSessions(){
  const container=$('#sessions');container.replaceChildren();
  if(!$('#demo').checked){
@@ -1345,7 +1403,7 @@ async function init(){
  try{[state,health]=await Promise.all([request('/api/settings'),request('/api/health')]);const [sessionsResult,handoffsResult]=await Promise.all([request('/api/sessions'),request('/api/handoffs')]);importedSessions=sessionsResult.sessions;savedHandoffs=handoffsResult.handoffs;tasks=(await request('/api/tasks')).tasks;renderOverview();ensurePolling();renderSettings();renderSessions();renderMemory();if(names[location.hash.slice(1)])go(location.hash.slice(1));selectors($('#handoff').elements.provider,$('#handoff').elements.modelKey);$('#memory-path').textContent=health.memory;$('#connection').replaceChildren(element('span','','dot'),'本機服務已連接');$('#settings button[type=submit]').disabled=false;$('#handoff button[type=submit]').disabled=false;}
  catch(error){window.loadFailed=true;renderOverview();$('#connection').textContent='本機服務未連接';tell(`載入失敗：${error.message}`);}
 }
-document.querySelectorAll('[data-view]').forEach(button=>button.onclick=()=>go(button.dataset.view));document.querySelectorAll('[data-go]').forEach(button=>button.onclick=()=>go(button.dataset.go));function afterSheetClose(){document.body.append($('#message'));const id=$('#task-dialog').dataset.task;(document.querySelector(`.lane[data-id="${id}"] .lane-open`)||document.querySelector('.lane-open')||$('#filter')||$('#new-task'))?.focus();}
+document.querySelectorAll('[data-view]').forEach(button=>button.onclick=()=>go(button.dataset.view));document.querySelectorAll('[data-go]').forEach(button=>button.onclick=()=>go(button.dataset.go));document.querySelectorAll('[data-new-task]').forEach(button=>button.onclick=()=>$('#new-task').click());function afterSheetClose(){document.body.append($('#message'));const id=$('#task-dialog').dataset.task;[document.querySelector(`.lane[data-id="${id}"] .lane-open`),...document.querySelectorAll('.lane-open'),$('#filter'),document.querySelector('[data-page]:not([hidden]) button'),$('#new-task')].find(node=>node&&!node.closest('[hidden]'))?.focus();}
 function closeSheet(){const d=$('#task-dialog');if(!d.open||d.classList.contains('closing'))return;if(matchMedia('(prefers-reduced-motion: reduce)').matches){d.close();afterSheetClose();return;}d.classList.add('closing');let done=false;const finish=()=>{if(done)return;done=true;d.classList.remove('closing');d.close();afterSheetClose();};d.addEventListener('animationend',finish,{once:true});setTimeout(finish,400);}
 $('#task-dialog').addEventListener('cancel',e=>{e.preventDefault();const menu=$('#task-menu-slot details[open]');if(menu){menu.open=false;menu.querySelector('summary').focus();return;}const confirmBox=$('#task-detail .trash-confirm');if(confirmBox){confirmBox.remove();$('#task-menu-slot summary')?.focus();return;}closeSheet();});$('#task-dialog').addEventListener('close',afterSheetClose);$('#draft-dialog').addEventListener('close',()=>document.body.append($('#message')));$('#task-dialog').addEventListener('click',e=>{if(e.target===e.currentTarget)closeSheet();});
 $('#preview-dialog').addEventListener('close',()=>{ previewMarkdown=null;$('#preview-content').replaceChildren();const {taskId,file,itemId,trigger}=previewReturn||{};previewReturn=null;const next=trigger?.isConnected?trigger:[...$('#task-detail').querySelectorAll('[data-preview-file], [data-preview-item]')].find(node=>(itemId?node.textContent==='驗收'&&node.dataset.previewItem===itemId:file?.startsWith('diff:')?node.textContent==='看改了什麼':node.dataset.previewFile===file)&&node.dataset.previewItem===trigger?.dataset.previewItem&&node.className===trigger?.className&&$('#task-dialog').dataset.task===taskId);const pending=$('#task-dialog').dataset.reviewRefresh;delete $('#task-dialog').dataset.reviewRefresh;if(pending&&$('#task-dialog').open&&$('#task-dialog').dataset.task===pending)openTask(pending,{background:true});(next?.isConnected?next:$('#task-title')).focus({preventScroll:true});});
@@ -1356,6 +1414,15 @@ document.querySelectorAll('[data-close]').forEach(button=>button.onclick=()=>but
 $('#demo').onchange=renderOverview;$('#filter').onchange=renderOverview;$('#show-all').onclick=()=>{expanded=!expanded;renderOverview();};$('#new-task').onclick=()=>{$('#draft-form').elements.project.value='';$('#draft-project').hidden=true;const box=$('#profile-picker');if(state&&box.children.length<=1){for(const p of state.profiles){const label=element('label',undefined,'option'),radio=element('input');radio.type='radio';radio.name='profile';radio.value=p.id;radio.checked=p.id==='standard';const text=element('div');text.append(element('strong',p.name),element('small',p.description));label.append(radio,text);box.append(label);}}if(state){options($('#new-task-agent'),agentChoices());$('#new-task-agent').value='inherit';const show=()=>{const v=$('#new-task-agent').value;$('#new-task-agents').textContent=v==='inherit'?`A ${agentOf('A')} · B ${agentOf('B')}`:`全部階段：${$('#new-task-agent').selectedOptions[0].textContent}`;};$('#new-task-agent').onchange=show;show();}$('#draft-dialog').showModal();$('#draft-form textarea').focus();};
 $('#refresh').onclick=async()=>{if(!confirm('重新整理會重載角色設定。尚未保存的角色選擇將被取代；交接文字會保留。'))return;await init();};
 const draftAttachments=attachmentPicker($('#draft-attachments'),async (file,batch,index)=>request(`/api/uploads?name=${encodeURIComponent(file.name)}&batch=${encodeURIComponent(batch)}&index=${index}`,await file.arrayBuffer(),{},true),names=>request('/api/uploads/batches',{names}));
+$('#obsidian-connect').onclick=busy($('#obsidian-connect'),async()=>{
+ const d=workDialog('連接 Obsidian 工作中心');
+ d.append(element('p','配對後，插件可讀取本機任務、建立工作、執行 AI 與送出你的驗收。請只把配對碼輸入你信任的 Mentor 插件。服務重啟或 12 小時後需重新配對。'));
+ const code=element('pre','','contract'),note=element('p','','small muted'),make=element('button','產生一次性配對碼（2 分鐘有效）','btn primary');
+ make.onclick=busy(make,async()=>{const r=await request('/api/obsidian/pairing',{});code.textContent=r.code;note.textContent=`${r.scope} 此碼僅使用一次；不會寫入筆記。`;});
+ d.append(make,code,note);
+ const {clients}=await request('/api/obsidian/connections');
+ for(const client of clients){const row=element('div',undefined,'buttons'),revoke=element('button','撤銷這個連線','btn');row.append(element('p',`${client.id} · 到期 ${when(new Date(client.expiresAt).toISOString())}`,'small'));revoke.onclick=busy(revoke,async()=>{await request('/api/obsidian/revoke',{id:client.id});row.replaceChildren(element('p','已撤銷；下一次請求將被拒絕。'));});row.append(revoke);d.append(row);}
+});
 $('#draft-form').onsubmit=event=>{event.preventDefault();if(!state)return tell('請先恢復後端連線。');const form=event.currentTarget,button=form.querySelector('button[type=submit]');const values=Object.fromEntries(new FormData(form));busy(button,async()=>{draftAttachments.lock(true);try{values.attachmentIds=await draftAttachments.ids();const result=await request('/api/tasks',values);draftAttachments.clear();tasks=(await request('/api/tasks')).tasks;renderOverview();ensurePolling();$('#draft-dialog').close();form.reset();openTask(result.task.id);tell(`${agentOfTask(result.task,'A')} 正在整理任務卡，接著會開始反問你。`);}finally{draftAttachments.lock(false);}})();};
 $('#settings').onsubmit=event=>{event.preventDefault();if(!state)return tell('請先恢復後端連線。');const form=event.currentTarget;submit(form,async()=>{const stages={};for(const stage of state.stages)stages[stage.id]={provider:form.elements[`${stage.id}-provider`].value,modelKey:form.elements[`${stage.id}-model`].value};const result=await request('/api/settings',{revision:state.settings.revision,stages});state.settings=result.settings;renderSettings();$('#plan-status').textContent='指派已保存，下一次執行生效。';tell('指派已保存。下一次執行就會用新的 AI。');});};
 $('#handoff').onsubmit=event=>{event.preventDefault();if(!state)return tell('請先恢復後端連線。');const form=event.currentTarget;submit(form,async()=>{const input=Object.fromEntries(new FormData(form)),result=await request('/api/handoffs',input);renderHandoff(input,result);tell('交接 Markdown 已保存，尚未啟動執行。');});};

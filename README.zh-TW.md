@@ -1,127 +1,131 @@
-<div align="center">
-
-<img src="web/assets/mentor.svg" width="72" alt="Mentor logo">
-
 # Mentor
 
-**在 Codex、Claude Code 和 Copilot 之間交接工作，不用重講背景。而且讓你真的記住學到的事。**
+把一件工作交給不同 AI 接續，保留目標、決策、成果與驗收紀錄。
 
-零依賴的本機工作台。一份任務檔是唯一正本：AI 開工前讀它，做完寫回它，你只負責決策和驗收。
+Mentor 是本機工作台：Web 負責指派與決策，Obsidian 負責筆記閱讀和整理。任務 Markdown 是共同正本；每輪工作卡讓人看懂當時要求、AI 理解、產出與檢查。AI 回報完成後，仍由人驗收。
 
-[![CI](https://github.com/dan40912/mentor/actions/workflows/ci.yml/badge.svg)](https://github.com/dan40912/mentor/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-![Dependencies: 0](https://img.shields.io/badge/dependencies-0-brightgreen)
-![Node](https://img.shields.io/badge/node-%3E%3D20-339933)
-![Platforms](https://img.shields.io/badge/macOS%20%7C%20Linux%20%7C%20Windows-lightgrey)
+[English](README.md) · [GitHub](https://github.com/dan40912/Mentor) · [MIT](LICENSE)
 
-[English](README.md) · 繁體中文
+> **開發版本 v0.1，介面為繁體中文。** 本分支已加入原生 Obsidian 側欄、Theme、範本及可復原索引整理；尚未通過 Obsidian 桌面與真人使用驗收。Codex 執行、Claude 接手審閱已做一次真實 CLI 測試；這不代表所有 provider、平台或外觀都已驗證。[完整狀態與證據](docs/implementation/mentor-obsidian-status.md)。
 
-<img src="docs/images/overview.png" alt="Mentor 工作總覽：一件等你決策的事，加上任務看板" width="860">
+![Mentor workflow home](docs/images/workflow-home.jpg)
 
-</div>
+新版 Web 首頁；使用虛構示範資料，畫面不代表真實 AI 執行。
 
-> **目前狀態：早期版本（v0.1）。** 任務檔、決策卡、接手包、驗收與 A–F 教練流程已完成並有測試。介面目前只有繁體中文，英文介面在 [Roadmap](#roadmap)。**額度用完自動切換尚未完成**：現在是一鍵交接，不是零操作。
+## 適合什麼工作
 
-## 為什麼需要它
+適合需要逐步確認範圍、交接給另一個 AI、檢查成果及保留經驗的本機文件工作。不適合把它當作無人監督的發布工具，或假設它會自動替你解決所有額度與登入問題。
 
-你同時用好幾個 AI。其中一個做到一半額度用完，你開另一個，花十分鐘重講專案、找最新的檔案、猜哪些事已經決定過。更糟的是：只有你能回答的問題被埋在聊天裡、AI 自己選了預設、結束碼 0 被當成完成。
-
-Mentor 讓你不用再當搬運工。
-
-## 你會得到什麼
-
-| | |
-|---|---|
-| **一份任務檔** | Markdown 保存目標、邊界、決策、證據與唯一的下一步，Obsidian 可直接讀。任何 AI 都能接手。 |
-| **一鍵交接** | `GET /api/tasks/:id/brief?for=codex\|claude` 產生 8,000 字元內的接手包：邊界、已確認決策、待決問題、口徑、回報格式。不需要聊天紀錄。 |
-| **人決策，AI 執行** | 決策是獨立的卡片，附建議、每個選項的代價與未知。「先問別人」會一直阻擋，直到記錄最終答案。AI 不能替你選預設。 |
-| **證據，不是感覺** | 自動檢查計算成果檔 SHA-256；你自己改檔就是新基準；基於舊版本的回報會被拒絕。`DONE` 只代表「可以驗收」。 |
-| **教練，不只是執行器** | A–F 六個階段（任務卡、Grill me、大綱、執行、驗收、修改），每個階段權限不同：只對話、唯讀、只能寫產出資料夾。 |
-| **回饋會改變做法** | 確認成果、自動停下、任務完成時，各問你一題 1–5 分加標籤。低分的標籤會變成下個任務開工時 AI 要照做的方向，首頁看得到趨勢。 |
-| **學到的會留下來** | 每步 AI 寫日記：詮釋、偏離、取捨。你勾選要保留的，下個任務會帶上，之後用間隔回想問你。 |
-| **零依賴** | 純 Node.js 與原生 JavaScript。不用 `npm install`、資料庫或 Obsidian 外掛。 |
+| 入口 | 你可以做什麼 |
+| --- | --- |
+| 現在 | 看下一個需要你回答、決策或驗收的項目，以及最近工作 |
+| 任務 | 建立任務、核對 AI 理解、預覽計畫、執行、審閱與修改 |
+| 成果與知識 | 開啟已登記成果，閱讀回饋、回想與工作足跡 |
+| 更多工具 | 找交接紀錄、對話、專案與角色設定等進階功能 |
+| Obsidian 工作中心（選用） | 從筆記或選取內容準備任務、查看同一任務、預覽整理方案與保存接手包 |
 
 ## 快速開始
 
-支援 macOS、Linux 與 Windows，需要 Node.js 20 以上（已測 20、22、24）。若要讓 Mentor 呼叫 AI，需要已登入的 CLI（[Codex](https://github.com/openai/codex)、[Claude Code](https://claude.com/claude-code) 或 GitHub Copilot CLI）。沒有 CLI 也能用任務檔與手動交接。
+需要 Node.js 20 以上；純 Node.js 與原生 JavaScript，沒有 runtime 套件，不必 npm install。
 
 ```sh
-git clone https://github.com/dan40912/mentor.git
-cd mentor
-npm run demo      # 在 .demo-home/ 建立虛構資料並啟動
+git clone https://github.com/dan40912/Mentor.git
+cd Mentor
+npm run demo
 ```
 
-開啟 <http://127.0.0.1:4317>。要用自己的資料：
+開啟終端顯示的網址，預設 [127.0.0.1:4317](http://127.0.0.1:4317)。示範會**重新建立 `.demo-home/`**，不要在裡面保存正式資料。可以閱讀虛構任務、做示範決策與查看接手資料，不必先登入 AI。示範服務不會將後續 AI 呼叫自動換成 fake CLI；按下執行前，須知道它會使用已登入 CLI 的帳號額度。
+
+要使用自己的獨立資料目錄：
 
 ```sh
-npm start                              # 資料在 ./vault 與 ./outputs（已加入 .gitignore）
-npm start -- --home ~/mentor-data      # 資料放在別處
-npm start -- --port 4318               # 連接埠衝突時
+npm start -- --home ~/mentor-data --port 4318
+```
+
+不帶參數的 `npm start` 將資料放在目前專案的 `vault/` 與 `outputs/`。也支援 `MENTOR_HOME` 與 `PORT`。停止服務用 Ctrl+C。若你的原服務已占用連接埠，請使用另一個連接埠與獨立 home。
+
+## 完成第一件工作
+
+1. 按「新任務」，寫下目的、允許變更的範圍與不可改動的限制。
+2. AI 整理任務卡與追問。核對理解；可用「有疑問？先問，不改成果」先詢問紀錄與限制。AI 對意圖的判斷與建議需你核對，明確確認的修正才成為新指令。
+3. AI 擬好計畫後，按「預覽計畫」，看工作項目、來源、產出位置與驗收條件，再核准該版本。
+4. 交給 AI 執行；閱讀每輪工作卡與實際成果。模型自述、機器檢查與人工驗收分開呈現。
+5. 要換 AI 時先確認原執行已停止，修改後續指派或準備精簡接手包。摘要保留目標、人的補充、限制、版本、證據與下一步，完整歷史按索引查閱。
+6. 按驗收清單確認成果；未測的項目保持未驗證。選擇值得保留的經驗，供後續任務參考。
+
+真實執行需安裝並登入 Codex、Claude Code 或 GitHub Copilot CLI；模型可用性、額度與費用依你的帳號。Mentor 不提供模型訂閱，也不保證額度耗盡時自動切換成功。沒有 CLI 仍可閱讀任務與手動交接。
+
+## 在 Obsidian 裡工作
+
+```sh
+npm run package:obsidian
+```
+
+在 Obsidian 桌面版開啟 `dist/mentor-obsidian` 作為**獨立示範庫**。選擇 Mentor Theme，審閱插件後自行啟用，再從 Web「連接 Obsidian」取得一次性配對碼。插件只連 `http://127.0.0.1:port`；憑證只存在記憶體，重啟需重配對。
+
+- Theme 提供淺深色、文件、表格、Properties 與 Callout 樣式。
+- 首頁和八份內容範本使用普通 Markdown，不要求 Dataview 或 Templater。
+- 從目前筆記／選取內容準備任務，送出前看清楚原文與目標；過長內容不偷偷截斷。
+- 「為目前資料夾預寫索引」先列來源與完整草稿。修改後重新預覽，再套用；只寫 `Mentor 整理/`，不搬動來源。它是檔名索引，不是 AI 摘要。
+- 「從目前筆記預寫內容或建議分類標籤」：先選紀錄任務、核對送給 AI 的來源，再生成草稿；預覽與修改後才能保存。來源版本變更會拒絕套用，保存不代表內容已驗收。
+- 命令「為目前資料夾的筆記加上分類標籤」可選筆記、輸入分類，再預覽完整變更。這會修改原筆記末尾的獨立標籤區塊，保留原文與 Properties，不使用 AI；Core 與 Mentor 任務不在修改範圍。
+- 同一個 AI 預寫入口可選「分類標籤建議」：先看理由與來源引文，再帶入可修改的標籤草稿及逐份變更預覽。資訊不足可不提出標籤；引文存在不等於分類正確。
+- 搬移／重新命名目前只有命令面板的只讀連結草稿，尚不可套用；索引完整性、寫入與復原仍待實作及驗證。
+- 「整理與復原紀錄」支援部分失敗重試及復原。後來被人修改的內容會保留並提示衝突。中斷先核對結果，不盲目重跑。
+
+停用 Theme／插件後，Markdown 仍可閱讀。套裝生成器不安裝到正式 Vault；`dist/` 是可重建產出，不要放正式筆記。升級前備份，插件需一併替換 main.js、organization.js、content-drafts.js、relocation.js、reference-coverage.js、manifest.json、styles.css。[完整安裝、復原與限制](docs/obsidian-work-center.md)。
+
+## 資料、權限與隱私
+
+- 任務在 `MENTOR_HOME/vault`，成果在 `MENTOR_HOME/outputs`；設定與日記也在本機。備份整個 home，另備份你的 Obsidian Vault。
+- Markdown 的 `awc:begin`／`awc:end` 是系統產生區塊；人工筆記放在區塊外，勿直接改產生資料。
+- Mentor 呼叫已登入 CLI；被選取的來源與 Prompt 會交給對應 AI 服務，本機儲存不代表模型離線執行。工作紀錄可能含來源內容，應依機密需求管理。
+- 整理復原紀錄保存修改前後內容，會隨 Vault 同步與備份。不要把正式筆記、憑證或私人執行紀錄提交到 Git。
+- 本機服務保留 loopback、Host／Origin、session 與 CSRF 檢查。Obsidian 使用有限權限的配對橋接，可在 Web 撤銷；撤銷不會自動停止已啟動的工作。
+- Codex 使用 CLI sandbox；Claude／Copilot 主要依工具白名單與工作目錄，Mentor 沒有額外 OS 沙箱。所有 provider 的隔離強度並不相同。
+- `DONE`、結束碼 0、模型自評及檔案存在都不等於人工驗收。服務重啟後未知結果需先核對。
+
+安全問題見 [SECURITY.md](SECURITY.md)。
+
+## 使用量與驗證
+
+每輪可核對實際 Prompt／回覆的字元與 UTF-8 bytes。成功的 Codex／Claude 呼叫另保存 CLI 回報的 Token 欄位與本機執行時間；缺少欄位、舊紀錄及失敗回合仍可能未知。Claude 費用是 CLI 端估算，非帳單，不推算 Codex 費用。各 provider 快取／輸入定義不同，不能直接混加比較。接手摘要不會為了滿足 8,000 字元而刪除必要限制；超長會標示，不能把字元減少直接宣稱為 Token 節省。
+
+```sh
 npm test
+npm run measure:handoff -- /absolute/MENTOR_HOME/vault/TASK-id.md
+npm run benchmark:handoff     # 只預覽，不呼叫模型
 ```
 
-`--home` 與 `--port` 在 macOS、Linux、PowerShell、cmd 用法相同，也可以用環境變數 `MENTOR_HOME`、`PORT`。
+一般測試使用虛構資料與 fake CLI，不消耗模型額度。完整 CI 定義在 [.github/workflows/ci.yml](.github/workflows/ci.yml)，涵蓋三個作業系統與 Node 20／22／24；綠燈不代表真實 CLI 或 Obsidian 實機驗收通過。
 
-### Windows 注意事項
+選用的真實跨 AI smoke test：
 
-- 用 npm 安裝的 CLI（例如 `codex`）在 Windows 是 `.cmd` 捷徑。Mentor 會依 `PATH` 與 `PATHEXT` 找到它，並經由 `cmd.exe` 執行。參數含有 `& | < > ^ % ! "` 時會直接拒絕而不是跳脫，專案與產出路徑請避開這些字元。
-- 停止執行時，用 `taskkill` 結束整個程序樹。
-- 每次 push 都會在 CI 跑 Windows。尚未在真實 Windows 機器上搭配已登入的 `codex`、`claude`、`copilot` 試過，遇到問題請回報。
-
-## 運作方式
-
-```
-任務檔 ──產生──▶ 接手包（≤ 8,000 字元）──貼上或直接執行──▶ Codex / Claude / Copilot
-  ▲                                                              │
-  └──── 後端核對 revision、證據、新成果檔 hash ◀──── 回報 ───────┘
+```sh
+node scripts/live-cross-ai.mjs --run
 ```
 
-1. **建立任務。** 教練把一句話整理成任務卡，每次最多問三題。
-2. **指派。** 每個階段選 AI 與模型。Mentor 用 `argv` 與 `stdin` 呼叫你已登入的 CLI，不經 shell。
-3. **決策。** 首頁只推薦你一件事，順序：待決策、未通過的檢查、待驗收、人工檢查、交給 AI。
-4. **交接。** 額度用完，或下一步換個模型更適合？換 provider，接手包帶著所有背景。
-5. **驗收。** 自動檢查與人工檢查分開。AI 驗過不等於你驗過。
-6. **保留。** 勾選值得留下的教訓，它們會影響同專案的下個任務。
+這會呼叫已登入的 Codex 與 Claude、消耗額度，並在隔離 `.lab-home/` 產生虛構 CSS 任務與證據；不會替人驗收，也不證明 Theme 的實際外觀。[測試範圍](docs/implementation/mentor-obsidian-status.md)。
 
-任務檔長什麼樣子見 [`examples/sample-task.md`](examples/sample-task.md)，內部設計見 [`docs/architecture.md`](docs/architecture.md)。
+[真實交接比較報告](docs/benchmarks/handoff-2026-10-22.md)的四次資訊保留檢查都通過，但兩組 Token 趨勢相反，**尚未證明可重複的節省**。報告保留有利與不利結果，不以文字變短推論整輪用量下降。
 
-## 安全設計
+## 常見問題與限制
 
-Mentor 在你的機器上執行你信任的 CLI，所以預設很嚴格。
+| 情況 | 處理方式 |
+| --- | --- |
+| 連接埠已占用 | 使用 `--port`；配對網址也需相同 |
+| CLI 找不到、未登入或模型不可用 | 在終端檢查 CLI 與帳號；在「更多工具」的角色設定換可用模型 |
+| Obsidian 配對失效 | 確認本機服務仍在，重新產生配對碼；不要把憑證寫進筆記 |
+| 過期方案或復原衝突 | 重新預覽；先閱讀目前內容，不用舊快照覆蓋新修改 |
+| 停止後不確定是否寫入 | 查看成果與歷史，核對版本後再繼續 |
+| 想移除整合 | 停用插件／Theme、撤銷連線；備份筆記與整理紀錄，再自行移除插件檔案 |
 
-- 只監聽 loopback，檢查 `Host` 與 `Origin`。
-- 修改類請求需要同源 cookie、CSRF token 與 `Idempotency-Key`；同一個 key 用在不同操作會被拒絕。
-- 任何 CLI 都不使用「略過權限」旗標。每個階段只給最小權限：只對話、唯讀，或只能寫任務的產出資料夾。實際強制力取決於 CLI：Codex 用它的 sandbox；Claude Code 與 Copilot 用工具白名單加工作目錄，Mentor 沒有額外沙箱。
-- 預覽與檔案讀取做路徑與 symlink 檢查。
-- 服務重啟時，未完成的步驟標為「結果未知」，不會偷偷重跑。
+尚待完成：自然語句意圖判讀的廣泛驗證、更多整理方案、可靠 Token 前後比較、README 教學的真人驗證、Obsidian 閱讀／Live Preview 實機、完整升級與跨平台真實 CLI 驗收。Windows `.cmd` CLI 有參數與路徑字元限制，見[架構](docs/architecture.md)；自動化 CI 不代替真實 Windows 操作。英文 UI 與自動額度切換亦非完整交付能力。
 
-發現漏洞請看 [SECURITY.md](SECURITY.md)。
+## 開發與貢獻
 
-## Roadmap
+先讀 [CONTRIBUTING.md](CONTRIBUTING.md)、[設計意圖](docs/design-intent.md) 與[架構](docs/architecture.md)。核心入口在 `src/`，Web 在 `web/`，插件在 `obsidian/mentor-work-center/`，Theme 在 `themes/Mentor/`。
 
-**目前可用：** 任務檔正本、決策、證據檢查、接手包、A–F 受控 CLI 流程、看板、學習日記與回想、回收桶、專案說明。
+保留零 runtime dependencies、使用 argv／stdin 呼叫 CLI、維持版本與路徑驗證。以虛構資料新增回歸測試，提交前跑 npm test；UI 修改附截圖。PR 請說明範圍、測試、未驗證項目與資料復原方式，不自行合併。
 
-**接下來：**
-- [ ] 英文介面（網頁與教練 prompt 的 i18n）
-- [ ] provider 回報額度錯誤時自動交接
-- [ ] Codex 與 Claude Code session 匯入（目前是手動匯入）
-- [ ] Server-sent events 取代重新整理
-- [ ] Claude → Codex 完整交接的示範 GIF
-- [ ] `npx mentor-ai`
-
-## 文件
-
-- [設計意圖](docs/design-intent.md)
-- [架構](docs/architecture.md)
-- [教學 1：5 分鐘完成第一個任務](docs/tutorials/01-first-task.md)
-- [教學 2：一個任務交給兩個 AI](docs/tutorials/02-handoff.md)
-- [教學 3：把錯誤變成規則](docs/tutorials/03-learning.md)
-- [AI-DLC 蒸餾筆記](docs/ai-dlc-notes.md)
-
-## 貢獻
-
-歡迎 issue 與 PR，請先看 [CONTRIBUTING.md](CONTRIBUTING.md)。現在最有幫助的貢獻是翻譯介面。
-
-## 授權
-
-[MIT](LICENSE)
+[改版 Prompt](prompts/mentor-obsidian-redesign-prompt.md) · [工作閉環 Prompt](prompts/mentor-obsidian-workflow-optimization-prompt.md) · [教學](docs/tutorials/01-first-task.md) · [MIT 授權](LICENSE)

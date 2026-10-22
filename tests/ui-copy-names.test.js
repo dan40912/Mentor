@@ -33,6 +33,7 @@ function context(extra = {}) {
     focusKey: b => b, busy: (b, fn) => fn, state: { profiles: [], providers: [], stages },
     agentOfTask: () => 'AI', agentOf: () => 'AI', stageLabel: id => stages.find(s => s.id === id)?.name,
     agentChoices: () => [], agentValue: () => 'inherit', options() {},
+    questionBox: () => node('details'),
     instructionBox: (t, { extraButtons = [] } = {}) => { const form = node('form');form.append(...extraButtons);return form; }, learningPanel: () => null, cardPanel: () => node('div'),
     auditPanel: () => node('details'), itemStatus: {}, visualIcon: {}, tell() {},
     ...extra });
@@ -70,7 +71,7 @@ test('共用資源先載入，server 白名單、MIME 與檔案路徑可提供�
 test('規格 1、2、9、26：label/button 原文與 holderOf 的 AI 動作分類', () => {
   const ctx = context();vm.runInContext(`${holder}\nglobalThis.classify = holderOf;`, ctx);
   const outline = task('outline');
-  assert.deepEqual(planningAction(outline), { kind: 'outline', label: '看 AI 的計畫，沒問題就核准', button: '核准計畫' });
+  assert.deepEqual(planningAction(outline), { kind: 'outline', label: '看 AI 的計畫，沒問題就核准', button: '預覽計畫' });
   assert.equal(Coach.prototype.nextStep.call({}, outline, {}).stop.label, '看 AI 的計畫，沒問題就核准');
   const grill = task('grill');grill.planning.readyForOutline = true;
   assert.deepEqual(planningAction(grill), { kind: 'grill', label: '需求問清楚了，可以讓 AI 擬計畫', button: '讓 AI 擬計畫' });
@@ -94,10 +95,11 @@ test('規格 3–8、10、26：實際 renderPlanning 標題、依賴、按鈕與
   t.nextAction = planningAction(t);const detail = node('div');ctx.renderPlanning(t, detail);
   const copy = texts(detail);
   for (const text of ['成品架構', 'AI 打算這樣組織成品。這裡錯了，後面每一項都會跟著錯，所以先看這裡。',
-    '要做的事（共 3 項）', '看這份計畫時注意', '核准，開始做', '我要改', '要先完成：第 1、2 項']) assert.ok(copy.includes(text), text);
+    '要做的事（共 3 項）', '看這份計畫時注意', '預覽並核准計畫', '我要改', '要先完成：第 1、2 項']) assert.ok(copy.includes(text), text);
   assert.ok(copy.includes('骨架版 W0 的素材標題'));
-  await all(detail).find(n => n.textContent === '核准，開始做').onclick();
-  assert.deepEqual(calls[0], [t, 'approve']);
+  ctx.previewPlan = async task => calls.push([task, 'preview']);
+  await all(detail).find(n => n.textContent === '預覽並核准計畫').onclick();
+  assert.deepEqual(calls[0], [t, 'preview']);
   all(detail).find(n => n.textContent === '我要改').onclick();assert.deepEqual(calls[1], ['focus']);
   assert.equal(ctx.trackOf(t).nodes[2].name, '計畫');
   for (const ready of [false, true]) {

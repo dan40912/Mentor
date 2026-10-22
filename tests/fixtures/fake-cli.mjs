@@ -26,7 +26,8 @@ const diary = prompt.includes('diary') ? { diary: { interpretations: ['把「新
 const learning = mode === 'no-learning' ? {} : { learning: { change: '補上明確的成功標準', reason: '原需求缺少可檢查的結果', evidence: '這次需求對話', lesson: '先說清楚讀者要做什麼決定，再安排內容。', nextPrompt: '請做十頁簡報，讓主管當場決定新品是否立案，逐項附資料來源。', question: '為什麼要先說主管要做的決定？' } };
 const json = value => '```json\n' + JSON.stringify({ ...value, ...diary, ...learning }) + '\n```';
 let reply;
-if (prompt.includes('「任務制定」')) reply = json({ card: { title: '新品簡報', project: prompt.includes('Alpha') ? 'Alpha' : undefined, goal: '說服主管核准新品', audience: '主管', deliverable: 'HTML 簡報', success: ['主管當場決定'], constraints: [], unknowns: ['頁數'] }, coaching: '原需求沒寫讀者。' });
+if (prompt.includes('「任務問答」')) reply = json({intent:'question',answer:'這是測試問答：只根據保存的紀錄說明，尚未修改成果或通過驗收。',proposedChange:'',scope:'current'});
+else if (prompt.includes('「任務制定」')) reply = json({ card: { title: '新品簡報', project: prompt.includes('Alpha') ? 'Alpha' : undefined, goal: '說服主管核准新品', audience: '主管', deliverable: 'HTML 簡報', success: ['主管當場決定'], constraints: [], unknowns: ['頁數'] }, coaching: '原需求沒寫讀者。' });
 else if (prompt.includes('「Grill me」')) reply = json(prompt.includes('十頁') ? { questions: [], coaching: '回答很具體。', card: { title: '新品簡報', goal: '說服主管核准新品', audience: '主管', deliverable: 'HTML 簡報 10 頁', success: ['主管當場決定'], constraints: ['10 頁'], unknowns: [] }, ready: true, readyReason: '讀者與篇幅都清楚了' } : { questions: [{ q: '要幾頁？', why: '決定密度' }], coaching: '先講讀者要做的決定。', card: { title: '新品簡報' }, ready: false });
 else if (prompt.includes('「擬定大綱」')) reply = json({ outline: { storyline: prompt.includes('修改意見') ? '新品值得做（改版）' : '新品值得做', logic: ['痛點', '方案', '決策'], sections: [{ no: 1, title: '痛點', point: '客訴多', evidence: '客服數據', visual: { type: 'chart', count: 1 } }, { no: 2, title: '方案', point: '新品', evidence: '無依據', visual: { type: 'none', count: 0 } }], imageTotal: 1 }, workItems: [{ id: 'W1', title: '產出 HTML', detail: '單檔', owner: 'ai', acceptance: ['有 deck.html'], dependsOn: [] }, { id: 'W2', title: '提供數據', detail: '', owner: 'human', acceptance: ['數據到位'], dependsOn: [] }], coaching: '先看主線。' });
 else if (prompt.includes('「執行」') && mode === 'nofiles') reply = '我描述了要做什麼。\nSTATUS: DONE\nFILES: 無\n證據：見回覆\n未完成：無';
@@ -39,4 +40,4 @@ if (mode === 'filter-zero') reply = 'The model returned no content because the r
 if (mode === 'malformed-a' && prompt.includes('「任務制定」')) reply = '我無法提供任務卡。';
 if (mode === 'empty-b' && prompt.includes('「Grill me」')) reply = json({ ready: false, questions: [] });
 if (mode === 'quote-filter') reply = json({ explanation: 'The model returned no content because the response was blocked by content filtering.' });
-if (out) writeFileSync(out, reply); else process.stdout.write(reply);
+if (out) writeFileSync(out, reply); else process.stdout.write(args[args.indexOf('--output-format')+1]==='json' ? JSON.stringify({type:'result',is_error:false,result:reply}) : reply);

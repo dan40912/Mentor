@@ -1,3 +1,7 @@
+import { ObsidianBridge } from './obsidian-bridge.js';
+import { workCards } from './work-cards.js';
+import { planPreview } from './plan-preview.js';
+import { compactHandoff } from './compact-handoff.js';
 import { probePreview, localPreviewUrl } from './review-settings.js';
 import http from 'node:http';
 import { randomUUID, randomBytes } from 'node:crypto';
@@ -14,7 +18,7 @@ import { Coach } from './coach.js';
 import { gitHead, itemDiff, itemChanges } from './git-diff.js';
 import { artifactPath, validateArtifactName } from './artifact-path.js';
 import { diagnose } from './agents.js';
-import { TaskStore, TaskError, buildBrief } from './tasks.js';
+import { TaskStore, TaskError, buildBrief, sha256 } from './tasks.js';
 import { summarize, MOMENTS } from './feedback.js';
 import { writeHandoff, previewHandoff } from './handoffs.js';
 import { readAttachment } from './attachments.js';
@@ -130,6 +134,8 @@ export async function createRequestHandler({ root = appDir, port = 4317, runAgen
   root = path.resolve(root);
   const memory = path.join(root, 'vault');
   const token = randomBytes(32).toString('hex');
+  const obsidian = new ObsidianBridge();
+  const taskCreations = new Map();
   let settings = { revision: 1, stages: defaultStageSettings() };
   const diagnosis = {};
   let queue = Promise.resolve();
@@ -167,6 +173,7 @@ export async function createRequestHandler({ root = appDir, port = 4317, runAgen
     const requestPort = typeof port === 'function' ? port() : port;
     const origin = `http://127.0.0.1:${requestPort}`;
     const send = (status, data) => {
+      if (data?.task && !data.task.error) data = { ...data, task: { ...data.task, workCards: workCards(data.task).slice(-3) } };
       res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
       res.end(JSON.stringify(data));
     };
@@ -182,7 +189,23 @@ export async function createRequestHandler({ root = appDir, port = 4317, runAgen
       (req.headers['sec-fetch-site'] === 'cross-site' && !pageNavigation)) {
       return send(403, { code: 'FORBIDDEN_ORIGIN', message: `請用 ${origin} 開啟工作台。` });
     }
+    let bridgeClient = null;
     try {
+      if (req.method === 'POST' && req.url === '/api/obsidian/connect') {
+        const input = await body(req);
+        return send(200, obsidian.exchange(input.code));
+      }
+      if (req.url.startsWith('/api/obsidian/') && !['/api/obsidian/pairing', '/api/obsidian/connections', '/api/obsidian/revoke'].includes(req.url)) {
+        const access = obsidian.authorize(req);
+        bridgeClient = access.client;
+        req.url = access.route;
+        // Only allowlisted bridge routes can use the internal session credentials.
+        req.headers = { ...req.headers, cookie: `awc=${token}`, 'x-csrf-token': token };
+      }
+      if (req.method === 'GET' && req.url === '/api/obsidian/connections') {
+        if (!req.headers.cookie?.split('; ').includes(`awc=${token}`)) return send(403, { code: 'SESSION_REQUIRED' });
+        return send(200, { clients: obsidian.list() });
+      }
       if (req.method === 'GET' && req.url === '/') {
         const html = await readFile(path.join(webDir, 'index.html'), 'utf8');
         res.writeHead(200, {
@@ -231,7 +254,16 @@ export async function createRequestHandler({ root = appDir, port = 4317, runAgen
       if (req.method === 'GET' && taskRoute) {
         if (!req.headers.cookie?.split('; ').includes(`awc=${token}`)) return send(403, { code: 'SESSION_REQUIRED' });
         const [, id, action, query] = taskRoute;
-        if (!id && !action) return send(200, { tasks: await Promise.all((await tasks.list()).map(async task => ({ ...task, gitAvailable: !task.error && Boolean(await gitHead(task.allowedRoots?.[0])) }))) });
+        if (!id && !action) return send(200, { tasks: await Promise.all((await tasks.list()).map(async task => ({ ...task, workCards: workCards(task).slice(-3), gitAvailable: !task.error && Boolean(await gitHead(task.allowedRoots?.[0])) }))) });
+        if (id && ['work-cards', 'plan', 'handoff-summary'].includes(action)) {
+          const task = (await tasks.list()).find(t => t.id === id && !t.error);
+          if (!task) throw new TaskError(404, 'TASK_NOT_FOUND', '找不到任務。');
+          if (action === 'work-cards') return send(200, { cards: workCards(task), revision: task.revision });
+          if (action === 'plan') return send(200, { plan: planPreview(task) });
+          const receiver = new URLSearchParams(query || '').get('for') || 'unassigned';
+          if (!['codex', 'claude', 'copilot', 'unassigned'].includes(receiver)) return send(400, { code: 'UNKNOWN_RECEIVER' });
+          return send(200, compactHandoff(task, receiver));
+        }
         if (id && action === 'events') return send(200, { events: await coach.events(id) });
         if (id && action === 'conversation') return send(200, await conversations.read((await tasks.get(id)).task));
         if (id && action === 'preview-check') {
@@ -305,6 +337,12 @@ export async function createRequestHandler({ root = appDir, port = 4317, runAgen
         return send(201, { attachment: await coach.attachments.stage(params.get('name'), req, params.has('batch') ? params.get('batch') : undefined, params.has('index') ? Number(params.get('index')) : undefined) });
       }
       const input = await body(req);
+      if (req.url === '/api/obsidian/pairing') return send(200, obsidian.prepare());
+      if (req.url === '/api/obsidian/revoke') { obsidian.revoke(input.id); return send(200, { revoked: true }); }
+      if (bridgeClient && taskRoute && !taskRoute[1]) {
+        if (Object.keys(input).some(key => !['request', 'project', 'profile', 'agent'].includes(key))) throw new TaskError(403, 'BRIDGE_SCOPE', '插件不能指定產出路徑、附件或自動模式。');
+      }
+      if (bridgeClient && taskRoute?.[2] === 'approve' && typeof input.proposalId !== 'string') throw new TaskError(400, 'PLAN_PREVIEW_REQUIRED', '請先預覽計畫，核准時須提供方案識別。');
       if (taskRoute?.[1] && taskRoute[2] === 'handoff-prompt') {
         const { task } = await tasks.get(taskRoute[1]);
         if (input.revision !== task.revision) throw new TaskError(409, 'REVISION_CONFLICT', '任務版本已更新。', { revision: task.revision });
@@ -366,17 +404,26 @@ export async function createRequestHandler({ root = appDir, port = 4317, runAgen
         return send(200, { ...result, memory: await memoryStore.list() });
       }
       if (taskRoute && !taskRoute[1] && !taskRoute[2]) {
-        const result = await coach.create(input);
+        const key = req.headers['idempotency-key'];
+        if (key !== undefined && (typeof key !== 'string' || !/^[a-zA-Z0-9-]{8,80}$/.test(key))) throw new TaskError(400, 'IDEMPOTENCY_KEY_REQUIRED', 'Idempotency-Key 格式不正確。');
+        const fingerprint = sha256(JSON.stringify(input));
+        const cached = key && taskCreations.get(key);
+        if (cached && cached.fingerprint !== fingerprint) throw new TaskError(409, 'IDEMPOTENCY_KEY_REUSED', '相同操作識別不能套用不同任務內容。');
+        if (!cached && key && taskCreations.size >= 500) throw new TaskError(429, 'CREATION_LIMIT', '這個服務階段已保存 500 次建立操作，請先確認現有任務；重新啟動會清除連線與操作快取。');
+        const run = cached?.run || coach.create(input);
+        if (key && !cached) { taskCreations.set(key, { fingerprint, run }); run.catch(() => taskCreations.delete(key)); }
+        const result = await run;
         return send(202, { task: result.task });
       }
       const coachActions = {
+        ask: (id,key) => coach.discuss(id,input.revision,key,input),
         card: (id, key) => coach.saveCard(id, input.revision, key, input),
         retry: (id, key) => coach.retry(id, input.revision, key, input.provider || null),
         answer: (id, key) => coach.answer(id, input.revision, key, input),
         outline: id => coach.draftOutline(id, input.feedback),
         learn: (id, key) => coach.keepLearnings(id, input.revision, key, input),
         reflect: (id, key) => coach.reflect(id, input.revision, key, input),
-        approve: (id, key) => coach.approveOutline(id, input.revision, key),
+        approve: (id, key) => coach.approveOutline(id, input.revision, key, input.proposalId ?? null),
         execute: id => coach.execute(id, input.itemId),
         review: id => coach.review(id, input.itemId),
         fix: id => coach.fix(id, input.itemId),
@@ -396,12 +443,12 @@ export async function createRequestHandler({ root = appDir, port = 4317, runAgen
         const [, id, action] = taskRoute;
         const key = req.headers['idempotency-key'];
         const result = await coachActions[action](id, key);
+        if (action === 'instruct' && input.dryRun) return send(200, result);
         // 開著「一路做到完」時，你做完任何一步，AI 會自己接著往下。
         // 評分只是記錄，不推動流程；否則停下時評分會讓 AI 重新判斷又停一次。
-        if (!['stop', 'cancel', 'trash', 'autopilot', 'feedback', 'agents', 'change-check'].includes(action)) coach.resumeAuto(id);
+        if (!['ask', 'stop', 'cancel', 'trash', 'autopilot', 'feedback', 'agents', 'change-check'].includes(action)) coach.resumeAuto(id);
         if (action === 'cancel' || action === 'stop') return send(202, { stopping: true, task: (await tasks.list()).find(t => t.id === id) || result.task });
         if (action === 'trash') return send(200, result);
-        if (action === 'instruct' && input.dryRun) return send(200, result);
         // answer 先寫入回答再啟動 B；回傳時 B 已在背景跑。
         const latest = result.task ? result : await tasks.get(id).then(r => ({ task: r.task }));
         const { done, task: _task, ...extra } = result;
