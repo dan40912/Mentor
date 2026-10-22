@@ -234,7 +234,7 @@ module.exports = class MentorPlugin extends Plugin {
   }
   ask(task) {
     new ReviewModal(this.app,'先問問題，不修改成果',(host,modal)=>{
-      text(host,'p','只根據保存的任務紀錄回答。這個按鍵不會讀寫成果、不會自動修改或取消任務；會使用問答階段 AI 的帳號額度。');
+      text(host,'p','只根據保存的任務紀錄回答。這個按鍵不會套用成果修改，也不會自動取消任務；會使用問答階段 AI 的帳號額度。');
       const input=host.createEl('textarea',{attr:{'aria-label':'只提問，不修改成果'}}),key=randomUUID();
       button(host,'先回答這個問題',async()=>{if(!input.value.trim())throw new Error('請先填入問題。');await this.api(`/tasks/${task.id}/ask`,{revision:task.revision,question:input.value},key);modal.close();this.refresh();},true);
     }).open();

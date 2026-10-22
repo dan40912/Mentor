@@ -172,7 +172,7 @@ async function confirmProjectTrash(p,host,from){
 
 function questionBox(t){
  const box=element('details',undefined,'task-question');box.append(element('summary','有疑問？先問，不改成果'));
- box.append(element('p','只根據任務紀錄回答，不讀寫成果，也不接續自動流程。建議需另經修改預覽確認。','small muted'));
+ box.append(element('p','依任務紀錄回答，不修改成果，也不接續自動流程。回答不代表原文已驗證；建議需另經確認。','small muted'));
  const labels={question:'提問與解釋',change:'可能希望修改，尚未執行',cancel:'可能希望暫停，尚未變更工作狀態',unclear:'意圖尚待釐清'};
  for(const message of (t.planning.messages||[]).filter(m=>m.kind==='discussion').slice(-4)){
   box.append(element('strong',message.role==='user'?'你的問題':labels[message.discussion?.intent]||'問答紀錄'),element('p',message.text));
