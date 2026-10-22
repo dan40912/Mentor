@@ -80,6 +80,7 @@ npm run verify:obsidian -- --vault dist/mentor-obsidian
 ## 資料、權限與隱私
 
 - 任務在 `MENTOR_HOME/vault`，成果在 `MENTOR_HOME/outputs`；設定與日記也在本機。備份整個 home，另備份你的 Obsidian Vault。
+- D／F 回合的成果副本在 `vault/artifact-history`，含完整內容。工作卡可讀保存版本；接手摘要提供檔案 hash 與最近三輪副本索引，正文按需取得。回收桶永久清空會刪除副本，原成果不刪除；舊回合不回填。[保存範圍與限制](docs/implementation/artifact-history.md)。
 - Markdown 的 `awc:begin`／`awc:end` 是系統產生區塊；人工筆記放在區塊外，勿直接改產生資料。
 - Mentor 呼叫已登入 CLI；被選取的來源與 Prompt 會交給對應 AI 服務，本機儲存不代表模型離線執行。工作紀錄可能含來源內容，應依機密需求管理。
 - 整理復原紀錄保存修改前後內容，會隨 Vault 同步與備份。不要把正式筆記、憑證或私人執行紀錄提交到 Git。

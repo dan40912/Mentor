@@ -81,6 +81,7 @@ Markdown remains readable when the theme or plugin is disabled. The packager doe
 ## Data, permissions and privacy
 
 - Tasks live in `MENTOR_HOME/vault`, artifacts in `MENTOR_HOME/outputs`; settings and diaries are local too. Back up the whole home and your Obsidian Vault separately.
+- D/F artifact copies live in `vault/artifact-history` and contain full content. Work cards read saved versions; compact handoffs include current hashes and the last three rounds’ snapshot indexes, with bodies loaded on demand. Purging task trash deletes copies, not original outputs; old rounds are not backfilled. See [scope and limits](docs/implementation/artifact-history.md).
 - Keep human notes outside the generated awc:begin / awc:end block. Do not manually change serialized task state.
 - Selected sources and prompts go to the configured AI service through its CLI. Local storage does not mean offline inference. Saved work history may contain source material.
 - Organization journals contain before/after content and follow your Vault’s sync and backup settings. Never commit private notes, credentials or real execution records.

@@ -6,6 +6,7 @@ export function compactHandoff(task, receiver = 'unassigned') {
   const list = values => values?.length ? values.map(v => `- ${v}`).join('\n') : '- 未記錄';
   const userMessages = [...new Set((p.messages || []).filter(m => m.role === 'user' && m.kind !== 'discussion').map(m => m.text).filter(Boolean))];
   const cards = workCards(task);
+  const outputLabel=o=>typeof o==='string'?`${o}｜SHA-256 未記錄`:`${o.file||o.path}｜SHA-256 ${o.sha||'未記錄'}`;
   const drafts=new Map((p.messages||[]).filter(m=>m.organizationDraft).map(m=>[m.requestKey,m]));
   const discussionText=m=>{const request=m.organizationDraft?m:drafts.get(m.inReplyTo);if(!request)return `${m.role==='user'?'問題':'回答'}：${m.text}`;return `整理草稿${m.role==='user'?'要求':'回答'}：${request.organizationDraft.kind}｜${request.organizationDraft.sourcePath}｜來源 ${request.organizationDraft.sourceSha256}｜問答 ${m.id||request.requestKey}。正文保留於完整對話，按需讀取；尚未代表套用或驗收。`;};
   const text = [
@@ -27,9 +28,11 @@ export function compactHandoff(task, receiver = 'unassigned') {
     '## 待核對', list(p.card?.unknowns),
     '## 事實與來源', list(task.facts?.map(f => `${f.label}：${f.value}｜${f.verified ? '已標記核對' : '未獨立核對'}｜${f.source || '來源未記錄'}`)),
     '## 任務狀態', `${task.status}｜${task.current?.summary || '未記錄'}`,
-    ...items.map(item => `### ${item.id} ${item.title}\n${item.status}｜${item.owner === 'human' ? '人處理' : item.executor || 'AI'}\n說明：${item.detail || '未記錄'}\n驗收：\n${list(item.acceptance)}\n依賴：${(item.dependsOn || []).join('、') || '無'}\n已登記成果：\n${list(item.outputs?.map(o => typeof o === 'string' ? o : o.file || o.path))}\n修正意見：\n${list(item.fixes)}\n重新核對原因：${item.recheck||'未標記'}\n舊審閱：${item.review?.superseded?'已失效，不作為本輪通過證據':'依目前狀態核對'}\n先前成果（僅供追查，不等於新成果）：\n${list(item.previousOutputs?.map(o=>typeof o==='string'?o:o.file||o.path))}`),
+    ...items.map(item => `### ${item.id} ${item.title}\n${item.status}｜${item.owner === 'human' ? '人處理' : item.executor || 'AI'}\n說明：${item.detail || '未記錄'}\n驗收：\n${list(item.acceptance)}\n依賴：${(item.dependsOn || []).join('、') || '無'}\n已登記成果：\n${list(item.outputs?.map(outputLabel))}\n修正意見：\n${list(item.fixes)}\n重新核對原因：${item.recheck||'未標記'}\n舊審閱：${item.review?.superseded?'已失效，不作為本輪通過證據':'依目前狀態核對'}\n先前成果（僅供追查，不等於新成果）：\n${list(item.previousOutputs?.map(outputLabel))}`),
     '## 驗收證據', list(task.checks?.map(c => `${c.result}｜${c.label}｜${c.path || ''}｜${c.note || ''}`)),
     '## 最近執行結果', list(cards.slice(-3).map(c => `${c.stage}｜${c.agent}｜${c.label}｜${c.outcome}（來源：${c.source}）`)),
+    '## 最近三輪保存版本索引（副本不代表已驗收）', list(cards.slice(-3).flatMap(c=>Object.entries(c.artifactHistory||{}).map(([phase,ref])=>`${c.id}｜${phase==='before'?'開工前實際內容':'本輪回報成果'}｜vault/artifact-history/${task.id}/${ref.id}/manifest.json｜manifest SHA-256 ${ref.digest}｜GET /api/tasks/${task.id}/artifact-version?version=${ref.id}`))),
+    '保存內容按需讀取，不把完整副本塞入摘要。先比對任務回合登記的 manifest digest，再依 manifest 的 index、file、sha、bytes 核對編號 .bin 副本；副本缺失或不符時停止，不以目前檔案替代。開工前內容可能不同於更早登記版本，核對 matchesRecorded。舊回合沒有副本時無法重建已覆寫內容。其餘歷史由每輪工作卡索引取得。',
     ...(p.running ? ['## 尚有執行中的工作', `${p.running.agent}｜${p.running.stage}。未確認停止前，禁止另一個 AI 重複寫入。`] : []),
     '## 下一步', task.nextAction?.label || task.next || '先核對最新任務檔',
     '## 按需閱讀索引', `任務正本：vault/${task.id}.md\n完整對話：GET /api/tasks/${task.id}/conversation\n每輪工作卡：GET /api/tasks/${task.id}/work-cards\n成果相對於：${task.allowedRoots?.[0] || '未記錄'}\n這些 API 需要現有工作台認證；外部 AI 無法存取時，由使用者提供所需檔案。`,

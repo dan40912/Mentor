@@ -10,4 +10,6 @@ D／F 執行前保存任務已登記成果的實際內容；成功解析本輪�
 
 此變更不讓 AI 寫入變成原子交易，不提供多程序鎖、不自動還原覆寫檔案，也未涵蓋 C／E 或手動匯入的舊流程。失敗執行仍可能已更動目前成果，開工前副本只提供查閱依據。
 
-已執行測試：tests/artifact-history.test.js（5 項真實檔案測試）及 tests/artifact-history-api.test.js（認證、路由綁定、內容轉義與損壞拒絕）。D／F 執行、失敗寫入後的開工前副本、回收桶還原與永久清空已加入整合測試；Web 操作及原生 Obsidian 實機驗收仍待完成。不能把目前測試視為整體驗收。
+已執行測試：tests/artifact-history.test.js（5 項真實檔案測試）及 tests/artifact-history-api.test.js（認證、路由綁定、內容轉義與損壞拒絕）。D／F 執行、失敗寫入後的開工前副本、回收桶還原與永久清空已加入整合測試；Web 的虛構 Markdown 流程及 390px 副本清單已實際操作（見 docs/verification/artifact-history）；原生 Obsidian 實機驗收仍待完成。不能把目前測試視為整體驗收。
+
+接手摘要保留目前成果 hash 及最近三輪副本 manifest 位置／digest／認證 API 索引，不嵌入完整副本內容；更多歷史由工作卡按需取得。外部 AI 需有實際檔案或現有認證才能讀取；索引不是授權或自動驗收。

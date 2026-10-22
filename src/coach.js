@@ -351,11 +351,14 @@ export class Coach {
     const kill = setTimeout(() => killTree(this.children.get(id), 'SIGKILL'), graceMs);
     const flag = setTimeout(async () => {
       if (!this.pending.has(id)) return;
-      await this.store.mutate(id, 'latest', null, t => {
-        if (t.planning.running?.stopping) t.planning.running.stopping.unconfirmed = true;
+      await this.store.mutate(id, 'latest', null, async t => {
+        if (t.planning.running?.turnId===task.planning.running.turnId && t.planning.running?.stopping) {
+          t.planning.running.stopping.unconfirmed = true;
+          // Keep the event in the same writer queue; a completed stop must not leave a late audit write.
+          await this.audit(id, 'STOP_UNCONFIRMED', {});
+        }
         return { status: planningStatus(t) };
       }).catch(() => {});
-      await this.audit(id, 'STOP_UNCONFIRMED', {});
     }, confirmMs);
     kill.unref?.(); flag.unref?.();
     this.pending.get(id)?.finally(() => { clearTimeout(kill); clearTimeout(flag); });
