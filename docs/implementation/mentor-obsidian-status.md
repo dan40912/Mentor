@@ -5,7 +5,7 @@
 ## 工作基準
 
 - Repo：dan40912/Mentor；基於既有 lab-zero-touch 的 commit `5b8c7e89eadf6e1a833651a695037b184109864b`。
-- 分支：codex/mentor-obsidian-workflow。
+- 目前分支：codex/mentor-relocation-apply；前一批 codex/mentor-obsidian-workflow 的 PR #2 已由外部操作合併（來源 9e75eea，main merge 94a4aa2）。
 - 獨立 worktree；原始 checkout 的 agents／coach／handoffs／server／web 修改，以及 Body-release、POC 與其他未追蹤檔均未覆蓋或帶入。
 - 基線：npm test，276 pass／0 fail。
 
@@ -36,7 +36,7 @@
 | README 與完整教學 | 中英文重寫完成／真人與實機待驗 | 三入口、兩種模式、資料與限制、復原、量測、實際新截圖；入門教學校正為可驗證示範 |
 | 真實多 AI 與停止／復原／驗收 | Codex D → Claude E 已實測；其餘待驗 | live-cross-ai.mjs，結構檢查通過、來源完整；真人與 Obsidian 視覺仍未驗收 |
 | 真人閱讀與接手測試 | 未驗證 | 需真人；不得由 AI 自評替代 |
-| GitHub PR、最新 head CI | Draft PR #2 已提交 | 3fb2000 的 CI 39709027341 九組通過；新提交須另核對，不代替維護者驗收 |
+| GitHub PR、最新 head CI | PR #2 已合併；後續 Draft PR #3 | 本批搬移提交需核對 #3 最新 head CI；不以舊 PR 的通過代替，也不等於真人驗收 |
 
 ## 第一批驗證紀錄
 
@@ -190,3 +190,5 @@
 - 尚待完成：擴大語法與參照支援、Obsidian 桌面及真人體驗、完整升級與跨平台真實 CLI 驗收，穩定 Token 效率證據。整體目標仍未完成。
 
 - 本批完整自動測試：344 pass／0 fail；npm run package:obsidian 與 git diff --check 通過。原生隔離操作與實際檔案系統均有覆蓋，未操作正式 Vault，Obsidian 桌面與真人驗收仍未完成。
+
+- PR 交付：原 PR #2 在開發期間由外部操作合併；後續搬移提交已改以 `codex/mentor-relocation-apply` 開 [Draft PR #3](https://github.com/dan40912/Mentor/pull/3)，不更動 main 或自行合併。先前誤寫到已合併 PR 的本批說明已還原為 #2 的歷史內容。
