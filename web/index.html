@@ -1007,7 +1007,7 @@ function previewFailure(error,reload){
  const retry=element('button','重試','btn');retry.type='button';retry.onclick=()=>{ $('#preview-status').textContent='載入中…';$('#preview-content').replaceChildren();return reload(); };
  $('#preview-status').textContent=`無法預覽：${error.message}`;$('#preview-content').replaceChildren(retry);
 }
-async function openPreview(taskId,file,trigger,action='preview',item=null,programPath=null){
+async function openPreview(taskId,file,trigger,action='preview',item=null,programPath=null,snapshot=null){
  const dialog=$('#preview-dialog'),content=$('#preview-content'),status=$('#preview-status'),modes=$('#preview-modes');
  const sidebar=$('#review-changes');
  $('#preview-layout')?.classList.toggle('review-layout',Boolean(item));
@@ -1021,7 +1021,7 @@ async function openPreview(taskId,file,trigger,action='preview',item=null,progra
  if(item&&!item.changes?.length)void loadReviewChanges(taskId,item,trigger,token);
  if(programPath!==null)return showProgramPreview(taskId,programPath,token);
  if(item&&!file){content.append(element('p','這個工作項目尚未登記可預覽成果。','notice'));modes.hidden=true;status.textContent='';return;}
- const url=`/api/tasks/${encodeURIComponent(taskId)}/${action}?file=${encodeURIComponent(file)}`;
+ const url=`/api/tasks/${encodeURIComponent(taskId)}/${snapshot?'artifact-version':action}?file=${encodeURIComponent(file)}`+(snapshot?`&version=${encodeURIComponent(snapshot.id)}&index=${snapshot.index}`:'');
  try{
   await refreshSession();
   const response=await fetch(url,{credentials:'same-origin',cache:'no-store'});
@@ -1050,7 +1050,7 @@ async function openPreview(taskId,file,trigger,action='preview',item=null,progra
   if(!dialog.open||previewReturn!==token)return;
   if(previewBlob)URL.revokeObjectURL(previewBlob);previewBlob=URL.createObjectURL(body);
   node.src=previewBlob;content.replaceChildren(node);modes.hidden=ext!=='html'&&ext!=='md';status.textContent='';
- }catch(error){if(dialog.open&&previewReturn===token)previewFailure(error,()=>openPreview(taskId,file,trigger,action,item,programPath));}
+ }catch(error){if(dialog.open&&previewReturn===token)previewFailure(error,()=>openPreview(taskId,file,trigger,action,item,programPath,snapshot));}
 }
 function diffButton(task,item){
  if(!task.gitAvailable)return null;
@@ -1342,7 +1342,7 @@ async function showRoundCards(t){
   box.append(definition([['本輪要求',c.userInput||'未記錄'],['當時理解',c.context?.interpretation||'舊紀錄未保存'],['實際結果',c.outcome],['版本',`${c.baseRevision??'未知'} → ${c.resultRevision??'尚無'}`],['當輪下一步',c.next?.label||'未記錄，請查看任務目前狀態']]));
   if(c.aiClaims?.change)box.append(element('p',`AI 自述改動：${c.aiClaims.change}`,'small'));
   if(c.aiClaims?.evidence)box.append(element('p',`AI 聲稱的證據（非獨立驗證）：${c.aiClaims.evidence}`,'small muted'));
-  for(const o of c.outputs){const file=typeof o==='string'?o:o.file||o.path,b=element('button',`查看目前檔案：${file}`,'btn');b.onclick=busy(b,async()=>{d.close();await openPreview(t.id,file,b);});box.append(b,element('p',`這輪登記 SHA-256：${typeof o==='object'&&o.sha?o.sha:'未記錄'}。按鍵開啟目前檔案，不能據此當成這輪原始內容。`,'small muted'));}
+  for(const o of c.outputs){const file=typeof o==='string'?o:o.file||o.path,snapshot=typeof o==='object'?o.snapshot:null,b=element('button',`${snapshot?'閱讀本輪保存版本':'查看目前檔案'}：${file}`,'btn');b.onclick=busy(b,async()=>{d.close();await openPreview(t.id,file,b,'preview',null,null,snapshot);});box.append(b,element('p',`這輪登記 SHA-256：${typeof o==='object'&&o.sha?o.sha:'未記錄'}。${snapshot?'按鍵讀取本輪保存副本；副本損壞時停止讀取。':'按鍵開啟目前檔案，不能據此當成這輪原始內容。'}`,'small muted'));}
   if(c.checks.length)box.append(sensorList(c.checks));else box.append(element('p','機器檢查未記錄，不視為通過。','small muted'));
   box.append(element('p',`本輪輸入 ${c.contextMetrics.input.characters} 字元／${c.contextMetrics.input.utf8Bytes} UTF-8 bytes；輸出 ${c.contextMetrics.output.characters} 字元。${c.contextMetrics.usageLabel||'Token 與費用未知。'}`,'small muted'),element('p',`來源：${c.source}`,'small muted'));d.append(box);
  }

@@ -32,6 +32,7 @@ export function workCards(task) {
     outcome: turn.error || (turn.status === 'completed' ? (turn.inputKind==='question'?'問答已保存；未修改成果，也未變更驗收。':'本輪 AI 回覆已保存；成果與驗收請分別核對。') : states[turn.status] || '尚無可核對結果'),
     aiClaims: turn.status === 'completed' ? { change: turn.learning?.change || '', evidence: turn.learning?.evidence || '' } : null,
     outputs: turn.outputs || [],
+    artifactHistory: turn.artifactHistory || null,
     checks: turn.checks || [],
     next: turn.nextAction || null,
     contextMetrics: { input: measureText(turn.prompt), output: measureText(turn.response), usage: turn.usage || null, usageLabel: usageLabel(turn.usage), elapsedMs: turn.elapsedMs ?? null },
