@@ -6,7 +6,7 @@ const module={exports:{}};
 vm.runInNewContext(await readFile(new URL('../obsidian/mentor-work-center/reference-coverage.js',import.meta.url),'utf8'),{module});
 const {scanReferences,noteCoverage}=module.exports;
 test('coverage scanner distinguishes links from code, comments, escaped punctuation, checkboxes and callout markers',()=>{
- const content=['---','title: plain','---','> [!note] 說明 [[A#標題|別名]]','- [ ] ![圖片](<圖 片.png>)','`[[程式]]` <!-- [[註解]] --> %% [[備註]] %%','\\[普通文字]','~~~md','[[範例]]','~~~','```js','const link="[[不是連結]]"','```','😀 [標籤](A.md#part)'].join('\n');
+ const content=['---','title: plain','cssclasses: [mentor-note]','tags: [研究/閱讀, 待核對]','---','> [!note] 說明 [[A#標題|別名]]','- [ ] ![圖片](<圖 片.png>)','`[[程式]]` <!-- [[註解]] --> %% [[備註]] %%','\\[普通文字]','~~~md','[[範例]]','~~~','```js','const link="[[不是連結]]"','```','😀 [標籤](A.md#part)'].join('\n');
  const result=scanReferences(content);assert.equal(result.blockers.length,0);assert.equal(result.references.length,3);assert.deepEqual(Array.from(result.references,r=>r.link),['A#標題','圖 片.png','A.md#part']);
  for(const ref of result.references)assert.equal(content.slice(ref.start,ref.end),ref.original,'offsets use UTF-16 like the host API');
  assert.equal(noteCoverage({content,references:result.references}).verified,true);
@@ -20,6 +20,6 @@ test('coverage detects missing or stale cached links instead of trusting otherwi
  assert.equal(noteCoverage({content:'no links',references:null}).verified,false,'an unavailable index is not an empty one');
 });
 test('unsupported grammar and unclosed contexts block coverage rather than silently skipping possible references',()=>{
- for(const content of ['[name][ref]\n[ref]: A.md','[shortcut]','[title](A.md "label")','---\nrelated: "[[A]]"\n---','<a href="A.md">link</a>','[deep [label]](A.md)','> ```md\n> [[A]]\n> ```','    [[A]]','`unterminated [[A]]','```md\n[[A]]','<!-- [[A]]','%% [[A]]','$x$ [[A]]','[open](obsidian://open?file=A)','```dataview\nLIST FROM "A"\n```'])assert.ok(scanReferences(content).blockers.length,content);
+ for(const content of ['[name][ref]\n[ref]: A.md','[shortcut]','[title](A.md "label")','---\nrelated: "[[A]]"\n---','---\ncssclasses: ["[[A]]"]\n---','---\nrelated: [A]\n---','<a href="A.md">link</a>','[deep [label]](A.md)','> ```md\n> [[A]]\n> ```','    [[A]]','`unterminated [[A]]','```md\n[[A]]','<!-- [[A]]','%% [[A]]','$x$ [[A]]','[open](obsidian://open?file=A)','```dataview\nLIST FROM "A"\n```'])assert.ok(scanReferences(content).blockers.length,content);
  assert.equal(scanReferences('no links').blockers.length,0);
 });
