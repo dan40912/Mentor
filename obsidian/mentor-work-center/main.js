@@ -42,13 +42,13 @@ class MentorView extends ItemView {
     const { tasks } = await this.plugin.api('/tasks');
     host.empty();text(host,'h2','現在，需要你做什麼？');
     text(host,'p','原生筆記與本機任務，共用同一份狀態。','mentor-caption');
-    const actions=host.createDiv({cls:'mentor-actions'});button(actions,'從目前筆記準備任務',()=>this.plugin.prepare(),true);button(actions,'重新整理',this.refresh);button(actions,'預寫資料夾索引',()=>this.plugin.prepareIndex());button(actions,'預寫內容與分類',()=>this.plugin.prepareContentDraft());button(actions,'整理紀錄與復原',()=>this.plugin.organizationHistory());
+    const actions=host.createDiv({cls:'mentor-actions'});button(actions,'從目前筆記準備任務',()=>this.plugin.prepare(),true);button(actions,'重新整理',this.refresh);const tools=host.createEl('details');text(tools,'summary','整理筆記與復原');const toolActions=tools.createDiv({cls:'mentor-actions'});button(toolActions,'預寫資料夾索引',()=>this.plugin.prepareIndex());button(toolActions,'預寫內容與分類',()=>this.plugin.prepareContentDraft());button(toolActions,'整理紀錄與復原',()=>this.plugin.organizationHistory());
     if (!tasks.filter(t=>!t.error&&!t.trashed).length) text(host,'p','還沒有任務。從目前筆記或選取內容開始。');
     for (const task of tasks.filter(t=>!t.error&&!t.trashed).sort((a,b)=>(a.status==='COMPLETED')-(b.status==='COMPLETED'))) {
       const box=host.createDiv({cls:'mentor-task'});text(box,'h3',task.title);text(box,'p',task.nextAction?.label||task.current?.summary);
       text(box,'p',`第 ${task.revision} 版 · ${task.planning?.running?'執行中':task.status}`,'mentor-caption');
       const latest=task.workCards?.at(-1);
-      if(latest){text(box,'h4','這一輪');text(box,'p',latest.context?.interpretation||'當時理解未記錄');text(box,'p',latest.outcome);const usage=box.createEl('details');text(usage,'summary','本輪用量');text(usage,'p',latest.contextMetrics?.usageLabel||'Token 與費用未知。');text(usage,'p',latest.contextMetrics?.elapsedMs==null?'執行時間未記錄。':`本機量測執行時間：${latest.contextMetrics.elapsedMs} ms。`);}
+      if(latest){text(box,'h4','這一輪');text(box,'p',latest.context?.interpretation||'當時理解未記錄');text(box,'p',latest.outcome);if(latest.simulated)text(box,'p','示範／模擬回合，未呼叫真實 AI。','mentor-caption');const usage=box.createEl('details');text(usage,'summary','本輪用量');text(usage,'p',latest.contextMetrics?.usageLabel||'Token 與費用未知。');text(usage,'p',latest.contextMetrics?.elapsedMs==null?'執行時間未記錄。':`本機量測執行時間：${latest.contextMetrics.elapsedMs} ms。`);}
       const row=box.createDiv({cls:'mentor-actions'});
       button(row,'開啟任務與下一步',()=>this.plugin.task(task),true);
       button(row,'準備接手包',()=>this.plugin.handoff(task));
@@ -355,7 +355,21 @@ module.exports = class MentorPlugin extends Plugin {
     new ReviewModal(this.app,task.title,(host,modal)=>{
       text(host,'p',`第 ${task.revision} 版 · ${task.nextAction?.label||task.status}`);text(host,'h3','原始要求');text(host,'p',p?.request||task.goal);text(host,'h3','目前理解');text(host,'p',task.goal);
       text(host,'p',task.current?.summary||'');
-      for(const c of task.workCards||[]){const box=host.createDiv({cls:'mentor-task'});text(box,'h3',`${c.roleLabel||c.stage} · ${c.label}`);text(box,'p',c.outcome);if(c.aiClaims?.change)text(box,'p',`AI 自述：${c.aiClaims.change}`);for(const check of c.checks)text(box,'p',`${check.result} · ${check.label||check.id}`);}
+      const renderRound=(parent,c)=>{
+        const box=parent.createDiv({cls:'mentor-task'});text(box,'h3',`${c.roleLabel||c.stage} · ${c.label}`);text(box,'p',c.outcome);if(c.simulated)text(box,'p','示範／模擬回合，未呼叫真實 AI，不作為實際成果或驗收證據。','mentor-caption');
+        if(!c.context?.interpretation)text(box,'p','此輪開工時的理解未記錄，不以目前目標回填。','mentor-caption');else if(c.context.interpretation!==task.goal)text(box,'p','此輪開工時的理解：'+c.context.interpretation);
+        if(c.aiClaims?.change)text(box,'p',`AI 自述：${c.aiClaims.change}`);
+        for(const output of c.outputs||[]){const file=typeof output==='string'?output:output.file||output.path,snapshot=typeof output==='object'?output.snapshot:null;button(box,`${snapshot?'閱讀本輪保存版本':'查看目前檔案'}：${file}`,()=>this.output(task,file,snapshot));if(!snapshot)text(box,'p','此輪沒有保存副本；目前檔案可能已被後續修改。','mentor-caption');}
+        if(c.artifactHistory?.before)button(box,'查看本輪開工前保存內容',async()=>{
+          const {version}=await this.api(`/tasks/${task.id}/artifact-version?version=${encodeURIComponent(c.artifactHistory.before.id)}`);
+          new ReviewModal(this.app,'本輪開工前的成果副本',host=>{text(host,'p','保存的是開工前實際內容；不保證等同更早回合的成果。');for(const entry of version.files){if(entry.status==='saved')button(host,entry.file,()=>this.output(task,entry.file,{id:version.id,index:entry.index}));else text(host,'p',entry.file+'：當時檔案已缺失，未保存內容。');}}).open();
+        });
+
+        const checks=c.checks||[];if(checks.length){const evidence=box.createEl('details');text(evidence,'summary',checks.some(check=>check.result==='FAIL')?`有檢查未通過，查看 ${checks.length} 筆紀錄`:`查看 ${checks.length} 筆檢查紀錄（仍需人工核對）`);for(const check of checks)text(evidence,'p',`${check.result} · ${check.label||check.id} · ${check.detail||check.note||'未附說明'}`);}
+        else text(box,'p','這一輪未記錄機器檢查，不代表已通過。','mentor-caption');
+      };
+      const rounds=task.workCards||[];if(rounds.length){text(host,'h3','最近這一輪');renderRound(host,rounds.at(-1));if(rounds.length>1){const history=host.createEl('details');text(history,'summary',`查看先前 ${rounds.length-1} 輪工作`);for(const round of rounds.slice(0,-1))renderRound(history,round);}}
+
       const invoke=async(action,input={})=>{await this.api(`/tasks/${task.id}/${action}`,{revision:task.revision,...input});modal.close();this.refresh();};
       for(const message of (p?.messages||[]).filter(m=>m.kind==='discussion').slice(-4)){
         if(message.organizationDraft){text(host,'h3','整理草稿要求');text(host,'p',`${ContentDrafts.KINDS[message.organizationDraft.kind]?.label||'草稿'} · ${message.organizationDraft.sourcePath}`);const snapshot=host.createEl('details');text(snapshot,'summary','來源快照與原始要求');text(snapshot,'pre',message.text,'mentor-source');button(host,'查看與套用這份草稿',()=>this.contentDraft(task.id,message.requestKey));continue;}
@@ -436,10 +450,16 @@ module.exports = class MentorPlugin extends Plugin {
       button(host,'請 AI 修改方案',async()=>{if(!changes.value.trim())throw new Error('請填入修改意見。');await this.api(`/tasks/${task.id}/outline`,{revision:plan.revision,feedback:changes.value});modal.close();this.refresh();});
     }).open();
   }
-  async output(task,file) {
-    const url=localAddress(this.address)+`/api/obsidian/tasks/${task.id}/preview?file=${encodeURIComponent(file)}`;
+  async output(task,file,snapshot=null) {
+    const url=localAddress(this.address)+`/api/obsidian/tasks/${task.id}/${snapshot?'artifact-version':'preview'}?file=${encodeURIComponent(file)}`+(snapshot?`&version=${encodeURIComponent(snapshot.id)}&index=${snapshot.index}`:'');
     const r=await requestUrl({url,headers:{Authorization:'Bearer '+this.token},throw:false});if(r.status!==200)throw new Error('無法讀取這份成果，請確認已登記且路徑在任務範圍。');
-    new ReviewModal(this.app,'成果原文（不執行 HTML 或腳本）',host=>{text(host,'p',file);text(host,'pre',r.text,'mentor-source');}).open();
+    let content=r.text;
+    if(/\.md$/i.test(file)){
+      const wrapper=content.match(/^<meta charset="utf-8"><pre style="white-space:pre-wrap;overflow-wrap:anywhere;font:inherit">([\s\S]*)<\/pre>$/);
+      if(!wrapper)throw new Error('Markdown 成果格式不正確，停止讀取。');
+      content=wrapper[1].replace(/&(amp|lt|gt);/g,(_,entity)=>({amp:'&',lt:'<',gt:'>'}[entity]));
+    }
+    new ReviewModal(this.app,snapshot?'本輪保存版本（不執行 HTML 或腳本）':'目前成果原文（不執行 HTML 或腳本）',host=>{text(host,'p',file);text(host,'pre',content,'mentor-source');}).open();
   }
   async handoff(task) {
     const r=await this.api(`/tasks/${task.id}/handoff-summary`);

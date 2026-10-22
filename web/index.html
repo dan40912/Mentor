@@ -603,7 +603,7 @@ dialog.sheet [data-anchor],dialog.sheet [data-item]{scroll-margin-top:0}
 .attach-remove:hover{background:var(--bg-warning-subtle);color:var(--content-primary)}
 .attach-saved h3{font-size:14px;margin:0 0 4px}
 .attach-saved{margin:var(--space-m) 0}
-.work-preview{width:min(860px,94vw);max-height:88vh;padding:28px;overflow:auto;border:1px solid var(--border);border-radius:18px}.work-preview .card{margin-top:18px}.work-round{border-inline-start:3px solid #648370}.work-preview .contract{white-space:pre-wrap;overflow-wrap:anywhere}
+.work-preview{width:min(860px,94vw);max-height:88vh;padding:28px;overflow:auto;border:1px solid var(--border);border-radius:18px}.work-preview{overflow-wrap:anywhere}.work-preview .card{margin-top:18px}.work-round{border-inline-start:3px solid #648370}.work-preview .contract{white-space:pre-wrap;overflow-wrap:anywhere}
 .more-tools{margin-top:16px;border-top:1px solid var(--line);padding-top:14px}.more-tools>summary{padding:10px 12px;color:var(--muted);font-size:13px;cursor:pointer}.more-tools button{width:100%;margin:4px 0}.home-work{display:grid;gap:12px}.home-work-card{padding:16px 20px}.home-work-card .btn{text-align:left;white-space:normal;overflow-wrap:anywhere}.home-work-card p{margin:8px 0 0}.learning-detail,.assignment-detail,.task-facts{margin:18px 0}.learning-detail>summary,.assignment-detail>summary,.task-facts>summary{padding:12px 0;cursor:pointer;color:var(--muted)}
 </style>
 </head>
@@ -1007,7 +1007,7 @@ function previewFailure(error,reload){
  const retry=element('button','重試','btn');retry.type='button';retry.onclick=()=>{ $('#preview-status').textContent='載入中…';$('#preview-content').replaceChildren();return reload(); };
  $('#preview-status').textContent=`無法預覽：${error.message}`;$('#preview-content').replaceChildren(retry);
 }
-async function openPreview(taskId,file,trigger,action='preview',item=null,programPath=null){
+async function openPreview(taskId,file,trigger,action='preview',item=null,programPath=null,snapshot=null){
  const dialog=$('#preview-dialog'),content=$('#preview-content'),status=$('#preview-status'),modes=$('#preview-modes');
  const sidebar=$('#review-changes');
  $('#preview-layout')?.classList.toggle('review-layout',Boolean(item));
@@ -1015,13 +1015,13 @@ async function openPreview(taskId,file,trigger,action='preview',item=null,progra
   renderReviewChanges(taskId,item,trigger);
  }}
  previewMarkdown=null;$('#preview-source').hidden=true;$('#preview-source').setAttribute('aria-pressed','false');for(const button of modes.querySelectorAll('[data-preview-mode]'))button.hidden=false;
- previewReturn={taskId,file,trigger,...(item?{itemId:item.id}:{})};$('#preview-title').textContent=item?`驗收：${item.title}`:`預覽成果：${file}`;content.replaceChildren();content.classList.remove('program-preview');if(programPath!==null)content.classList.toggle('program-preview',true);content.classList.remove('mobile');modes.hidden=true;modes.querySelector('[data-preview-mode="desktop"]').setAttribute('aria-pressed','true');modes.querySelector('[data-preview-mode="mobile"]').setAttribute('aria-pressed','false');status.textContent='載入中…';
+ previewReturn={taskId,file,trigger,...(item?{itemId:item.id}:{})};$('#preview-title').textContent=snapshot?`保存版本：${file}`:item?`驗收：${item.title}`:`預覽成果：${file}`;content.replaceChildren();content.classList.remove('program-preview');if(programPath!==null)content.classList.toggle('program-preview',true);content.classList.remove('mobile');modes.hidden=true;modes.querySelector('[data-preview-mode="desktop"]').setAttribute('aria-pressed','true');modes.querySelector('[data-preview-mode="mobile"]').setAttribute('aria-pressed','false');status.textContent='載入中…';
  if(!dialog.open)dialog.showModal();dialog.querySelector('[data-close]').focus();
  const token=previewReturn;
  if(item&&!item.changes?.length)void loadReviewChanges(taskId,item,trigger,token);
  if(programPath!==null)return showProgramPreview(taskId,programPath,token);
  if(item&&!file){content.append(element('p','這個工作項目尚未登記可預覽成果。','notice'));modes.hidden=true;status.textContent='';return;}
- const url=`/api/tasks/${encodeURIComponent(taskId)}/${action}?file=${encodeURIComponent(file)}`;
+ const url=`/api/tasks/${encodeURIComponent(taskId)}/${snapshot?'artifact-version':action}?file=${encodeURIComponent(file)}`+(snapshot?`&version=${encodeURIComponent(snapshot.id)}&index=${snapshot.index}`:'');
  try{
   await refreshSession();
   const response=await fetch(url,{credentials:'same-origin',cache:'no-store'});
@@ -1050,7 +1050,7 @@ async function openPreview(taskId,file,trigger,action='preview',item=null,progra
   if(!dialog.open||previewReturn!==token)return;
   if(previewBlob)URL.revokeObjectURL(previewBlob);previewBlob=URL.createObjectURL(body);
   node.src=previewBlob;content.replaceChildren(node);modes.hidden=ext!=='html'&&ext!=='md';status.textContent='';
- }catch(error){if(dialog.open&&previewReturn===token)previewFailure(error,()=>openPreview(taskId,file,trigger,action,item,programPath));}
+ }catch(error){if(dialog.open&&previewReturn===token)previewFailure(error,()=>openPreview(taskId,file,trigger,action,item,programPath,snapshot));}
 }
 function diffButton(task,item){
  if(!task.gitAvailable)return null;
@@ -1324,6 +1324,16 @@ function openTask(id,{background=false}={}){
 function workDialog(title){
  const d=element('dialog');d.classList.add('work-preview');d.setAttribute('aria-label',title);const head=element('div',undefined,'dialog-heading'),close=element('button','關閉','btn');close.onclick=()=>d.close();head.append(element('h2',title),close);d.append(head);document.body.append(d);d.addEventListener('close',()=>d.remove(),{once:true});d.showModal();return d;
 }
+async function showArtifactBefore(taskId,reference){
+ const {version}=await request(`/api/tasks/${encodeURIComponent(taskId)}/artifact-version?version=${encodeURIComponent(reference.id)}`);
+ const d=workDialog('本輪開工前的成果副本');d.append(element('p','保存的是開工前實際內容；不保證等同更早回合的成果。','small muted'));
+ for(const entry of version.files){
+  if(entry.status!=='saved'){d.append(element('p',`${entry.file}：當時檔案已缺失，未保存內容。`,'small muted'));continue;}
+  const read=element('button',`閱讀保存副本：${entry.file}`,'btn');
+  read.onclick=busy(read,async()=>{d.close();await openPreview(taskId,entry.file,read,'preview',null,null,{id:version.id,index:entry.index});});
+  d.append(read,element('p',`SHA-256：${entry.sha}${entry.matchesRecorded===false?'；開工前內容已不同於先前登記版本。':''}`,'small muted'));
+ }
+}
 async function previewPlan(t){
  const {plan}=await request(`/api/tasks/${t.id}/plan`);if(!plan)throw new Error('目前沒有待核准的方案。');
  const d=workDialog('確認這份方案，再開始工作');
@@ -1338,10 +1348,12 @@ async function showRoundCards(t){
  const {cards}=await request(`/api/tasks/${t.id}/work-cards`);const d=workDialog('每輪工作卡');
  for(const c of [...cards].reverse()){
   const box=section(`${c.roleLabel||c.stage} · ${c.label} · ${c.agent}`);
+  if(c.simulated)box.append(element('p','示範／模擬回合，未呼叫真實 AI，不作為實際成果或驗收證據。','notice'));
   box.append(definition([['本輪要求',c.userInput||'未記錄'],['當時理解',c.context?.interpretation||'舊紀錄未保存'],['實際結果',c.outcome],['版本',`${c.baseRevision??'未知'} → ${c.resultRevision??'尚無'}`],['當輪下一步',c.next?.label||'未記錄，請查看任務目前狀態']]));
   if(c.aiClaims?.change)box.append(element('p',`AI 自述改動：${c.aiClaims.change}`,'small'));
   if(c.aiClaims?.evidence)box.append(element('p',`AI 聲稱的證據（非獨立驗證）：${c.aiClaims.evidence}`,'small muted'));
-  for(const o of c.outputs){const file=typeof o==='string'?o:o.file||o.path,b=element('button',`開啟成果：${file}`,'btn');b.onclick=busy(b,async()=>{d.close();await openPreview(t.id,file,b);});box.append(b);}
+  for(const o of c.outputs){const file=typeof o==='string'?o:o.file||o.path,snapshot=typeof o==='object'?o.snapshot:null,b=element('button',`${snapshot?'閱讀本輪保存版本':'查看目前檔案'}：${file}`,'btn');b.onclick=busy(b,async()=>{d.close();await openPreview(t.id,file,b,'preview',null,null,snapshot);});box.append(b,element('p',`這輪登記 SHA-256：${typeof o==='object'&&o.sha?o.sha:'未記錄'}。${snapshot?'按鍵讀取本輪保存副本；副本損壞時停止讀取。':'按鍵開啟目前檔案，不能據此當成這輪原始內容。'}`,'small muted'));}
+  if(c.artifactHistory?.before){const before=element('button','查看本輪開工前保存內容','btn');before.onclick=busy(before,async()=>{d.close();await showArtifactBefore(t.id,c.artifactHistory.before);});box.append(before);}
   if(c.checks.length)box.append(sensorList(c.checks));else box.append(element('p','機器檢查未記錄，不視為通過。','small muted'));
   box.append(element('p',`本輪輸入 ${c.contextMetrics.input.characters} 字元／${c.contextMetrics.input.utf8Bytes} UTF-8 bytes；輸出 ${c.contextMetrics.output.characters} 字元。${c.contextMetrics.usageLabel||'Token 與費用未知。'}`,'small muted'),element('p',`來源：${c.source}`,'small muted'));d.append(box);
  }

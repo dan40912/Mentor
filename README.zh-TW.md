@@ -59,12 +59,14 @@ npm start -- --home ~/mentor-data --port 4318
 
 ```sh
 npm run package:obsidian
+npm run verify:obsidian -- --vault dist/mentor-obsidian
 ```
 
 在 Obsidian 桌面版開啟 `dist/mentor-obsidian` 作為**獨立示範庫**。選擇 Mentor Theme，審閱插件後自行啟用，再從 Web「連接 Obsidian」取得一次性配對碼。插件只連 `http://127.0.0.1:port`；憑證只存在記憶體，重啟需重配對。
 
 - Theme 提供淺深色、文件、表格、Properties 與 Callout 樣式。
-- 首頁和八份內容範本使用普通 Markdown，不要求 Dataview 或 Templater。
+- 首頁和八份內容範本使用普通 Markdown，不要求 Dataview 或 Templater。另附「實機測試：表格與工作回合」，先做不需 AI 帳號的閱讀測試。
+- 原生任務先顯示最近一輪；先前回合與檢查可展開。失敗摘要與模擬標記保留，不把已回覆當成人工驗收。
 - 從目前筆記／選取內容準備任務，送出前看清楚原文與目標；過長內容不偷偷截斷。
 - 「為目前資料夾預寫索引」先列來源與完整草稿。修改後重新預覽，再套用；只寫 `Mentor 整理/`，不搬動來源。它是檔名索引，不是 AI 摘要。
 - 「從目前筆記預寫內容或建議分類標籤」：先選紀錄任務、核對送給 AI 的來源，再生成草稿；預覽與修改後才能保存。來源版本變更會拒絕套用，保存不代表內容已驗收。
@@ -73,11 +75,12 @@ npm run package:obsidian
 - 「搬移或重新命名筆記」先核對完整筆記與連結變更，通過受支援範圍檢查後才能確認套用。保存操作日誌，支援核對中斷、重試與整組復原；後來的修改會阻擋復原並保留。此功能仍待 Obsidian 桌面驗收。
 - 「整理與復原紀錄」支援部分失敗重試及復原。後來被人修改的內容會保留並提示衝突。中斷先核對結果，不盲目重跑。
 
-停用 Theme／插件後，Markdown 仍可閱讀。套裝生成器不安裝到正式 Vault；`dist/` 是可重建產出，不要放正式筆記。升級前備份，插件需一併替換 main.js、organization.js、content-drafts.js、relocation.js、reference-coverage.js、manifest.json、styles.css。[完整安裝、復原與限制](docs/obsidian-work-center.md)。
+停用 Theme／插件後，Markdown 仍可閱讀。套裝生成器不安裝到正式 Vault；`dist/` 是可重建產出，不要放正式筆記。重建遇到人工改過的範本會停止，不默默覆寫。升級前備份，插件需一併替換 main.js、organization.js、content-drafts.js、relocation.js、reference-coverage.js、manifest.json、styles.css。[完整安裝、復原與限制](docs/obsidian-work-center.md)。
 
 ## 資料、權限與隱私
 
 - 任務在 `MENTOR_HOME/vault`，成果在 `MENTOR_HOME/outputs`；設定與日記也在本機。備份整個 home，另備份你的 Obsidian Vault。
+- D／F 回合的成果副本在 `vault/artifact-history`，含完整內容。工作卡可讀保存版本；接手摘要提供檔案 hash 與最近三輪副本索引，正文按需取得。回收桶永久清空會刪除副本，原成果不刪除；舊回合不回填。[保存範圍與限制](docs/implementation/artifact-history.md)。
 - Markdown 的 `awc:begin`／`awc:end` 是系統產生區塊；人工筆記放在區塊外，勿直接改產生資料。
 - Mentor 呼叫已登入 CLI；被選取的來源與 Prompt 會交給對應 AI 服務，本機儲存不代表模型離線執行。工作紀錄可能含來源內容，應依機密需求管理。
 - 整理復原紀錄保存修改前後內容，會隨 Vault 同步與備份。不要把正式筆記、憑證或私人執行紀錄提交到 Git。

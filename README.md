@@ -59,6 +59,7 @@ Real execution needs an installed, logged-in Codex, Claude Code or GitHub Copilo
 
 ```sh
 npm run package:obsidian
+npm run verify:obsidian -- --vault dist/mentor-obsidian
 ```
 
 Open `dist/mentor-obsidian` as a **separate demonstration Vault** in Obsidian desktop. Select the Mentor theme, review and enable the plugin yourself, then pair using the Web app’s 連接 Obsidian action. Only `http://127.0.0.1:port` is supported. Credentials stay in memory and must be paired again after restart.
@@ -73,11 +74,14 @@ Open `dist/mentor-obsidian` as a **separate demonstration Vault** in Obsidian de
 - Move/rename previews the note and link changes, then requires confirmation within the supported Markdown scope. Journals support explicit interruption reconciliation, retries and whole-bundle undo; later changes block undo and remain intact. Native desktop acceptance is pending.
 - Inspect organization history, retry partial failures and undo unchanged results. Later human edits remain intact as conflicts. Interrupted operations require explicit reconciliation before retrying.
 
-Markdown remains readable when the theme or plugin is disabled. The packager does not install into a real Vault; dist is rebuildable output. Back up before upgrading and replace main.js, organization.js, content-drafts.js, relocation.js, reference-coverage.js, manifest.json and styles.css together. [Setup, recovery and limitations](docs/obsidian-work-center.md) (Traditional Chinese).
+The native task view leads with the latest round; history and detailed checks expand on demand. Failed checks and simulated rounds stay explicit. The demonstration Vault includes a table/round-reading exercise, starting without an AI account.
+
+Markdown remains readable when the theme or plugin is disabled. The packager does not install into a real Vault; dist is rebuildable output. Rebuilding refuses edited generated files. The verifier compares runtime checksums only; it does not prove native behavior. Back up before upgrading and replace main.js, organization.js, content-drafts.js, relocation.js, reference-coverage.js, manifest.json and styles.css together. [Setup, recovery and limitations](docs/obsidian-work-center.md) (Traditional Chinese).
 
 ## Data, permissions and privacy
 
 - Tasks live in `MENTOR_HOME/vault`, artifacts in `MENTOR_HOME/outputs`; settings and diaries are local too. Back up the whole home and your Obsidian Vault separately.
+- D/F artifact copies live in `vault/artifact-history` and contain full content. Work cards read saved versions; compact handoffs include current hashes and the last three rounds’ snapshot indexes, with bodies loaded on demand. Purging task trash deletes copies, not original outputs; old rounds are not backfilled. See [scope and limits](docs/implementation/artifact-history.md).
 - Keep human notes outside the generated awc:begin / awc:end block. Do not manually change serialized task state.
 - Selected sources and prompts go to the configured AI service through its CLI. Local storage does not mean offline inference. Saved work history may contain source material.
 - Organization journals contain before/after content and follow your Vault’s sync and backup settings. Never commit private notes, credentials or real execution records.

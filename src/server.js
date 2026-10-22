@@ -43,7 +43,11 @@ export async function previewArtifact(tasks, projectRoot, id, file) {
   const info = await stat(resolved);
   if (!info.isFile()) throw new TaskError(415, 'PREVIEW_TYPE_UNSUPPORTED', '只能預覽一般檔案。');
   if (info.size > type[1]) throw new TaskError(413, 'PREVIEW_TOO_LARGE', '成果檔超過預覽大小上限。');
-  const content = await readFile(resolved);
+  return previewArtifactBytes(file,await readFile(resolved));
+}
+
+function previewArtifactBytes(file,content){
+  const type=previewTypes[path.extname(file).toLowerCase()];if(!type)throw new TaskError(415,'PREVIEW_TYPE_UNSUPPORTED','此成果版本的格式尚未提供預覽。');
   if (content.length > type[1]) throw new TaskError(413, 'PREVIEW_TOO_LARGE', '成果檔超過預覽大小上限。');
   const ext = path.extname(file).toLowerCase();
   if (['.html', '.md', ...textPreviewExtensions].includes(ext)) {
@@ -287,11 +291,22 @@ export async function createRequestHandler({ root = appDir, port = 4317, runAgen
           res.writeHead(200, { 'Content-Type': 'application/octet-stream', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Content-Disposition': `attachment; filename=attachment; filename*=UTF-8''${encodeURIComponent(attachment.name)}` });
           return res.end(content);
         }
-        if (id && ['preview', 'handoff-preview'].includes(action)) {
-          const file = new URLSearchParams(query || '').get('file');
-          const preview = action === 'handoff-preview'
+        if (id && ['preview', 'handoff-preview','artifact-version'].includes(action)) {
+          const params=new URLSearchParams(query||'');let file=params.get('file'),versionPreview=null,versionSha=null;
+          if(action==='artifact-version'){
+            const {task}=await tasks.get(id);if(task.trashed)throw new TaskError(409,'TASK_TRASHED','請先還原任務，再閱讀成果版本。');
+            const version=params.get('version'),reference=(task.planning?.learningTurns||[]).flatMap(turn=>Object.values(turn.artifactHistory||{})).find(ref=>ref?.id===version);
+            if(!reference)throw new TaskError(404,'ARTIFACT_HISTORY_NOT_REFERENCED','這份版本沒有登記在此任務的回合中。');
+            const manifest=await coach.artifactHistory.manifest(id,version);if(manifest.digest!==reference.digest)throw new TaskError(409,'ARTIFACT_HISTORY_CORRUPT','成果版本清單已變更，不當成原版本。');
+            if(!params.has('index'))return send(200,{version:manifest});
+            const rawIndex=params.get('index');if(!/^(?:0|[1-9][0-9]*)$/.test(rawIndex))throw new TaskError(400,'ARTIFACT_HISTORY_FILE','成果版本檔案識別不正確。');
+            const saved=await coach.artifactHistory.read(id,version,Number(rawIndex));if(saved.manifest.digest!==reference.digest)throw new TaskError(409,'ARTIFACT_HISTORY_CORRUPT','成果版本清單已變更，不當成原版本。');if(file!==saved.file.file)throw new TaskError(400,'ARTIFACT_HISTORY_FILE','成果版本檔名與登記不一致。');
+            versionPreview=previewArtifactBytes(file,saved.content);versionSha=saved.file.sha;
+          }
+          const preview = versionPreview || (action === 'handoff-preview'
             ? await previewHandoff(root, (await tasks.get(id)).task, file)
-            : await previewArtifact(tasks, root, id, file);
+            : await previewArtifact(tasks, root, id, file));
+          if(versionSha)res.setHeader('X-Mentor-Artifact-SHA256',versionSha);
           res.writeHead(200, { 'Content-Type': preview.mime, 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Content-Disposition': 'inline', 'Content-Security-Policy': preview.html ? "sandbox allow-scripts; default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; connect-src 'none'; form-action 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; frame-ancestors 'self'" : "default-src 'none'; style-src 'unsafe-inline'; sandbox; frame-ancestors 'self'" });
           return res.end(preview.content);
         }

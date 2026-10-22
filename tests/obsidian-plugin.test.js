@@ -21,7 +21,7 @@ class El {
 }
 const all=e=>[e,...e.children.flatMap(all)];
 function fixture(){
-  let lastModal, saved, read='原始筆記',requests=[];
+  let lastModal, saved, read='原始筆記',requests=[],responseText='';
   const notices=[];
   class Modal { constructor(){this.contentEl=new El();}setTitle(t){this.title=t;}open(){lastModal=this;this.onOpen();}close(){this.onClose();} }
   class Plugin {async loadData(){return {address:'http://127.0.0.1:4350',sources:{}};}async saveData(data){saved=structuredClone(data);}registerView(){}addRibbonIcon(){}addCommand(){}addSettingTab(){} }
@@ -33,12 +33,12 @@ function fixture(){
     if(name==='./organization')return organizationModule.exports;
     if(name==='./relocation')return relocationModule.exports;
     if(name==='./content-drafts')return contentModule.exports;
-    if(name==='obsidian')return {Plugin,ItemView,Modal,MarkdownView,parseLinktext:link=>({path:link.split('#')[0]}),Notice:class{constructor(t){notices.push(t);}},PluginSettingTab:class{},Setting:class{},requestUrl:async input=>{requests.push(input);return {status:200,json:input.url.endsWith('/connect')?{token:'memory-only-secret'}:{task:{id:'TASK-plugin'}}};}};
+    if(name==='obsidian')return {Plugin,ItemView,Modal,MarkdownView,parseLinktext:link=>({path:link.split('#')[0]}),Notice:class{constructor(t){notices.push(t);}},PluginSettingTab:class{},Setting:class{},requestUrl:async input=>{requests.push(input);return {status:200,text:responseText,json:input.url.endsWith('/connect')?{token:'memory-only-secret'}:{task:{id:'TASK-plugin'}}};}};
     throw Error(name);
   }};
   vm.runInNewContext(source,context);
   const plugin=new context.module.exports();plugin.app=app;
-  return {plugin,notices,requests,get modal(){return lastModal;},get saved(){return saved;},set read(value){read=value;}};
+  return {plugin,notices,requests,get modal(){return lastModal;},get saved(){return saved;},set responseText(value){responseText=value;},set read(value){read=value;}};
 }
 
 test('plugin pairing refuses remote hosts and saves preferences without a credential',async()=>{
@@ -203,4 +203,23 @@ test('native relocation confirms the preview, journals Vault writes, updates sou
 test('source shortcut persistence can be retried if preference storage fails after a successful relocation',async()=>{
  const f=fixture();await f.plugin.onload();f.plugin.sources={'TASK-old':{path:'A.md',hash:'original'}};const save=f.plugin.saveData.bind(f.plugin);let attempts=0;f.plugin.saveData=async data=>{if(++attempts===1)throw Error('preference storage unavailable');return save(data);};
  const result={status:'applied',moved:true,plan:{from:'A.md',to:'新/A.md'}};await assert.rejects(f.plugin.syncRelocationSources(result),/unavailable/);assert.equal(f.plugin.sources['TASK-old'].path,'A.md');await f.plugin.syncRelocationSources(result);assert.equal(f.saved.sources['TASK-old'].path,'新/A.md');assert.equal(f.plugin.sources['TASK-old'].hash,'original');
+});
+
+test('native round reading keeps current guidance and historical failed evidence without treating absent checks as passed',async()=>{
+ const f=fixture();await f.plugin.onload();const task={id:'TASK-reading',title:'表格閱讀',revision:8,goal:'只改 Obsidian 表格',status:'READY',nextAction:{label:'請核對範圍'},workCards:[{stage:'D',label:'未完成',outcome:'舊回合中斷',context:{interpretation:'舊版理解'},aiClaims:{change:'AI 曾提出的修改'},checks:[{id:'shape',result:'FAIL',label:'範圍檢查',detail:'錯改了 Web UI'}]},{stage:'B',label:'已回覆，仍需核對',outcome:'最近回答已保存',simulated:true}]};
+ await f.plugin.task(task);const elements=all(f.modal.contentEl);assert.ok(elements.some(e=>e.text==='第 8 版 · 請核對範圍'));assert.ok(elements.some(e=>e.text==='最近回答已保存'));assert.ok(elements.some(e=>e.text.includes('示範／模擬回合，未呼叫真實 AI')));assert.ok(elements.some(e=>e.text.includes('未記錄機器檢查，不代表已通過')));
+ const history=elements.find(e=>e.tag==='details'&&all(e).some(child=>child.text==='舊回合中斷'));assert.ok(history);assert.ok(all(history).some(e=>e.text.includes('FAIL · 範圍檢查 · 錯改了 Web UI')));assert.ok(all(history).some(e=>e.text==='此輪開工時的理解：舊版理解'));assert.equal(f.requests.length,0,'reading history does not start an AI operation');
+ task.workCards.at(-1).checks=[{result:'FAIL',label:'範圍未通過'}];await f.plugin.task(task);assert.ok(all(f.modal.contentEl).some(e=>e.tag==='summary'&&e.text.includes('有檢查未通過')),'folded details must not hide a current failure');
+});
+
+
+test('native saved Markdown reads original text, never executes wrapper HTML or falls back on invalid format',async()=>{
+ const f=fixture();await f.plugin.onload();f.plugin.token='test-only';
+ f.responseText='<meta charset="utf-8"><pre style="white-space:pre-wrap;overflow-wrap:anywhere;font:inherit">\n# saved &lt;script&gt;bad()&lt;/script&gt; &amp;lt;</pre>';
+ await f.plugin.output({id:'TASK-reading'},'note.md',{id:'saved-version',index:0});
+ assert.ok(f.requests.at(-1).url.includes('/artifact-version?file=note.md&version=saved-version&index=0'));
+ assert.equal(all(f.modal.contentEl).find(e=>e.tag==='pre').text,'\n# saved <script>bad()</script> &lt;');
+ const previous=f.modal;f.responseText='<script>bad()</script>';
+ await assert.rejects(f.plugin.output({id:'TASK-reading'},'note.md',{id:'saved-version',index:0}),/格式不正確/);
+ assert.equal(f.modal,previous);assert.equal(f.requests.length,2);
 });
