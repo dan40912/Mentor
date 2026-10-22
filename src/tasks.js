@@ -159,7 +159,7 @@ export function planningAction(task) {
   if ((item = pick('REVIEWED'))) return { kind: 'item', id: item.id, label: `確認驗收：${item.title}`, button: '確認驗收' };
   if ((item = pick('BLOCKED'))) return { kind: 'item', id: item.id, label: `AI 需要你補資訊：${item.title}`, button: '查看' };
   if ((item = pick('TODO', i => i.owner === 'human' && ready(items, i)))) return { kind: 'item', id: item.id, label: `輪到你：${item.title}`, button: '完成這項' };
-  if ((item = pick('AWAITING_REVIEW'))) return { kind: 'item', id: item.id, label: `讓 AI 檢查：${item.title}`, button: '讓 AI 檢查' };
+  if ((item = pick('AWAITING_REVIEW', i => !i.recheck || ready(items,i,p.autopilot?.full?['DONE','REVIEWED']:['DONE'])))) return { kind: 'item', id: item.id, label: `讓 AI 檢查：${item.title}`, button: '讓 AI 檢查' };
   if ((item = pick('TODO', i => i.owner === 'ai' && ready(items, i)))) return { kind: 'item', id: item.id, label: `交給 AI 做：${item.title}`, button: '交給 AI 做' };
   return { kind: 'none', label: '等待前置項目完成', button: '查看' };
 }

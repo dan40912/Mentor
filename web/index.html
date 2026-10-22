@@ -754,7 +754,7 @@ async function request(url,data,headers={},raw=false){
   if(attempt===0&&response.status===403&&['CSRF_FAILED','SESSION_REQUIRED'].includes(result.code)){
    const token=await refreshSession();if(data)options.headers['X-CSRF-Token']=token;continue;
   }
-  if(!response.ok)throw Object.assign(new Error(result.message||(['CSRF_FAILED','SESSION_REQUIRED'].includes(result.code)?'連線驗證已失效，請保留輸入並再試一次。':`${result.code}；請重新整理後比對最新版本。`)),{code:result.code,status:response.status});
+  if(!response.ok)throw Object.assign(new Error(result.message||(['CSRF_FAILED','SESSION_REQUIRED'].includes(result.code)?'連線驗證已失效，請保留輸入並再試一次。':`${result.code}；請重新整理後比對最新版本。`)),{code:result.code,status:response.status,plan:result.plan});
   return result;
  }
 }

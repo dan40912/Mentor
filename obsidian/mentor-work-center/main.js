@@ -205,6 +205,7 @@ module.exports = class MentorPlugin extends Plugin {
       for(const c of task.workCards||[]){const box=host.createDiv({cls:'mentor-task'});text(box,'h3',`${c.stage} · ${c.label}`);text(box,'p',c.outcome);if(c.aiClaims?.change)text(box,'p',`AI 自述：${c.aiClaims.change}`);for(const check of c.checks)text(box,'p',`${check.result} · ${check.label||check.id}`);}
       const invoke=async(action,input={})=>{await this.api(`/tasks/${task.id}/${action}`,{revision:task.revision,...input});modal.close();this.refresh();};
       if(p?.running){button(host,'停止這次執行',()=>invoke('stop'));return;}
+      if(p)button(host,'補充或修正這個任務',()=>{modal.close();this.instruction(task);});
       if(p?.phase==='grill'){
         for(const message of (p.messages||[]).filter(m=>m.role==='ai').slice(-2)){text(host,'p',message.text||message.coaching||'');for(const q of message.questions||[])text(host,'p',`${q.q}（${q.why}）`);}
         const reply=host.createEl('textarea',{attr:{'aria-label':'回答或補充需求',placeholder:'回答問題或修正 AI 的理解'}});
@@ -212,7 +213,7 @@ module.exports = class MentorPlugin extends Plugin {
       }
       if(p?.phase==='outline')button(host,'預覽並核准計畫',async()=>{modal.close();await this.plan(task);},true);
       if(p?.phase==='execute')for(const item of p.workItems||[]){
-        const box=host.createDiv({cls:'mentor-task'});text(box,'h3',`${item.title} · ${item.status}`);text(box,'p',item.detail||'');for(const a of item.acceptance||[])text(box,'p','驗收：'+a);
+        const box=host.createDiv({cls:'mentor-task'});text(box,'h3',`${item.title} · ${item.status}`);text(box,'p',item.detail||'');if(item.recheck)text(box,'p','需要重新核對：'+item.recheck);for(const a of item.acceptance||[])text(box,'p','驗收：'+a);
         for(const output of item.outputs||[])button(box,'閱讀成果：'+output.file,()=>this.output(task,output.file));
         for(const r of item.review?.results||[])text(box,'p',`${r.result} · ${r.criterion} · ${r.evidence}`);
         if(item.owner==='ai'&&item.status==='TODO')button(box,'交給 AI 執行',()=>invoke('execute',{itemId:item.id}),true);
@@ -227,6 +228,31 @@ module.exports = class MentorPlugin extends Plugin {
       const who=host.createEl('select',{attr:{'aria-label':'下一步 AI'}});for(const [v,n] of [['inherit','沿用設定'],['codex|default','Codex'],['claude|default','Claude Code'],['copilot|default','Copilot']])who.createEl('option',{text:n,value:v});
       button(host,'保存後續 AI 指派',()=>invoke('agents',{all:who.value}));
       button(host,'準備跨 AI 接手包',()=>this.handoff(task));
+    }).open();
+  }
+  instruction(task,draft={}) {
+    new ReviewModal(this.app,'補充需求，先看影響',(host,modal)=>{
+      text(host,'p','原始要求會保留。先預覽本次文字將交給哪個步驟，以及哪些成果需要重新核對。');
+      const input=host.createEl('textarea',{value:draft.text||'',attr:{'aria-label':'補充或修正內容'}});
+      const scope=host.createEl('select',{attr:{'aria-label':'這次要調整哪裡'}});
+      for(const [value,label] of [['current','目前步驟'],['outline','重排整個計畫'],...(task.planning.workItems||[]).filter(i=>i.owner==='ai').map(i=>[i.id,i.title])])scope.createEl('option',{value,text:label});
+      scope.value=draft.scope||'current';
+      const reason=host.createEl('textarea',{value:draft.reason||'',attr:{'aria-label':'修改原因（選填）'}});
+      button(host,'預覽這次修改的影響',async()=>{
+        if(!input.value.trim())throw new Error('請先填入補充內容。');
+        const snapshot={text:input.value,scope:scope.value,reason:reason.value};
+        const {plan}=await this.api(`/tasks/${task.id}/instruct`,{revision:task.revision,...snapshot,dryRun:true});
+        const key=randomUUID();modal.close();
+        new ReviewModal(this.app,'確認這次修改',(preview,review)=>{
+          text(preview,'h3','你的原文');text(preview,'pre',plan.request,'mentor-source');
+          text(preview,'p',`第 ${plan.revision} 版 · ${plan.label} · ${plan.id.slice(0,12)}`);
+          text(preview,'p',plan.impact||'尚未確認的工作將依補充內容接續；這次不會將既有成果直接標為通過。');
+          text(preview,'p','確認後會呼叫 AI，使用已登入帳號的額度。既有來源與產出邊界維持不變。');
+          button(preview,`確認：${plan.label}`,async()=>{await this.api(`/tasks/${task.id}/instruct`,{revision:plan.revision,...snapshot,confirmImpact:true,proposalId:plan.id},key);review.close();this.refresh();},true);
+          button(preview,'修改內容',()=>{review.close();this.instruction(task,snapshot);});
+          button(preview,'暫不處理',()=>review.close());
+        }).open();
+      },true);
     }).open();
   }
   async plan(task) {

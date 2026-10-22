@@ -107,3 +107,43 @@ test('CLI usage and elapsed time survive task persistence and reach authenticate
  const response=await app.fetch(`/api/tasks/${task.id}/work-cards`,{headers});assert.equal(response.status,200);
  const card=(await response.json()).cards.at(-1);assert.equal(card.contextMetrics.elapsedMs,42);assert.equal(card.contextMetrics.usage.inputTokens,120);assert.match(card.contextMetrics.usageLabel,/CLI 回報/);assert.match(workCardsMarkdown(saved),/輸入 120/);
 });
+
+test('instruction dry runs never resume autopilot; exact content and revision bind subsequent application',async t=>{
+ const {task,app,headers}=await setup(t);let resumes=0;app.coach.resumeAuto=()=>resumes++;
+ const post=input=>app.fetch(`/api/tasks/${task.id}/instruct`,{method:'POST',headers,body:JSON.stringify(input)});
+ const before=await app.coach.latest(task.id);
+ const preview=await post({revision:before.revision,text:'只改表格列距',scope:'outline',dryRun:true});assert.equal(preview.status,200);
+ const {plan}=await preview.json();assert.equal(resumes,0);assert.equal((await app.coach.latest(task.id)).revision,before.revision);
+ assert.equal((await post({revision:before.revision,text:'改成重做網站',scope:'outline',confirmImpact:true,proposalId:plan.id})).status,409);
+ assert.equal((await post({revision:before.revision-1,text:'只改表格列距',dryRun:true})).status,409);
+ assert.equal(resumes,0);assert.equal((await app.coach.latest(task.id)).planning.request,before.planning.request);
+});
+
+test('editing accepted work previews and invalidates transitive acceptances without losing saved outputs',async t=>{
+ const {task,app,home}=await setup(t);
+ task.planning.phase='execute';
+ task.planning.workItems=['A','B','C','unrelated'].map((id,index)=>({id,title:id,detail:id,owner:'ai',status:'DONE',acceptance:['check'],dependsOn:index===1?['A']:index===2?['B']:[],outputs:[{file:id+'.md'}],review:{results:[]},doneAt:'yesterday'}));
+ await writeFile(path.join(home,'vault',task.id+'.md'),serializeTask(task));
+ app.coach.fix=async()=>({task:await app.coach.latest(task.id)});
+ const current=await app.coach.latest(task.id),input={text:'只修改 A 的資料來源',scope:'A'};
+ const {plan}=await app.coach.instruct(task.id,current.revision,'impact-preview-key',{...input,dryRun:true});
+ assert.match(plan.impact,/B/);assert.match(plan.impact,/C/);
+ await app.coach.instruct(task.id,current.revision,'impact-apply-key',{...input,confirmImpact:true,proposalId:plan.id});
+ const saved=await app.coach.latest(task.id);
+ assert.deepEqual(saved.planning.workItems.map(i=>i.status),['REVIEW_FAIL','AWAITING_REVIEW','AWAITING_REVIEW','DONE']);
+ assert.equal(saved.planning.workItems[2].outputs[0].file,'C.md');assert.equal(saved.planning.workItems[2].doneAt,undefined);
+ await assert.rejects(app.coach.confirm(task.id,saved.revision,'impact-confirm-key',{itemId:'C',accept:true}),{code:'DEPENDENCY_PENDING'});
+ await assert.rejects(app.coach.review(task.id,'C'),{code:'DEPENDENCY_PENDING'});
+ assert.equal(saved.planning.request,task.planning.request);
+});
+
+test('replanning a detail-only change reopens its work and downstream review even when titles stay the same',async t=>{
+ const {task,app,home}=await setup(t);task.planning.phase='execute';
+ const definitions=[{id:'A',title:'來源',owner:'ai',detail:'原來源',acceptance:['可追溯'],dependsOn:[]},{id:'B',title:'成果',owner:'ai',detail:'依來源寫作',acceptance:['可讀'],dependsOn:['A']}];
+ task.planning.workItems=definitions.map(i=>({...i,status:'DONE',outputs:[{file:i.id+'.md'}],doneAt:'old'}));
+ await writeFile(path.join(home,'vault',task.id+'.md'),serializeTask(task));
+ app.coach.runAgent=async()=>({text:JSON.stringify({outline:{sections:[],imageTotal:0},workItems:[{...definitions[0],detail:'改用新來源'},definitions[1]]})});
+ const run=await app.coach.draftOutline(task.id,'只修正來源',{replan:true});await run.done;
+ const saved=await app.coach.latest(task.id);assert.equal(saved.planning.phase,'outline');
+ assert.equal(saved.planning.workItems[0].status,'TODO');assert.equal(saved.planning.workItems[0].previousOutputs[0].file,'A.md');assert.equal(saved.planning.workItems[1].status,'AWAITING_REVIEW');assert.equal(saved.planning.workItems[1].outputs[0].file,'B.md');
+});

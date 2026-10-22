@@ -71,7 +71,8 @@ function instructionBox(t,{extraButtons=[]}={}){
  }
  area.oninput=()=>{saveDraft(t.id,area.value);error.hidden=true;if(!impact.hidden)impact.querySelector('.btn.subtle')?.click();sync();};
  area.onkeydown=e=>{if(e.key==='Enter'&&(e.metaKey||e.ctrlKey)){e.preventDefault();form.requestSubmit();}};
- const payload=confirm=>({text:area.value,scope:scope?.value||'current',reason:reason?.value||'',confirmImpact:confirm});
+ let instructionProposalId=null;
+ const payload=confirm=>({text:area.value,scope:scope?.value||'current',reason:reason?.value||'',confirmImpact:confirm,...(confirm&&instructionProposalId?{proposalId:instructionProposalId}:{})});
  const done=text=>{saveDraft(t.id,'');delete instructDrafts.reason[t.id];delete instructDrafts.scope[t.id];tell(mode==='stopped'?'已繼續任務，AI 從保存的成果接續。':mode==='grill'?'已送出回答，AI 繼續釐清。':mode==='outline'?`${agentOf('C')} 正在依你的意見改計畫。`:mode==='done'?'已建立新一輪，先前的完成紀錄保留。':scope?.value==='outline'?'已送出，計畫重排後需要你再核准一次。':'已送出補充指示。');};
  async function submitWith(confirm,button){
   if(p.running)return;
@@ -81,7 +82,7 @@ function instructionBox(t,{extraButtons=[]}={}){
   try{const data=payload(confirm);data.attachmentIds=await attachments.ids();saveDraft(t.id,'');await coachAct(t,'instruct',data);attachments.consume(data.attachmentIds);done(text);}
   catch(e){saveDraft(t.id,text);const box=document.getElementById(id);if(box&&!box.value)box.value=text;
    const form2=box?.closest('form')||form;const imp=form2.querySelector('.impact'),err=form2.querySelector('.field-error');
-   if(e.code==='CONFIRM_IMPACT'){showImpact(imp,e.message,box);return;}
+   if(e.code==='CONFIRM_IMPACT'){instructionProposalId=e.plan?.id||null;showImpact(imp,e.message,box);return;}
    err.textContent=`沒有送出：${e.message}`;err.hidden=false;box?.focus();}
   finally{attachments.lock(false);area.disabled=false;if(reason)reason.disabled=false;if(scope)scope.disabled=false;}
  }

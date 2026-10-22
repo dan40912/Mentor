@@ -1,3 +1,5 @@
+import { instructionPreview } from './instruction-preview.js';
+import { downstreamItems, sameWorkDefinition, invalidateDownstream } from './work-item-impact.js';
 import { turnContext } from './work-cards.js';
 import { planPreview } from './plan-preview.js';
 import { normalizePreview, normalizeChanges } from './review-settings.js';
@@ -192,6 +194,7 @@ ${cardText(task.planning.card)}
 
 工作項目：${item.title}
 說明：${item.detail}
+${item.recheck ? `本次重新核對原因：${item.recheck}。不可沿用舊的 PASS；請對照最新相依成果重新檢查本項驗收條件。\n相依成果：${(item.dependsOn||[]).map(id=>{const source=task.planning.workItems.find(w=>w.id===id);return `${id} ${(source?.outputs||[]).map(o=>o.file).join('、')||'未登記成果'}`;}).join('；')}\n` : ''}
 檔案：${(item.outputs || []).map(o => o.file).join('、') || '（執行者沒有列出檔案，請自行查看資料夾）'}
 自動檢查（確定性感測器，供參考）：
 ${(item.sensors || []).filter(s => s.id !== 'test-command').map(s => `- ${s.result}｜${s.name}：${s.detail}`).join('\n') || '- 無'}
@@ -376,7 +379,7 @@ export class Coach {
     const fixed = ap.fixRounds || {};
     const failing = aiItems.find(i => i.status === 'REVIEW_FAIL');
     if (failing && (fixed[failing.id] || 0) < Coach.AUTO_MAX_FIX) return { run: () => this.fix(t.id, failing.id), fixItem: failing.id };
-    const reviewable = aiItems.find(i => i.status === 'AWAITING_REVIEW');
+    const reviewable = aiItems.find(i => i.status === 'AWAITING_REVIEW' && (!i.recheck || ready(items,i,unlockOf(t))));
     if (reviewable) return { run: () => this.review(t.id, reviewable.id) };
     const todo = aiItems.find(i => i.status === 'TODO' && ready(items, i, unlockOf(t)));
     if (todo) return { run: () => this.execute(t.id, todo.id) };
@@ -842,9 +845,11 @@ export class Coach {
         for (const [index, next] of items.entries()) {
           const old = before.get(next.id);
           if (!old) { next.added = true; continue; }
-          const same = old.title === next.title && JSON.stringify(old.acceptance) === JSON.stringify(next.acceptance) && old.owner === next.owner;
-          items[index] = same ? { ...old, dependsOn: next.dependsOn, detail: next.detail || old.detail } : { ...next, previousOutputs: old.outputs?.length ? old.outputs : old.previousOutputs, recheck: old.status === 'DONE' || old.status === 'REVIEWED' ? '計畫修改後內容改變，需重新執行與驗收' : null };
+          const same = sameWorkDefinition(old, next);
+          items[index] = same ? { ...old, dependsOn: next.dependsOn, detail: next.detail } : { ...next, previousOutputs: old.outputs?.length ? old.outputs : old.previousOutputs, recheck: old.status === 'DONE' || old.status === 'REVIEWED' ? '計畫修改後內容改變，需重新執行與驗收' : null };
         }
+        const changedIds = items.filter(item => before.has(item.id) && !sameWorkDefinition(before.get(item.id), item)).map(item=>item.id);
+        invalidateDownstream(items, changedIds, '前置工作的定義已改變，需重新檢查與驗收');
         t.planning.removedItems = [...(t.planning.removedItems || []), ...[...before.values()].filter(w => !items.some(i => i.id === w.id)).map(w => ({ ...w, removedAt: now() }))];
       }
       t.planning.workItems = items;
@@ -948,6 +953,7 @@ export class Coach {
     try {
       started = await this.withAgent(id, 'E', copy ? 'write' : 'read', copy || task.allowedRoots[0], t => {
       const item = this.item(t, itemId);
+      if (item.recheck && !ready(t.planning.workItems,item,unlockOf(t))) throw new TaskError(409, 'DEPENDENCY_PENDING', '前置項目尚未重新確認，不能先驗收依賴它的成果。');
       if (item.status !== 'AWAITING_REVIEW') throw new TaskError(409, 'NOT_READY_FOR_REVIEW', '這一項還沒有可驗收的成果。');
       return prompts.E(t, item, { copy: Boolean(copy) });
     }, (t, text, agent) => {
@@ -959,6 +965,7 @@ export class Coach {
       item.fixes = pass ? [] : (json?.fixes || []).map(String).filter(Boolean);
       // AI 驗收通過只是輔助證據，最後由人確認。
       item.status = pass ? 'REVIEWED' : 'REVIEW_FAIL';
+      if(pass)item.recheck=null;
       this.addDiary(t, 'E', json?.diary, agent);
     }, { workItemId: itemId, ...(instruction ? { instruction, userInput: instruction, inputKind: 'user' } : {}) });
     } catch (error) { cleanup(); throw error; }
@@ -1016,20 +1023,22 @@ export class Coach {
       if (!ready(items, target)) throw new TaskError(409, 'DEPENDENCY_PENDING', `${itemName(target.id)} 的前置項目還沒完成。`);
       return { route: 'execute', itemId: target.id, label: '交給 AI 開始做', impact: null };
     }
-    const dependents = items.filter(i => i.id !== target.id && i.dependsOn?.includes(target.id) && i.status !== 'TODO').map(i => i.id);
+    const dependents = downstreamItems(items,[target.id]).filter(i=>i.status!=='TODO').map(i=>i.id);
     if (target.status === 'DONE') {
-      return { route: 'fix', itemId: target.id, label: '請 AI 照這樣改', impact: `${itemName(target.id)} 已確認，會改回待修改並重新驗收${dependents.length ? `；依賴它的 ${itemNames(dependents)} 標為待核對` : ''}。${keepText(doneIds.filter(x => x !== target.id))}` };
+      return { route: 'fix', itemId: target.id, label: '請 AI 照這樣改', impact: `${itemName(target.id)} 已確認，會改回待修改並重新驗收${dependents.length ? `；依賴它的 ${itemNames(dependents)} 標為待核對` : ''}。${keepText(doneIds.filter(x => x !== target.id && !dependents.includes(x)))}` };
     }
     return { route: 'fix', itemId: target.id, label: '請 AI 照這樣改', impact: dependents.length ? `會修改 ${itemName(target.id)} 並重新驗收；依賴它的 ${itemNames(dependents)} 標為待核對。` : null };
   }
 
-  async instruct(id, revision, key, { text = '', scope = 'current', reason = '', confirmImpact = false, dryRun = false, attachmentIds = [] } = {}) {
+  async instruct(id, revision, key, { text = '', scope = 'current', reason = '', confirmImpact = false, dryRun = false, attachmentIds = [], proposalId = null } = {}) {
     if (typeof text !== 'string' || text.length > 6000) throw new TaskError(400, 'TEXT_TOO_LONG', '補充指示最多 6,000 字。');
     if (typeof reason !== 'string' || reason.length > 500) throw new TaskError(400, 'REASON_TOO_LONG', '修改原因最多 500 字。');
     text = text.trim(); reason = reason.trim();
     const task = await this.latest(id);
     if (this.pending.has(id)) throw new TaskError(409, 'AGENT_BUSY', 'AI 還在執行。可以先寫，停止這次執行後才能送出。');
-    const plan = this.plan(task, { text, scope });
+    if ((dryRun || proposalId) && revision !== task.revision) throw new TaskError(409,'REVISION_CONFLICT','任務版本已改變，請重新預覽。',{revision:task.revision});
+    const plan = instructionPreview(task,this.plan(task, { text, scope }),{text,scope,reason,attachmentIds});
+    if(proposalId && proposalId!==plan.id)throw new TaskError(409,'INSTRUCTION_CHANGED','補充內容或影響範圍已改變，請重新預覽。');
     if (dryRun) return { plan };
     if (plan.impact && !confirmImpact) throw new TaskError(409, 'CONFIRM_IMPACT', plan.impact, { plan });
     if (plan.route === 'answer') {
@@ -1052,8 +1061,7 @@ export class Coach {
       if (plan.route === 'fix') {
         const item = this.item(t, plan.itemId);
         (item.instructions ||= []).push({ text, at: now() });
-        const dependents = t.planning.workItems.filter(i => i.dependsOn?.includes(item.id) && i.status !== 'TODO');
-        for (const d of dependents) d.recheck = `前置項目 ${itemName(item.id)} 已修改，請重新核對`;
+        invalidateDownstream(t.planning.workItems,[item.id],`前置項目 ${itemName(item.id)} 已修改，請重新核對`);
         Object.assign(item, { status: 'REVIEW_FAIL', fixes: [...(item.fixes || []), text], review: item.review ? { ...item.review, superseded: true } : null, doneAt: undefined });
       }
       if (plan.route === 'round') {
@@ -1111,6 +1119,7 @@ export class Coach {
   confirm(id, revision, key, { itemId, accept, note = '' }) {
     return this.store.mutate(id, revision, key, t => {
       const item = this.item(t, itemId);
+      if ((accept || item.owner === 'human') && !ready(t.planning.workItems,item,unlockOf(t))) throw new TaskError(409,'DEPENDENCY_PENDING','前置項目尚未完成，不能確認這項成果。');
       startFeedback(t.planning);
       if (item.owner === 'human') {
         if (item.status !== 'TODO') throw new TaskError(409, 'ITEM_CLOSED', '這一項已完成。');
@@ -1123,7 +1132,7 @@ export class Coach {
           if (!String(note).trim()) throw new TaskError(400, 'NOTE_REQUIRED', '退回時寫下要修什麼，修改的 AI 會照這段做。');
           Object.assign(item, { status: 'REVIEW_FAIL', fixes: [...(item.fixes || []), String(note).trim()] });
           // 完全自動時後續項目可能已經用它做下去了，標成待核對。
-          for (const d of t.planning.workItems.filter(i => i.dependsOn?.includes(item.id) && i.status !== 'TODO')) d.recheck = `前置項目 ${itemName(item.id)} 被退回，請重新核對`;
+          invalidateDownstream(t.planning.workItems,[item.id],`前置項目 ${itemName(item.id)} 被退回，請重新核對`);
         }
       }
       if (t.planning.workItems.every(i => i.status === 'DONE')) {

@@ -117,8 +117,8 @@ test('new task submit failure and upload retry keep the draft text, batch identi
 });
 
 test('impact confirmation preserves IDs, text and scope until confirmed',async()=>{
-  const b=browser(async(url,data)=>{if(url==='/api/uploads/batches')return {id:'batch',results:[{index:0}]};if(url.startsWith('/api/uploads?'))return {attachment:{id:'confirm-id'}};if(!data.confirmImpact)throw Object.assign(new Error('W1 已確認，將重新驗收'),{code:'CONFIRM_IMPACT'});return {};});
+  const b=browser(async(url,data)=>{if(url==='/api/uploads/batches')return {id:'batch',results:[{index:0}]};if(url.startsWith('/api/uploads?'))return {attachment:{id:'confirm-id'}};if(!data.confirmImpact)throw Object.assign(new Error('W1 已確認，將重新驗收'),{code:'CONFIRM_IMPACT',plan:{id:'seen-impact-proposal'}});return {};});
   const t=task('impact-task','execute');const form=b.c.instructionBox(t);b.roots.push(form);const area=form.querySelector('textarea');area.value='調整第二頁';area.oninput();form.querySelector('select').value='W1';form.querySelector('select').onchange();const cached=b.c.taskAttachmentPicker(t.id,'instruction');trigger(cached.host,'drop',[file()]);await cached.picker.ids();
   form.onsubmit({preventDefault(){}});await b.wait();assert.equal(form.querySelector('.impact').hidden,false);assert.equal(area.value,'調整第二頁');assert.deepEqual(Array.from(await cached.picker.ids()),['confirm-id']);
-  await form.querySelector('[data-focus="impact-ok"]').onclick();await b.wait();assert.equal(b.calls[1].data.scope,'W1');assert.equal(b.calls[1].data.confirmImpact,true);assert.deepEqual(Array.from(b.calls[1].data.attachmentIds),['confirm-id']);assert.equal((await cached.picker.ids()).length,0);
+  await form.querySelector('[data-focus="impact-ok"]').onclick();await b.wait();assert.equal(b.calls[1].data.scope,'W1');assert.equal(b.calls[1].data.confirmImpact,true);assert.equal(b.calls[1].data.proposalId,'seen-impact-proposal');assert.deepEqual(Array.from(b.calls[1].data.attachmentIds),['confirm-id']);assert.equal((await cached.picker.ids()).length,0);
 });

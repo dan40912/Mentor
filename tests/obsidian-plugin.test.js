@@ -87,3 +87,15 @@ test('native Vault adapter uses atomic process checks, journals results and pres
   const second=await f.plugin.organization.previewIndex(['來源.md']);await f.plugin.organization.apply(second);await f.plugin.organization.undo(second.id);
   assert.equal(files.get(target),'使用者後來修改','previous managed content is restored exactly');
 });
+
+test('native correction previews a captured request before applying its exact revision and proposal',async()=>{
+ const f=fixture();await f.plugin.onload();f.plugin.token='test-token';
+ const calls=[];f.plugin.api=async(route,input,key)=>{calls.push({route,input,key});return input.dryRun?{plan:{revision:7,id:'proposal-1234567890',request:input.text,label:'請 AI 改計畫',impact:'重新驗收 A 與 B'}}:{}};
+ f.plugin.instruction({id:'TASK-correction',revision:7,planning:{workItems:[]}});
+ const editor=f.modal;const area=all(editor.contentEl).find(e=>e.attrs['aria-label']==='補充或修正內容');area.value='只改表格';
+ await all(editor.contentEl).find(e=>e.text==='預覽這次修改的影響').onclick();
+ assert.equal(calls.length,1);assert.equal(calls[0].input.dryRun,true);
+ const preview=f.modal;assert.ok(all(preview.contentEl).some(e=>e.text==='只改表格'));
+ await all(preview.contentEl).find(e=>e.text==='確認：請 AI 改計畫').onclick();
+ assert.equal(calls.length,2);assert.equal(calls[1].input.proposalId,'proposal-1234567890');assert.equal(calls[1].input.revision,7);assert.equal(calls[1].input.text,'只改表格');assert.ok(calls[1].key);
+});
