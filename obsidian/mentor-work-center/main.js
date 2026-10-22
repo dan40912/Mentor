@@ -453,7 +453,13 @@ module.exports = class MentorPlugin extends Plugin {
   async output(task,file,snapshot=null) {
     const url=localAddress(this.address)+`/api/obsidian/tasks/${task.id}/${snapshot?'artifact-version':'preview'}?file=${encodeURIComponent(file)}`+(snapshot?`&version=${encodeURIComponent(snapshot.id)}&index=${snapshot.index}`:'');
     const r=await requestUrl({url,headers:{Authorization:'Bearer '+this.token},throw:false});if(r.status!==200)throw new Error('無法讀取這份成果，請確認已登記且路徑在任務範圍。');
-    new ReviewModal(this.app,snapshot?'本輪保存版本（不執行 HTML 或腳本）':'目前成果原文（不執行 HTML 或腳本）',host=>{text(host,'p',file);text(host,'pre',r.text,'mentor-source');}).open();
+    let content=r.text;
+    if(/\.md$/i.test(file)){
+      const wrapper=content.match(/^<meta charset="utf-8"><pre style="white-space:pre-wrap;overflow-wrap:anywhere;font:inherit">([\s\S]*)<\/pre>$/);
+      if(!wrapper)throw new Error('Markdown 成果格式不正確，停止讀取。');
+      content=wrapper[1].replace(/&(amp|lt|gt);/g,(_,entity)=>({amp:'&',lt:'<',gt:'>'}[entity]));
+    }
+    new ReviewModal(this.app,snapshot?'本輪保存版本（不執行 HTML 或腳本）':'目前成果原文（不執行 HTML 或腳本）',host=>{text(host,'p',file);text(host,'pre',content,'mentor-source');}).open();
   }
   async handoff(task) {
     const r=await this.api(`/tasks/${task.id}/handoff-summary`);
