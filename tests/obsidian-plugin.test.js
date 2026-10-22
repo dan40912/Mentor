@@ -9,7 +9,9 @@ vm.runInNewContext(await readFile(new URL('../obsidian/mentor-work-center/organi
 const contentModule={exports:{}};
 vm.runInNewContext(await readFile(new URL('../obsidian/mentor-work-center/content-drafts.js',import.meta.url),'utf8'),{module:contentModule,require:name=>name==='./organization'?organizationModule.exports:path});
 const relocationModule={exports:{}};
-vm.runInNewContext(await readFile(new URL('../obsidian/mentor-work-center/relocation.js',import.meta.url),'utf8'),{module:relocationModule,require:name=>name==='./organization'?organizationModule.exports:name==='node:crypto'?crypto:path});
+const coverageModule={exports:{}};
+vm.runInNewContext(await readFile(new URL('../obsidian/mentor-work-center/reference-coverage.js',import.meta.url),'utf8'),{module:coverageModule});
+vm.runInNewContext(await readFile(new URL('../obsidian/mentor-work-center/relocation.js',import.meta.url),'utf8'),{module:relocationModule,require:name=>name==='./reference-coverage'?coverageModule.exports:name==='./organization'?organizationModule.exports:name==='node:crypto'?crypto:path});
 const source=await readFile(new URL('../obsidian/mentor-work-center/main.js',import.meta.url),'utf8');
 class El {
   constructor(tag='',options={}){this.tag=tag;this.text=options.text||'';this.value=options.value||'';this.children=[];this.attrs=options.attr||{};}
@@ -176,7 +178,8 @@ test('native relocation command reads a full snapshot and exposes link differenc
  f.plugin.app.metadataCache={getFileCache:file=>({links:file.path==='引用.md'?[{original:'[[測試]]',link:'測試',position:{start:{offset:0},end:{offset:6}}}]:[]}),getFirstLinkpathDest:link=>link==='測試'?entries[0]:null};
  await f.plugin.previewRelocation();assert.equal(f.requests.length,0);all(f.modal.contentEl).find(e=>e.attrs['aria-label']==='搬移目標筆記路徑').value='知識/新名字.md';
  await all(f.modal.contentEl).find(e=>e.text==='計算搬移與連結草稿').onclick();
- assert.equal(f.modal.title,'搬移與連結草稿 · 尚不可套用');assert.ok(all(f.modal.contentEl).some(e=>e.text.includes('[[知識/新名字]]')));assert.ok(all(f.modal.contentEl).some(e=>e.text.includes('尚未證明索引完整')));assert.equal(all(f.modal.contentEl).filter(e=>e.tag==='button').length,0);assert.equal(f.requests.length,0);assert.equal(files.get('測試.md'),'原文');assert.equal(files.get('引用.md'),'[[測試]]');
+ assert.equal(f.modal.title,'搬移與連結草稿 · 尚不可套用');assert.ok(all(f.modal.contentEl).some(e=>e.text.includes('[[知識/新名字]]')));assert.ok(all(f.modal.contentEl).some(e=>e.text.includes('只涵蓋受支援的 Markdown')));assert.equal(all(f.modal.contentEl).filter(e=>e.tag==='button').length,0);assert.equal(f.requests.length,0);assert.equal(files.get('測試.md'),'原文');assert.equal(files.get('引用.md'),'[[測試]]');
+ f.plugin.app.metadataCache.getFileCache=()=>({links:[]});await f.plugin.previewRelocation();all(f.modal.contentEl).find(e=>e.attrs['aria-label']==='搬移目標筆記路徑').value='知識/新名字.md';await all(f.modal.contentEl).find(e=>e.text==='計算搬移與連結草稿').onclick();assert.ok(all(f.modal.contentEl).some(e=>e.text.includes('本次索引涵蓋核對未通過')));assert.ok(all(f.modal.contentEl).some(e=>e.text.includes('連結數與索引不同')));
 });
 test('native relocation discards a snapshot if note contents change during scanning',async()=>{
  const f=fixture();await f.plugin.onload();const entry={path:'測試.md',stat:{}};let reads=0;

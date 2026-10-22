@@ -164,7 +164,7 @@ module.exports = class MentorPlugin extends Plugin {
     const file=this.app.workspace.getActiveViewOfType(MarkdownView)?.file;
     if(!file)throw new Error('請先開啟要搬移的一般 Markdown 筆記。');
     new ReviewModal(this.app,'搬移／重新命名 · 只讀草稿',(host,modal)=>{
-      text(host,'p','這一步只計算來源、目標與連結變更，不改檔、不呼叫 AI。尚未提供套用與復原；連結索引完整性仍未證明，草稿不能當作可安全執行的授權。');
+      text(host,'p','這一步只計算來源、目標與連結變更，不改檔、不呼叫 AI。會獨立掃描受支援的 Markdown，再與索引逐筆核對。尚未提供套用與復原，草稿不能當作改檔授權。');
       text(host,'p','來源：'+file.path);text(host,'label','目標筆記路徑');const target=host.createEl('input',{type:'text',attr:{'aria-label':'搬移目標筆記路徑',placeholder:'例如：知識庫/主題.md'}});target.value=file.path;
       text(host,'p','填寫筆記庫內的完整相對路徑，以 .md 結尾。需核對整個庫，最多 200 份 Markdown；不略過剩餘筆記。');
       button(host,'計算搬移與連結草稿',async()=>{
@@ -185,7 +185,7 @@ module.exports = class MentorPlugin extends Plugin {
         const plan=compileRelocation(notes,file.path,target.value,allFiles);modal.close();
         new ReviewModal(this.app,'搬移與連結草稿 · 尚不可套用',(preview)=>{
           text(preview,'p',`${plan.from} → ${plan.to}；掃描 ${plan.sources.length} 份筆記、${plan.referenceCount} 筆索引連結。`);
-          text(preview,'p','此版只讀。即使沒有發現阻擋，也尚未證明索引完整，不能宣稱連結都已覆蓋；尚無套用、重試或復原功能。');
+          text(preview,'p',plan.indexCoverage==='VERIFIED_SUPPORTED_MARKDOWN'?'受支援語法的獨立掃描與索引核對通過。此結論只涵蓋受支援的 Markdown，不代表所有外掛或外部參照；此版仍只讀，沒有套用、重試或復原。':'本次索引涵蓋核對未通過，請處理下列阻擋。此版只讀，沒有套用、重試或復原。');
           if(plan.blockers.length){text(preview,'h3',`需先處理 ${plan.blockers.length} 項阻擋`);for(const item of plan.blockers)text(preview,'p',item.path+'：'+item.reason);}
           for(const change of plan.changes){const box=preview.createEl('details');text(box,'summary',change.path+' → '+change.targetPath);text(box,'h4','修改前');text(box,'pre',change.before,'mentor-source');text(box,'h4','草稿修改後');text(box,'pre',change.after,'mentor-source');for(const link of change.replacements)text(box,'p',link.before+' → '+link.after);}
         }).open();

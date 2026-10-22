@@ -2,6 +2,7 @@
 const path=require('node:path').posix;
 const {randomUUID}=require('node:crypto');
 const {hash,safeNote,ROOT}=require('./organization');
+const {noteCoverage}=require('./reference-coverage');
 const key=value=>value.normalize('NFC').toLowerCase();
 const protectedNote=name=>name.startsWith(ROOT+'/')||name.split('/')[0].toLowerCase()==='core';
 function fail(message){throw new Error(message);}
@@ -35,15 +36,17 @@ function compileRelocation(notes,from,to,allPaths=notes.map(n=>n.path)){
  const names=new Set(),source=notes.find(n=>n.path===from);if(!source)fail('找不到來源筆記。');
  const fromName=key(path.basename(from)),toName=key(path.basename(to));
  if(notes.some(n=>n.path!==from&&(key(path.basename(n.path))===fromName||key(path.basename(n.path))===toName)))fail('來源或目標檔名在其他資料夾有同名筆記，需先人工消除連結歧義。');
- const blockers=[],changes=[],sources=[];let referenceCount=0;
+ const blockers=[],changes=[],sources=[];let referenceCount=0,scannedReferences=0;
+ for(const name of allPaths)if(/\.(?:canvas|base|html?|mdx|svg|jsonl?|ya?ml|txt|csv|tsv|[cm]?js|css|toml|xml|excalidraw)$/i.test(name)&&!new RegExp('^'+ROOT+'/復原紀錄/[a-f0-9-]{36}\\.json$').test(name))blockers.push({path:name,reason:'此檔案類型可能包含參照，尚未支援完整核對。'});
  for(const note of notes){
   safeNote(note.path);referencePath(note.path);if(names.has(key(note.path)))fail('掃描清單有重複或大小寫衝突。');names.add(key(note.path));
   if(typeof note.content!=='string'||note.content.length>200000)fail('筆記內容不正確或超過 200,000 字。');
   sources.push({path:note.path,hash:hash(note.content)});
-  if(!Array.isArray(note.references)){blockers.push({path:note.path,reason:'尚無可核對的連結索引。'});continue;}
+  const coverage=noteCoverage(note);scannedReferences+=coverage.references.length;
+  referenceCount+=Array.isArray(note.references)?note.references.length:0;if(referenceCount>10000)fail('連結超過 10,000 筆，不能忽略剩餘連結。');
+  if(!coverage.verified){for(const reason of coverage.blockers)blockers.push({path:note.path,reason});continue;}
   const replacements=[];let previousEnd=-1;
   for(const ref of [...note.references].sort((a,b)=>a.start-b.start)){
-   if(++referenceCount>10000)fail('連結超過 10,000 筆，請先縮小整個示範庫範圍，不能忽略剩餘連結。');
    if(!Number.isSafeInteger(ref.start)||!Number.isSafeInteger(ref.end)||ref.start<previousEnd||ref.start<0||ref.end<=ref.start||ref.end>note.content.length||typeof ref.original!=='string'||typeof ref.link!=='string'||note.content.slice(ref.start,ref.end)!==ref.original){blockers.push({path:note.path,reason:'連結索引位置與原文不一致，請等待重新索引。'});continue;}
    previousEnd=ref.end;
    const movingNote=note.path===from;
@@ -59,8 +62,9 @@ function compileRelocation(notes,from,to,allPaths=notes.map(n=>n.path)){
   let after=note.content;for(const item of [...replacements].reverse())after=after.slice(0,item.start)+item.after+after.slice(item.end);
   if(note.path===from||after!==note.content)changes.push({path:note.path,targetPath:note.path===from?to:note.path,before:note.content,after,replacements});
  }
+ if(allPaths.filter(name=>/\.md$/i.test(name)).some(name=>!names.has(key(name)))||notes.some(note=>!allPaths.includes(note.path)))fail('未完整提供筆記庫 Markdown 清單，不能核對部分來源。');
  if(source.content.includes('awc:begin'))blockers.push({path:from,reason:'Mentor 任務正本不可搬移。'});
- const plan={version:1,kind:'relocation-preview',id:randomUUID(),createdAt:new Date().toISOString(),from,to,sources,changes,blockers,referenceCount,indexCoverage:'UNVERIFIED',application:'NOT_IMPLEMENTED'};
+ const plan={version:1,kind:'relocation-preview',id:randomUUID(),createdAt:new Date().toISOString(),from,to,sources,changes,blockers,referenceCount,scannedReferences,indexCoverage:blockers.length?'BLOCKED':'VERIFIED_SUPPORTED_MARKDOWN',application:'NOT_IMPLEMENTED'};
  plan.digest=hash(JSON.stringify(plan));return plan;
 }
 module.exports={compileRelocation};

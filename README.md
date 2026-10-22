@@ -73,7 +73,7 @@ Open `dist/mentor-obsidian` as a **separate demonstration Vault** in Obsidian de
 - Move/rename currently has a command-palette, read-only link draft only. Applying it is unavailable; index coverage, writes and recovery are still incomplete.
 - Inspect organization history, retry partial failures and undo unchanged results. Later human edits remain intact as conflicts. Interrupted operations require explicit reconciliation before retrying.
 
-Markdown remains readable when the theme or plugin is disabled. The packager does not install into a real Vault; dist is rebuildable output. Back up before upgrading and replace main.js, organization.js, content-drafts.js, relocation.js, manifest.json and styles.css together. [Setup, recovery and limitations](docs/obsidian-work-center.md) (Traditional Chinese).
+Markdown remains readable when the theme or plugin is disabled. The packager does not install into a real Vault; dist is rebuildable output. Back up before upgrading and replace main.js, organization.js, content-drafts.js, relocation.js, reference-coverage.js, manifest.json and styles.css together. [Setup, recovery and limitations](docs/obsidian-work-center.md) (Traditional Chinese).
 
 ## Data, permissions and privacy
 

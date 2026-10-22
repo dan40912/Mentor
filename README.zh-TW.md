@@ -73,7 +73,7 @@ npm run package:obsidian
 - 搬移／重新命名目前只有命令面板的只讀連結草稿，尚不可套用；索引完整性、寫入與復原仍待實作及驗證。
 - 「整理與復原紀錄」支援部分失敗重試及復原。後來被人修改的內容會保留並提示衝突。中斷先核對結果，不盲目重跑。
 
-停用 Theme／插件後，Markdown 仍可閱讀。套裝生成器不安裝到正式 Vault；`dist/` 是可重建產出，不要放正式筆記。升級前備份，插件需一併替換 main.js、organization.js、content-drafts.js、relocation.js、manifest.json、styles.css。[完整安裝、復原與限制](docs/obsidian-work-center.md)。
+停用 Theme／插件後，Markdown 仍可閱讀。套裝生成器不安裝到正式 Vault；`dist/` 是可重建產出，不要放正式筆記。升級前備份，插件需一併替換 main.js、organization.js、content-drafts.js、relocation.js、reference-coverage.js、manifest.json、styles.css。[完整安裝、復原與限制](docs/obsidian-work-center.md)。
 
 ## 資料、權限與隱私
 

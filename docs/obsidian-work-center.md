@@ -77,7 +77,11 @@ Web 任務內展開「有疑問？先問，不改成果」；原生任務視窗�
 
 目前計算支援可核對位置的 Wiki 連結、別名、嵌入、標題／區塊錨點與簡單 Markdown 行內連結；來源內部的相對連結也會依新位置計算。原文位置不符、無法解析的來源連結、未支援格式、受保護筆記的反向連結、同名歧義與路徑衝突都會列為阻擋或拒絕產生草稿。掃描期間檔案清單或筆記內容改變也會拒絕。
 
-**這尚未完成搬移功能。** 公開連結索引的完整性尚無充分驗證；比對已有位置，不能證明索引沒有漏掉新連結。Canvas／其他外掛參照、部分 Properties 連結、複雜 Markdown 及其他間接引用尚未驗證。即使沒有阻擋項目，也不能宣稱可安全套用。後續還需完成完整性檢查、版本綁定套用、連結更新、中斷核對及可復原紀錄，才會開放改檔。
+獨立掃描器會從目前原文辨認受支援的連結，再逐筆核對索引的數量、位置、原始語法與連結目標文字。它能攔下索引漏掉新連結、留下舊連結及位置過期的情況。一般程式範例、行內程式碼、註解、核取方塊及 Callout 標記不冒充有效連結。
+
+掃描器採保守範圍：參考式連結、Properties 中的連結或集合、巢狀／縮排程式區塊中的可能連結、數學語法、HTML、自動連結、動態查詢及未結束的語法會阻擋。庫中另有 Canvas、Bases、JSON、HTML、SVG、文字／程式檔等可能存放參照的檔案也會阻擋；由本功能保留的既有復原 JSON 是不可改寫的歷史證據，不當成目前連結來源。
+
+**這尚未完成搬移功能。** 核對通過只標為 `VERIFIED_SUPPORTED_MARKDOWN`，不證明所有外掛、二進位附件內部或外部參照的完整性，更不等於 Obsidian 實機驗收。未通過則為 `BLOCKED`。後續仍需完成版本綁定套用、連結寫入、中斷核對及可復原紀錄；目前沒有改檔按鈕。
 
 技術依據為 Obsidian 公開的 [ReferenceCache／MetadataCache 型別](https://github.com/obsidianmd/obsidian-api/blob/master/obsidian.d.ts)；本實作未呼叫 renameFile 或 Vault.rename，不以索引草稿冒充原生搬移驗收。
 
@@ -131,7 +135,7 @@ Theme 使用系統字型、Obsidian 變數與原創紙色／森林綠配色，�
 
 停用 Theme 回到其他外觀；停用插件不影響筆記原文。人工整理的範本與側欄保存的接手包仍可閱讀。正式 Mentor 任務檔仍在 MENTOR_HOME/vault，不因插件停用而搬移。
 
-要升級，先備份示範庫與你保存的筆記，再手動替換插件的 main.js、organization.js、content-drafts.js、relocation.js、manifest.json、styles.css 或 Theme；不覆寫範本中已填寫的內容。正式庫升級流程仍待實機驗收。
+要升級，先備份示範庫與你保存的筆記，再手動替換插件的 main.js、organization.js、content-drafts.js、relocation.js、reference-coverage.js、manifest.json、styles.css 或 Theme；不覆寫範本中已填寫的內容。正式庫升級流程仍待實機驗收。
 
 ## 使用量
 
