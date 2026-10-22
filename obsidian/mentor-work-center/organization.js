@@ -40,6 +40,10 @@ function fingerprint(plan) { const {digest,...body}=plan;return hash(JSON.string
 function validatePlan(plan) {
   if(!plan||![1,2].includes(plan.version)||!/^[a-f0-9-]{36}$/.test(plan.id)||plan.digest!==fingerprint(plan))fail('PLAN_CHANGED','方案內容已改變，請重新產生預覽。');
   if(!Array.isArray(plan.sources)||!Array.isArray(plan.operations)||!plan.operations.length||plan.operations.length>40||plan.sources.length>40)fail('PLAN_INVALID','方案數量不正確。');
+  if(plan.basis){
+    const basis=plan.basis;
+    if(plan.kind!=='tags'||plan.operations.length!==1||basis.sourcePath!==plan.operations[0].path||typeof plan.operations[0].before!=='string'||basis.sourceSha256!==hash(plan.operations[0].before)||!/^TASK-[a-zA-Z0-9-]+$/.test(basis.taskId)||!/^[a-f0-9-]{36}$/.test(basis.requestKey)||!Number.isSafeInteger(basis.resultRevision)||basis.resultRevision<1)fail('SOURCE_STALE','分類建議的來源或任務版本不一致，請重新產生建議。');
+  }
   const seen=new Set();
   for(const source of plan.sources){safeNote(source.path);if(seen.has(source.path))fail('SOURCE_DUPLICATE','來源重複。');seen.add(source.path);}
   const targets=new Set(),operationIds=new Set();for(const op of plan.operations){if(typeof op.id!=='string'||!/^op-[0-9]+$/.test(op.id)||operationIds.has(op.id))fail('PLAN_INVALID','操作識別重複或不正確。');operationIds.add(op.id);if(plan.version===2){if(plan.kind!=='tags'||op.after!==tagText(op.path,op.before,op.tags))fail('PLAN_INVALID','標籤方案只能新增你預覽的分類區塊。');}else managed(op.path);if(seen.has(op.path)||targets.has(op.path))fail('OUTPUT_OVERLAP','來源與產出不可重疊，產出也不可重複。');targets.add(op.path);if(typeof op.after!=='string'||op.after.length>200000||!(op.before===null||typeof op.before==='string'))fail('PLAN_INVALID','產出內容不正確。');}
@@ -58,7 +62,7 @@ class Organization {
     for(const name of [...new Set(paths)].sort()){safeNote(name);if(name.startsWith(ROOT+'/'))fail('SOURCE_SCOPE','整理資料夾不作為自己的來源。');const content=await this.io.read(name);if(content===null)fail('SOURCE_MISSING','來源已不存在：'+name);sources.push({path:name,hash:hash(content)});}
     return this.previewWrites(sources,[{path:target,after:indexText(title,sources,target)}],'建立筆記索引');
   }
-  async previewTags(paths,tags) {
+  async previewTags(paths,tags,basis=null) {
     tags=normalizeTags(tags);
     if(!Array.isArray(paths)||!paths.length||paths.length>40)fail('SOURCE_LIMIT','請選 1～40 份筆記。');
     const operations=[];for(const name of [...new Set(paths)].sort()){
@@ -66,7 +70,7 @@ class Organization {
       const after=tagText(name,before,tags);if(after!==before)operations.push({id:'op-'+operations.length,path:name,before,after,tags});
     }
     if(!operations.length)fail('NO_CHANGES','已選筆記已有這些分類標籤，不需重複套用。');
-    const plan={version:2,kind:'tags',id:randomUUID(),label:'加上分類標籤',createdAt:new Date().toISOString(),sources:[],operations};plan.digest=fingerprint(plan);validatePlan(plan);return plan;
+    const plan={version:2,kind:'tags',id:randomUUID(),label:'加上分類標籤',createdAt:new Date().toISOString(),sources:[],operations,...(basis?{basis}: {})};plan.digest=fingerprint(plan);validatePlan(plan);return plan;
   }
   async previewWrites(sources, outputs, label='保存整理內容') {
     if(!Array.isArray(outputs)||!outputs.length||outputs.length>40)fail('OUTPUT_LIMIT','一次最多準備 40 份產出。');
@@ -130,4 +134,4 @@ class Organization {
     log.status=conflicts.length?'undo-partial':'reverted';log.conflicts=conflicts;log.updatedAt=new Date().toISOString();await this.save(log);return log;
   }); }
 }
-module.exports={Organization,ROOT,HISTORY,hash,safeNote,validatePlan};
+module.exports={Organization,ROOT,HISTORY,hash,safeNote,validatePlan,normalizeTags};

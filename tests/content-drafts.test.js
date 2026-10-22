@@ -22,3 +22,17 @@ test('drafts never silently truncate sources or accept mismatched replies/snapsh
  assert.throws(()=>output(request('source'),reply(),'TASK-draft',undefined),/識別不正確/);
  assert.throws(()=>output(request('source'),{...reply(),discussion:{intent:'unclear'}},'TASK-draft',7),/尚未取得/);
 });
+
+test('AI tag suggestions require a correlated answer and verbatim excerpt evidence; uncertain answers can abstain',()=>{
+ const r=request('tags'),classification=drafts.exports.classification;
+ const value={summary:'分類仍需人確認',suggestions:[{tag:'研究/閱讀',reason:'原文內容相關',quote:'選取的原文'}]};
+ const answer={...reply(),text:JSON.stringify(value)};const result=classification(r,answer,'TASK-draft',7);
+ assert.equal(result.suggestions[0].tag,'研究/閱讀');assert.equal(result.sourceSha256,hash('完整筆記'));assert.equal(result.resultRevision,7);
+ const reordered={...r,organizationDraft:Object.fromEntries(Object.entries(r.organizationDraft).reverse())};assert.equal(snapshotOf(reordered).kind,'tags','metadata property order is not provenance');
+ assert.throws(()=>output(r,answer,'TASK-draft',7),/需先核對/);
+ const abstain=classification(r,{...reply(),text:JSON.stringify({summary:'資訊不足',suggestions:[]})},'TASK-draft',7);assert.equal(abstain.suggestions.length,0);
+ for(const suggestions of [[{...value.suggestions[0],quote:'並不存在的引文'}],[{...value.suggestions[0],tag:'../execute'}],[value.suggestions[0],value.suggestions[0]]])assert.throws(()=>classification(r,{...answer,text:JSON.stringify({...value,suggestions})},'TASK-draft',7));
+ assert.throws(()=>classification(r,answer,'TASK-draft',8),/尚未取得/);
+ assert.throws(()=>classification(r,{...answer,inReplyTo:'other'},'TASK-draft',7),/尚未取得/);
+ assert.throws(()=>classification(r,{...reply(),text:'```json\n{}\n```'},'TASK-draft',7),/格式不正確/);
+});

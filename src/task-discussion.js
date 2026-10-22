@@ -13,7 +13,7 @@ export function discussionResult(text,task) {
 
 export function organizationDraftMetadata(value) {
   if(value==null)return null;
-  if(value.version!==1||!['knowledge','weekly','source'].includes(value.kind)||typeof value.sourcePath!=='string'||!value.sourcePath.endsWith('.md')||value.sourcePath.includes('\\')||value.sourcePath.includes('\0')||value.sourcePath.split('/').some(p=>!p||p==='.'||p==='..'||p.startsWith('.'))||value.sourcePath.startsWith('Mentor 整理/'))throw new Error('整理來源與類型格式不正確。');
+  if(value.version!==1||!['knowledge','weekly','source','tags'].includes(value.kind)||typeof value.sourcePath!=='string'||!value.sourcePath.endsWith('.md')||value.sourcePath.includes('\\')||value.sourcePath.includes('\0')||value.sourcePath.split('/').some(p=>!p||p==='.'||p==='..'||p.startsWith('.'))||value.sourcePath.startsWith('Mentor 整理/'))throw new Error('整理來源與類型格式不正確。');
   if(!/^[a-f0-9]{64}$/.test(value.sourceSha256)||!/^[a-f0-9]{64}$/.test(value.excerptSha256)||typeof value.period!=='string'||value.period.length>80)throw new Error('整理來源版本或期間格式不正確。');
   return {version:1,kind:value.kind,sourcePath:value.sourcePath,sourceSha256:value.sourceSha256,excerptSha256:value.excerptSha256,period:value.period};
 }

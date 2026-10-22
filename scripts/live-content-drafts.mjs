@@ -10,7 +10,7 @@ import {Memory} from '../src/memory.js';
 import {runAgent} from '../src/agents.js';
 import {demoTask} from '../tests/fixtures/demo-task.js';
 if(!process.argv.includes('--run')){
- console.log('Opt-in only. node scripts/live-content-drafts.mjs --run uses real Claude quota for three fictional drafts. It previews but never applies notes to a Vault.');
+ console.log('Opt-in only. node scripts/live-content-drafts.mjs --run uses real Claude quota for three fictional drafts; add --classification for one fictional tag-suggestion call instead. It previews but never applies notes to a Vault.');
 }else{
  for(const name of ['AWC_CODEX_BIN','AWC_CLAUDE_BIN'])if(process.env[name])throw Error('Refusing live CLI overrides');
  const repo=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..'),home=path.join(repo,'.lab-home','content-drafts-'+randomUUID().slice(0,8)),vault=path.join(home,'vault'),notes=path.join(home,'note-vault');await mkdir(vault,{recursive:true});await mkdir(notes);
@@ -24,12 +24,19 @@ if(!process.argv.includes('--run')){
  const engine=new organization.exports.Organization({read:async name=>readFile(path.join(notes,name),'utf8').catch(e=>{if(e.code==='ENOENT')return null;throw e;}),createJournal:async()=>{throw Error('Preview test cannot write notes');},writeJournal:async()=>{throw Error('Preview test cannot write notes');},compareWrite:async()=>{throw Error('Preview test cannot write notes');}});
  const evidence={at:new Date().toISOString(),nodeVersion:process.version,requestedProvider:'claude',requestedModel:'sonnet',requestedEffort:'low',sourceSha256:hash(source),coreBeforeSha256:before,results:[],noteApplication:'NOT_RUN',humanContentAcceptance:'NOT_RUN',obsidianDesktop:'NOT_RUN'};
  const save=()=>writeFile(path.join(home,'evidence.json'),JSON.stringify(evidence,null,2));await save();console.log('Evidence directory: '+home);
- for(const kind of ['knowledge','weekly','source']){
+ for(const kind of (process.argv.includes('--classification')?['tags']:['knowledge','weekly','source'])){
   console.log('Real CLI draft: '+kind);const current=await coach.latest(task.id),key=randomUUID(),request=drafts.exports.prepare(kind,'來源.md',hash(source),source,'');
   const run=await coach.discuss(task.id,current.revision,key,request);await run.done;
   const latest=await coach.latest(task.id),message=latest.planning.messages.find(m=>m.requestKey===key),reply=latest.planning.messages.find(m=>m.inReplyTo===key);
-  const output=drafts.exports.output(message,reply,task.id,reply?.resultRevision),plan=await engine.previewWrites([{path:'來源.md',hash:hash(source)}],[output],'AI content draft');await engine.verifySources(plan);
-  const turn=latest.planning.learningTurns.at(-1);evidence.results.push({kind,status:turn.status,intent:reply.discussion.intent,resultRevision:reply.resultRevision,usage:turn.usage,elapsedMs:turn.elapsedMs,previewPath:output.path,previewSha256:hash(output.after),preview:output.after,coreUnchanged:hash(core(latest))===before,sourceUnchanged:hash(await readFile(path.join(notes,'來源.md'),'utf8'))===hash(source)});await save();
+  let plan,basis;
+  if(kind==='tags'){
+   basis=drafts.exports.classification(message,reply,task.id,reply?.resultRevision);
+   if(basis.suggestions.length)plan=await engine.previewTags([basis.sourcePath],basis.suggestions.map(item=>item.tag),basis);
+  }else{
+   const output=drafts.exports.output(message,reply,task.id,reply?.resultRevision);plan=await engine.previewWrites([{path:'來源.md',hash:hash(source)}],[output],'AI content draft');await engine.verifySources(plan);
+  }
+  const output=plan?.operations[0];
+  const turn=latest.planning.learningTurns.at(-1);evidence.results.push({kind,status:turn.status,intent:reply.discussion.intent,resultRevision:reply.resultRevision,usage:turn.usage,elapsedMs:turn.elapsedMs,...(basis?{basis}:{}),previewPath:output?.path??null,previewSha256:output?hash(output.after):null,preview:output?.after??null,coreUnchanged:hash(core(latest))===before,sourceUnchanged:hash(await readFile(path.join(notes,'來源.md'),'utf8'))===hash(source)});await save();
  }
  console.log(JSON.stringify({evidence:path.join(home,'evidence.json'),results:evidence.results.map(({kind,status,intent,coreUnchanged,sourceUnchanged})=>({kind,status,intent,coreUnchanged,sourceUnchanged})),noteApplication:evidence.noteApplication,humanContentAcceptance:evidence.humanContentAcceptance},null,2));
  if(evidence.results.some(r=>r.status!=='completed'||!r.coreUnchanged||!r.sourceUnchanged))process.exitCode=1;

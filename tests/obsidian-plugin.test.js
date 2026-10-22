@@ -146,3 +146,23 @@ test('native tag command previews selected notes without model calls and uses co
  await all(preview.contentEl).find(e=>e.text==='套用已選的整理方案').onclick();assert.match(files.get('測試.md'),/#待核對 #研究\/閱讀/);assert.equal(files.get('第二.md'),'# 不選');assert.equal(f.requests.length,0);
  const history=[...files.keys()].find(p=>p.endsWith('.json'));await f.plugin.organization.undo(JSON.parse(files.get(history)).plan.id);assert.equal(files.get('測試.md'),'---\ntags: [既有]\n---\n# 原文');
 });
+
+test('native AI classification passes through evidence, editable tags, exact preview and source-version checks',async()=>{
+ const f=fixture();await f.plugin.onload();const org=organizationModule.exports;
+ const prepared=contentModule.exports.prepare('tags','測試.md',org.hash('原始筆記'),'原始筆記',''),key='12345678-1234-1234-1234-123456789abc';
+ const request={role:'user',kind:'discussion',text:prepared.question,organizationDraft:prepared.organizationDraft,requestKey:key};
+ const reply={role:'ai',kind:'discussion',inReplyTo:key,resultRevision:8,text:JSON.stringify({summary:'建議人工核對',suggestions:[{tag:'研究',reason:'與來源相關',quote:'原始筆記'}]}),discussion:{intent:'question'}};
+ f.plugin.api=async()=>({tasks:[{id:'TASK-tags',revision:99,planning:{messages:[request,reply]}}]});
+ const files=new Map([['測試.md','原始筆記']]);f.plugin.app.vault.getMarkdownFiles=()=>[{path:'測試.md'},{path:'其他.md'}];
+ f.plugin.organization=new org.Organization({read:async p=>files.get(p)??null,createJournal:async(p,v)=>files.set(p,v),writeJournal:async(p,v)=>files.set(p,v),compareWrite:async(p,b,a)=>{assert.equal(files.get(p),b);files.set(p,a);}});
+ await f.plugin.contentDraft('TASK-tags',key);assert.equal(files.size,1);assert.ok(all(f.modal.contentEl).some(e=>e.tag==='blockquote'&&e.text==='原始筆記'));
+ await all(f.modal.contentEl).find(e=>e.text==='帶入標籤草稿，再預覽變更').onclick();
+ const chooser=f.modal;assert.ok(all(chooser.contentEl).some(e=>e.text==='測試.md'));
+ assert.ok(!all(chooser.contentEl).some(e=>e.text==='其他.md'),'suggestions cannot expand to unrelated notes');
+ const tags=all(chooser.contentEl).find(e=>e.attrs['aria-label']==='要加上的分類標籤');assert.equal(tags.value,'研究');tags.value='人工調整';
+ files.set('測試.md','來源已改');await all(chooser.contentEl).find(e=>e.text==='預覽分類標籤變更').onclick();assert.match(f.notices.at(-1),/來源或任務版本不一致/);assert.equal(files.size,1);
+ files.set('測試.md','原始筆記');await all(chooser.contentEl).find(e=>e.text==='預覽分類標籤變更').onclick();const preview=f.modal;
+ await all(preview.contentEl).find(e=>e.text==='套用已選的整理方案').onclick();assert.match(files.get('測試.md'),/#人工調整/);
+ const journal=JSON.parse(files.get([...files.keys()].find(p=>p.endsWith('.json'))));assert.equal(journal.plan.basis.resultRevision,8);assert.equal(journal.plan.basis.suggestions[0].tag,'研究');assert.equal(journal.plan.operations[0].tags[0],'人工調整');
+ await f.plugin.organization.undo(journal.plan.id);assert.equal(files.get('測試.md'),'原始筆記');
+});

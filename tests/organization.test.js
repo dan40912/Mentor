@@ -60,3 +60,10 @@ test('classification uses stale checks, partial retry and conflict-aware undo fo
  const plan=await f.engine.previewTags(['研究/第一篇.md','研究/第二篇.md'],['研究']);f.failPath='研究/第二篇.md';assert.equal((await f.engine.apply(plan)).status,'partial');
  f.failPath=null;assert.equal((await f.engine.apply(plan)).status,'applied');f.files.set('研究/第一篇.md','人工新內容');assert.equal((await f.engine.undo(plan.id)).status,'undo-partial');assert.equal(f.files.get('研究/第一篇.md'),'人工新內容');assert.equal(f.files.get('研究/第二篇.md'),'# B');
 });
+
+test('AI-based tag plans retain provenance and cannot be refreshed against a changed source',async()=>{
+ const f=fixture(),basis={sourcePath:'研究/第一篇.md',sourceSha256:hash('# A'),excerptSha256:hash('# A'),taskId:'TASK-tags',requestKey:'12345678-1234-1234-1234-123456789abc',resultRevision:8,summary:'需要確認',suggestions:[{tag:'研究',quote:'# A',reason:'來源'}]};
+ const plan=await f.engine.previewTags([basis.sourcePath],['研究'],basis);assert.equal(plan.basis.requestKey,basis.requestKey);assert.equal((await f.engine.apply(plan)).status,'applied');assert.equal((await f.engine.load(plan.id)).plan.basis.resultRevision,8);await f.engine.undo(plan.id);
+ f.files.set(basis.sourcePath,'來源後來更新');await assert.rejects(f.engine.previewTags([basis.sourcePath],['研究'],basis),{code:'SOURCE_STALE'});
+ f.files.set(basis.sourcePath,'# A');await assert.rejects(f.engine.previewTags([basis.sourcePath,'研究/第二篇.md'],['研究'],basis),{code:'SOURCE_STALE'});
+});

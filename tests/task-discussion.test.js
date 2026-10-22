@@ -58,11 +58,11 @@ test('question restart recovery preserves uncertainty without creating a write-w
 
 test('organization metadata persists as inert provenance with a correlated, versioned answer',async t=>{
  let calls=0;const f=await setup(t,async()=>{calls++;return {text:JSON.stringify({intent:'question',answer:'## 知識草稿\n尚待核對。',scope:'current',proposedChange:''})};});
- const metadata={version:1,kind:'knowledge',sourcePath:'研究/來源.md',sourceSha256:'a'.repeat(64),excerptSha256:'b'.repeat(64),period:'',outputDir:'/outside'};
+ const metadata={version:1,kind:'tags',sourcePath:'研究/來源.md',sourceSha256:'a'.repeat(64),excerptSha256:'b'.repeat(64),period:'',outputDir:'/outside'};
  const input={revision:1,question:'請依來源快照預寫內容，不修改任何檔案。',organizationDraft:metadata};
  const response=await f.post(input);assert.equal(response.status,202);await f.app.settle();
  const task=await f.app.coach.latest(f.task.id),user=task.planning.messages.find(m=>m.organizationDraft),answer=task.planning.messages.find(m=>m.inReplyTo===user.requestKey);
- assert.equal(user.organizationDraft.outputDir,undefined);assert.equal(answer.resultRevision,task.revision);assert.equal(answer.inReplyTo,user.requestKey);assert.deepEqual(task.planning.workItems,f.task.planning.workItems);
+ assert.equal(user.organizationDraft.kind,'tags');assert.equal(user.organizationDraft.outputDir,undefined);assert.equal(answer.resultRevision,task.revision);assert.equal(answer.inReplyTo,user.requestKey);assert.deepEqual(task.planning.workItems,f.task.planning.workItems);
  const compact=compactHandoff(task).content;assert.match(compact,/正文保留於完整對話/);assert.doesNotMatch(compact,/## 知識草稿/);
  f.app.coach.questions.clear();assert.equal((await f.post(input)).status,200);assert.equal(calls,1);
  assert.equal((await f.post({...input,organizationDraft:{...metadata,period:'different'}})).status,409);
