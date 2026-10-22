@@ -5,7 +5,7 @@
 ## 工作基準
 
 - Repo：dan40912/Mentor；基於既有 lab-zero-touch 的 commit `5b8c7e89eadf6e1a833651a695037b184109864b`。
-- 目前分支：codex/mentor-relocation-apply；前一批 codex/mentor-obsidian-workflow 的 PR #2 已由外部操作合併（來源 9e75eea，main merge 94a4aa2）。
+- 目前分支：codex/mentor-obsidian-reading-flow（以升級 PR #4 為前置；#4 依賴搬移 PR #3）；搬移分支為 codex/mentor-relocation-apply；前一批 codex/mentor-obsidian-workflow 的 PR #2 已由外部操作合併（來源 9e75eea，main merge 94a4aa2）。
 - 獨立 worktree；原始 checkout 的 agents／coach／handoffs／server／web 修改，以及 Body-release、POC 與其他未追蹤檔均未覆蓋或帶入。
 - 基線：npm test，276 pass／0 fail。
 
@@ -192,3 +192,27 @@
 - 本批完整自動測試：344 pass／0 fail；npm run package:obsidian 與 git diff --check 通過。原生隔離操作與實際檔案系統均有覆蓋，未操作正式 Vault，Obsidian 桌面與真人驗收仍未完成。
 
 - PR 交付：原 PR #2 在開發期間由外部操作合併；後續搬移提交已改以 `codex/mentor-relocation-apply` 開 [Draft PR #3](https://github.com/dan40912/Mentor/pull/3)，不更動 main 或自行合併。先前誤寫到已合併 PR 的本批說明已還原為 #2 的歷史內容。
+
+
+## 第十五批：安裝核對與保留人工內容的重建
+
+- 套裝改為明確 runtime 檔案清單，只分發非隱藏 Markdown 範例；來源資料夾的 data.json／其他狀態不會夾帶。建置追蹤檔保存產生檔案 hash，先核對全部輸出；已改過或無法確認所有權的檔案停止，不覆寫。
+- 改善 dist symlink 檢查順序，在建立子目錄之前拒絕外部連結；寫入拒絕晚到的替換及 hard link。新工具不接受正式 Vault 作為建置目標，也不提供強制覆寫旗標。
+- 新增 verify:obsidian -- --vault，唯讀比對 9 個 runtime 檔案與此 checkout，找出漏裝、混版及不安全路徑。不讀筆記、data.json 或憑證，不自動安裝或啟用；PASS 只是檔案比對，並非實機驗收。
+- 隔離真實檔案系統驗證追蹤升級、人工範本拒絕、手動只換 runtime 再回復、設定／筆記／日誌保留、舊版未追蹤產出、symlink 目標與 hard link。正式庫與 Obsidian 實機仍未操作。
+- 此批另開依賴 PR #3 的 Draft PR，維持獨立審查。完整目標仍包含真人／桌面／跨平台真實 CLI 驗收及可靠 Token 效率證據，尚未完成。
+
+- 本批完整自動測試：349 pass／0 fail；套裝建置、verify:obsidian（9 個 runtime matched）與 git diff --check 通過。這是隔離檔案系統／checksum 證據，未替代 Obsidian 實機升級與真人驗收。
+
+
+## 第十六批：先看最近變化，再追查歷史
+
+- 原生側欄將整理工具集中於可展開入口；任務視窗先看最近一輪，先前回合與檢查紀錄按需展開。未通過檢查仍在摘要指出，不因收合而隱藏目前失敗；舊理解未記錄時不回填目前目標。
+- 共用 work-cards 角色標籤改為中文用途，A–F 機器階段保留；原生及普通 Markdown 補上模擬回合標記。AI 自述、機器證據與人工驗收持續分開。
+- 新增示範庫的「實機測試：表格與工作回合」，提供無 AI 帳號的閱讀階段、可選的真實 CLI scoped 表格任務、六個真人理解問題及未測預設的回覆範本；沒有假造使用者觀察。
+- 校正交接教學：區分非截斷摘要與 8,000 字元舊 brief 的拒絕／選擇性省略行為，說明外部 AI 的實際檔案取得與版本核對，修復已不存在的 roadmap 連結。
+- UI 結構、欄位、冗餘、行為一致性與待驗收項目見 native-reading-review.md。已向使用者索取文字實機觀察；尚無真人或桌面結果，不宣稱設計或完整流程已驗收。
+
+- 本批完整自動測試：350 pass／0 fail；針對歷史失敗證據、目前失敗摘要、缺檢查及模擬標記有回歸。尚未收到真人／桌面觀察，不能將示範步驟當成已驗收。
+
+- 追加閱讀一致性：Web 完整回合視窗補上模擬標記；歷史成果按鍵標示目前檔案並列出當輪 SHA，避免把重新開啟的現檔誤當成歷史原始內容。固定快照測試服務仍標記 b976cda，這項 Web 提示後續在 PR head 驗證，不混稱同一版本。
