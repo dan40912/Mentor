@@ -61,17 +61,20 @@ test('preview binds the revision and exact scope; wrong digest, stale revision, 
 test('work cards keep historical understanding, separate AI claims from machine evidence and preserve them in Markdown', () => {
   const task = demoTask();
   const context = turnContext(task);
-  task.planning.learningTurns = [{ id: 'turn-1', stage: 'D', status: 'completed', beforeRevision: 2, afterRevision: 4, prompt: '表格', response: '完成', context, learning: { change: '換色', evidence: 'AI 說已測' }, outputs: [{ file: 'theme.css' }], checks: [{ id: 'syntax', result: 'FAIL', detail: '語法錯誤' }] }, { id: 'old', stage: 'D', status: 'unknown' }];
+  task.planning.learningTurns = [{ id: 'turn-1', stage: 'D', simulated:true, status: 'completed', beforeRevision: 2, afterRevision: 4, prompt: '表格', response: '完成', context, learning: { change: '換色', evidence: 'AI 說已測' }, outputs: [{ file: 'theme.css' }], checks: [{ id: 'syntax', result: 'FAIL', detail: '語法錯誤' }] }, { id: 'old', stage: 'D', status: 'unknown' }];
   task.goal = '後來換了目標';
   const cards = workCards(task);
   assert.equal(cards[0].context.interpretation, '示範目標');
   assert.equal(cards[0].checks[0].result, 'FAIL');
+  assert.equal(cards[0].roleLabel,'成果製作');
   assert.equal(cards[0].aiClaims.evidence, 'AI 說已測');
   assert.equal(cards[1].context, null);
   assert.equal(cards[1].aiClaims, null);
   assert.equal(cards[0].contextMetrics.input.tokens, null);
   assert.deepEqual(measureText('表格'), { characters: 2, utf8Bytes: 6, tokens: null, tokenSource: 'unavailable' });
   assert.match(workCardsMarkdown(task), /FAIL/);
+  assert.match(workCardsMarkdown(task),/成果製作（D）/);
+  assert.match(workCardsMarkdown(task),/示範／模擬回合，未呼叫真實 AI/);
   const restored = parseTask(serializeTask(task), task.id + '.md');
   assert.equal(restored.planning.learningTurns[0].context.interpretation, '示範目標');
 });

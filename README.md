@@ -74,6 +74,8 @@ Open `dist/mentor-obsidian` as a **separate demonstration Vault** in Obsidian de
 - Move/rename previews the note and link changes, then requires confirmation within the supported Markdown scope. Journals support explicit interruption reconciliation, retries and whole-bundle undo; later changes block undo and remain intact. Native desktop acceptance is pending.
 - Inspect organization history, retry partial failures and undo unchanged results. Later human edits remain intact as conflicts. Interrupted operations require explicit reconciliation before retrying.
 
+The native task view leads with the latest round; history and detailed checks expand on demand. Failed checks and simulated rounds stay explicit. The demonstration Vault includes a table/round-reading exercise, starting without an AI account.
+
 Markdown remains readable when the theme or plugin is disabled. The packager does not install into a real Vault; dist is rebuildable output. Rebuilding refuses edited generated files. The verifier compares runtime checksums only; it does not prove native behavior. Back up before upgrading and replace main.js, organization.js, content-drafts.js, relocation.js, reference-coverage.js, manifest.json and styles.css together. [Setup, recovery and limitations](docs/obsidian-work-center.md) (Traditional Chinese).
 
 ## Data, permissions and privacy

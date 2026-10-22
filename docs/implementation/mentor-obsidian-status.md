@@ -5,7 +5,7 @@
 ## 工作基準
 
 - Repo：dan40912/Mentor；基於既有 lab-zero-touch 的 commit `5b8c7e89eadf6e1a833651a695037b184109864b`。
-- 目前分支：codex/mentor-obsidian-upgrade-verification（以搬移 PR #3 為前置）；搬移分支為 codex/mentor-relocation-apply；前一批 codex/mentor-obsidian-workflow 的 PR #2 已由外部操作合併（來源 9e75eea，main merge 94a4aa2）。
+- 目前分支：codex/mentor-obsidian-reading-flow（以升級 PR #4 為前置；#4 依賴搬移 PR #3）；搬移分支為 codex/mentor-relocation-apply；前一批 codex/mentor-obsidian-workflow 的 PR #2 已由外部操作合併（來源 9e75eea，main merge 94a4aa2）。
 - 獨立 worktree；原始 checkout 的 agents／coach／handoffs／server／web 修改，以及 Body-release、POC 與其他未追蹤檔均未覆蓋或帶入。
 - 基線：npm test，276 pass／0 fail。
 
@@ -203,3 +203,14 @@
 - 此批另開依賴 PR #3 的 Draft PR，維持獨立審查。完整目標仍包含真人／桌面／跨平台真實 CLI 驗收及可靠 Token 效率證據，尚未完成。
 
 - 本批完整自動測試：349 pass／0 fail；套裝建置、verify:obsidian（9 個 runtime matched）與 git diff --check 通過。這是隔離檔案系統／checksum 證據，未替代 Obsidian 實機升級與真人驗收。
+
+
+## 第十六批：先看最近變化，再追查歷史
+
+- 原生側欄將整理工具集中於可展開入口；任務視窗先看最近一輪，先前回合與檢查紀錄按需展開。未通過檢查仍在摘要指出，不因收合而隱藏目前失敗；舊理解未記錄時不回填目前目標。
+- 共用 work-cards 角色標籤改為中文用途，A–F 機器階段保留；原生及普通 Markdown 補上模擬回合標記。AI 自述、機器證據與人工驗收持續分開。
+- 新增示範庫的「實機測試：表格與工作回合」，提供無 AI 帳號的閱讀階段、可選的真實 CLI scoped 表格任務、六個真人理解問題及未測預設的回覆範本；沒有假造使用者觀察。
+- 校正交接教學：區分非截斷摘要與 8,000 字元舊 brief 的拒絕／選擇性省略行為，說明外部 AI 的實際檔案取得與版本核對，修復已不存在的 roadmap 連結。
+- UI 結構、欄位、冗餘、行為一致性與待驗收項目見 native-reading-review.md。已向使用者索取文字實機觀察；尚無真人或桌面結果，不宣稱設計或完整流程已驗收。
+
+- 本批完整自動測試：350 pass／0 fail；針對歷史失敗證據、目前失敗摘要、缺檢查及模擬標記有回歸。尚未收到真人／桌面觀察，不能將示範步驟當成已驗收。

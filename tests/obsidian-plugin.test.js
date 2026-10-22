@@ -204,3 +204,10 @@ test('source shortcut persistence can be retried if preference storage fails aft
  const f=fixture();await f.plugin.onload();f.plugin.sources={'TASK-old':{path:'A.md',hash:'original'}};const save=f.plugin.saveData.bind(f.plugin);let attempts=0;f.plugin.saveData=async data=>{if(++attempts===1)throw Error('preference storage unavailable');return save(data);};
  const result={status:'applied',moved:true,plan:{from:'A.md',to:'新/A.md'}};await assert.rejects(f.plugin.syncRelocationSources(result),/unavailable/);assert.equal(f.plugin.sources['TASK-old'].path,'A.md');await f.plugin.syncRelocationSources(result);assert.equal(f.saved.sources['TASK-old'].path,'新/A.md');assert.equal(f.plugin.sources['TASK-old'].hash,'original');
 });
+
+test('native round reading keeps current guidance and historical failed evidence without treating absent checks as passed',async()=>{
+ const f=fixture();await f.plugin.onload();const task={id:'TASK-reading',title:'表格閱讀',revision:8,goal:'只改 Obsidian 表格',status:'READY',nextAction:{label:'請核對範圍'},workCards:[{stage:'D',label:'未完成',outcome:'舊回合中斷',context:{interpretation:'舊版理解'},aiClaims:{change:'AI 曾提出的修改'},checks:[{id:'shape',result:'FAIL',label:'範圍檢查',detail:'錯改了 Web UI'}]},{stage:'B',label:'已回覆，仍需核對',outcome:'最近回答已保存',simulated:true}]};
+ await f.plugin.task(task);const elements=all(f.modal.contentEl);assert.ok(elements.some(e=>e.text==='第 8 版 · 請核對範圍'));assert.ok(elements.some(e=>e.text==='最近回答已保存'));assert.ok(elements.some(e=>e.text.includes('示範／模擬回合，未呼叫真實 AI')));assert.ok(elements.some(e=>e.text.includes('未記錄機器檢查，不代表已通過')));
+ const history=elements.find(e=>e.tag==='details'&&all(e).some(child=>child.text==='舊回合中斷'));assert.ok(history);assert.ok(all(history).some(e=>e.text.includes('FAIL · 範圍檢查 · 錯改了 Web UI')));assert.ok(all(history).some(e=>e.text==='此輪開工時的理解：舊版理解'));assert.equal(f.requests.length,0,'reading history does not start an AI operation');
+ task.workCards.at(-1).checks=[{result:'FAIL',label:'範圍未通過'}];await f.plugin.task(task);assert.ok(all(f.modal.contentEl).some(e=>e.tag==='summary'&&e.text.includes('有檢查未通過')),'folded details must not hide a current failure');
+});

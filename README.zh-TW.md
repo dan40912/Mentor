@@ -65,7 +65,8 @@ npm run verify:obsidian -- --vault dist/mentor-obsidian
 在 Obsidian 桌面版開啟 `dist/mentor-obsidian` 作為**獨立示範庫**。選擇 Mentor Theme，審閱插件後自行啟用，再從 Web「連接 Obsidian」取得一次性配對碼。插件只連 `http://127.0.0.1:port`；憑證只存在記憶體，重啟需重配對。
 
 - Theme 提供淺深色、文件、表格、Properties 與 Callout 樣式。
-- 首頁和八份內容範本使用普通 Markdown，不要求 Dataview 或 Templater。
+- 首頁和八份內容範本使用普通 Markdown，不要求 Dataview 或 Templater。另附「實機測試：表格與工作回合」，先做不需 AI 帳號的閱讀測試。
+- 原生任務先顯示最近一輪；先前回合與檢查可展開。失敗摘要與模擬標記保留，不把已回覆當成人工驗收。
 - 從目前筆記／選取內容準備任務，送出前看清楚原文與目標；過長內容不偷偷截斷。
 - 「為目前資料夾預寫索引」先列來源與完整草稿。修改後重新預覽，再套用；只寫 `Mentor 整理/`，不搬動來源。它是檔名索引，不是 AI 摘要。
 - 「從目前筆記預寫內容或建議分類標籤」：先選紀錄任務、核對送給 AI 的來源，再生成草稿；預覽與修改後才能保存。來源版本變更會拒絕套用，保存不代表內容已驗收。
