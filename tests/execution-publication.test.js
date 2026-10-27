@@ -6,7 +6,7 @@ import os from 'node:os';
 import {randomUUID} from 'node:crypto';
 import {demoTask} from './fixtures/demo-task.js';
 import {requestApp} from './fixtures/request.js';
-import {serializeTask,sha256} from '../src/tasks.js';
+import {serializeTask,sha256,planningAction,planningStatus} from '../src/tasks.js';
 import {prepareExecutionWorkspace,publishExecutionWorkspace} from '../src/execution-workspace.js';
 const reply='STATUS: DONE\nFILES: result.md';
 async function fixture(t,{conflict=false,stage='D',fail=false}={}){
@@ -26,9 +26,9 @@ test('unknown publication blocks new execution and has authenticated, revision-b
  const f=await fixture(t),turnId=randomUUID(),workspace=await prepareExecutionWorkspace(f.out,f.vault,{taskId:f.task.id,turnId});await assert.rejects(publishExecutionWorkspace(workspace,{checkpoint:async phase=>{if(phase==='after-original-move')throw Error('interrupted');}}));
  await f.app.coach.store.mutate(f.task.id,'latest',null,task=>{task.planning.learningTurns=[{id:turnId,stage:'D',status:'unknown',executionWorkspace:{directory:workspace.directory,status:'unknown'}}];return {};});
  await assert.rejects(f.app.coach.execute(f.task.id,'W1'),{code:'EXECUTION_PUBLICATION_PENDING'});
- const task=await f.app.coach.latest(f.task.id),input={revision:task.revision,turnId,choice:'restore-original',confirmed:true};
+ const task=await f.app.coach.latest(f.task.id);assert.equal(planningAction(task).kind,'publication');assert.equal(planningStatus(task),'BLOCKED');const input={revision:task.revision,turnId,choice:'restore-original',confirmed:true};
  const url=`/api/tasks/${task.id}/reconcile-publication`;assert.equal((await f.app.fetch(url,{method:'POST',body:JSON.stringify(input)})).status,403);
  const cookie=(await f.app.fetch('/')).headers.get('set-cookie').split(';')[0],csrf=(await(await f.app.fetch('/api/session',{headers:{cookie}})).json()).csrfToken,headers={cookie,'x-csrf-token':csrf,'Idempotency-Key':'recover-original'};
- const response=await f.app.fetch(url,{method:'POST',headers,body:JSON.stringify(input)});assert.equal(response.status,200);const result=await response.json();assert.equal(await readFile(path.join(f.out,'result.md'),'utf8'),'baseline');assert.equal(result.task.planning.learningTurns[0].executionWorkspace.status,'reconciled');
+ const response=await f.app.fetch(url,{method:'POST',headers,body:JSON.stringify(input)});assert.equal(response.status,200);const result=await response.json();assert.equal(await readFile(path.join(f.out,'result.md'),'utf8'),'baseline');assert.equal(result.task.planning.learningTurns[0].executionWorkspace.status,'reconciled');assert.notEqual(planningAction(result.task).kind,'publication');
  const replay=await f.app.coach.reconcilePublication(task.id,task.revision,'recover-original',input);assert.equal(replay.task.revision,result.task.revision);
 });

@@ -1,0 +1,13 @@
+{
+  "simulated": true,
+  "source": "Web UI clicks on isolated fixture",
+  "restoredOriginalMatchesBaseline": true,
+  "actualSha256": "6fe606acfa7f249887f8bc02ee9ffc551cf8c956cf8d2e82b796ab1f8830d7fc",
+  "candidateSha256": "b8111a402a6e83d6374379fac2bd0d07b68adf605d16f11ffe145e695879d78b",
+  "candidateRetained": true,
+  "publicationStatus": "reconciled",
+  "recoveryChoice": "restore-original",
+  "workItemStatus": "TODO",
+  "running": null,
+  "modelRunner": "Configured to throw without invoking any provider"
+}

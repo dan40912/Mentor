@@ -117,10 +117,13 @@ ${json}
 ${END}${notes}`;
 }
 
+export const publicationPending=task=>(task.planning?.learningTurns||[]).some(turn=>['publishing','original_moved','unknown'].includes(turn.executionWorkspace?.status));
+
 export function planningStatus(task) {
   const p = task.planning;
   if (!p) return null;
   if (p.running) return 'RUNNING';
+  if(publicationPending(task))return 'BLOCKED';
   if (p.autopilot && !p.autopilot.waitingFor && !p.stopped) return 'RUNNING';
   if (p.stopped) return 'BLOCKED';
   if (p.phase === 'grill' || p.phase === 'outline') return 'BLOCKED';
@@ -141,6 +144,7 @@ export function planningAction(task) {
   if (p.running?.stopping?.unconfirmed) return { kind: 'stopping', label: `尚未確認停止：${activeName}（${p.running.agent}）`, button: '查看狀態' };
   if (p.running?.stopping) return { kind: 'stopping', label: `正在停止${activeName}：${p.running.agent}`, button: '查看狀態' };
   if (p.running) return { kind: 'running', label: `${activeName}進行中：${p.running.agent}`, button: '查看進度' };
+  if(publicationPending(task))return {kind:'publication',label:'成果發布結果待核對，先保留目前成果或恢復原成果',button:'核對成果發布'};
   if (p.autopilot && !p.autopilot.waitingFor && !p.stopped) return { kind: 'auto', label: 'AI 自己在跑。需要你時會停下來叫你。', button: '查看進度' };
   if (p.stopped) return { kind: 'stopped', label: `已停止${stageName(p.stopped.stage)}${p.stopped.itemId ? ` ${itemName(p.stopped.itemId)}` : ''}，成果已保留`, button: '繼續任務' };
   if (p.phase === 'grill') {

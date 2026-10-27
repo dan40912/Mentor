@@ -2,6 +2,7 @@
 // 一路做到完：你按一次就是授權整條鏈；AI 只在需要你時停下來。
 const autoFull=()=>{try{return localStorage.getItem('awc-full')==='1';}catch{return false;}};
 function decorateOneThing(t,{one,oneText,jump}){
+ if(t.nextAction.kind==='publication'){jump.textContent='核對成果發布';jump.onclick=()=>jumpToNext(t);return;}
  const p=t.planning;if(!p||p.phase==='done'||p.running||p.stopped)return;
  const ap=p.autopilot,wait=ap?.waitingFor;
  const tr=trackOf(t),idx=Math.max(0,tr.nodes.findIndex(n=>n.state==='now')),step=`第 ${idx+1}／${tr.nodes.length} 步 · ${tr.nodes[idx]?.name||''}`;

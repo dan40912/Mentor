@@ -247,3 +247,9 @@ test('opening task focus reuses the mounted controller instead of discarding an 
  f.plugin.app.workspace.getLeavesOfType=()=>[leaf];f.plugin.app.workspace.revealLeaf=async()=>reveals++;
  await f.plugin.openFocus({id:'TASK-focus-one',title:'核對表格'});assert.equal(opens,0);assert.equal(reveals,1);assert.deepEqual(JSON.parse(JSON.stringify(calls)),['refresh',{taskId:'TASK-focus-one',title:'核對表格',goal:'核對表格'}]);assert.equal(f.requests.length,0);
 });
+
+
+test('native unknown publication gives recovery controls before AI actions and does not imply acceptance',async()=>{
+ const f=fixture();await f.plugin.onload();const task={id:'TASK-recovery-ui',title:'恢復',revision:3,goal:'恢復',status:'BLOCKED',nextAction:{kind:'publication',label:'成果發布結果待核對'},planning:{learningTurns:[{id:'turn-recovery',stage:'D',executionWorkspace:{directory:'/fixture/candidate',status:'unknown',displaced:'/fixture/original'}}]}};
+ await f.plugin.task(task);const nodes=all(f.modal.contentEl);assert.ok(nodes.some(n=>n.tag==='button'&&n.text==='恢復原成果（只限位置空缺）'));assert.ok(nodes.some(n=>n.text==='請先核對上方發布紀錄；完成前不執行 AI 或驗收。'));assert.equal(nodes.some(n=>n.tag==='button'&&n.text==='交給 AI 做'),false);await nodes.find(n=>n.tag==='button'&&n.text==='恢復原成果（只限位置空缺）').onclick();assert.equal(f.requests.length,0);assert.ok(f.notices.some(n=>n.includes('請先確認原 CLI')));
+});
