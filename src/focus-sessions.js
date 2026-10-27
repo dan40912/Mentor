@@ -1,5 +1,7 @@
+import {renameReplace} from './platform.js';
+import {organizationIndex,validateOrganizationRuns} from './focus-organization.js';
 import {sourceSnapshot,materialsIndex,materialComparison,validateStoredMaterials} from './focus-materials.js';
-import {readFile,writeFile,rename,rm,lstat} from 'node:fs/promises';
+import {readFile,writeFile,rm,lstat} from 'node:fs/promises';
 import path from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {TaskStore,TaskError,sha256} from './tasks.js';
@@ -19,12 +21,20 @@ export class FocusSessions{
   if(state.schema!==1||!Number.isSafeInteger(state.revision)||state.revision<0||!Array.isArray(state.sessions)||!Array.isArray(state.requests)||state.sessions.length>1000||state.requests.length>5001)fail('FOCUS_STATE_INVALID','專注紀錄格式不正確。');
   if(state.requests.some(r=>!r||typeof r.key!=='string'||!/^[a-zA-Z0-9_-]{8,128}$/.test(r.key)||typeof r.digest!=='string'||!/^[a-f0-9]{64}$/.test(r.digest)))fail('FOCUS_STATE_INVALID','專注操作識別紀錄損壞。');
   if(state.sessions.some(s=>!s||typeof s.id!=='string'||typeof s.goal!=='string'||s.goal.length>1000||!Array.isArray(s.events)||!s.events.length||s.events.length>5002||!Number.isSafeInteger(s.startedAt)||s.startedAt<0||!['running','paused','ended','cancelled'].includes(s.status)||!Number.isInteger(s.targetMinutes)||s.targetMinutes<1||s.targetMinutes>180||!Number.isSafeInteger(s.elapsedMs)||s.elapsedMs<0||!Number.isSafeInteger(s.lastEventAt))||state.sessions.filter(s=>['running','paused'].includes(s.status)).length>1)fail('FOCUS_STATE_INVALID','專注時段格式不正確。');
-  for(const session of state.sessions)validateStoredMaterials(session.materials);
+  for(const session of state.sessions){validateStoredMaterials(session.materials);validateOrganizationRuns(session.organizationRuns);}
   return state;
  }
- project(state){return {revision:state.revision,sessions:state.sessions.map(session=>{const {materials,...rest}=session;return {...rest,materials:materialsIndex(materials),timing:focusTiming(session,this.clock())};}),activeId:state.sessions.find(s=>['running','paused'].includes(s.status))?.id||null};}
+ project(state){return {revision:state.revision,sessions:state.sessions.map(session=>{const {materials,organizationRuns,...rest}=session;return {...rest,organizationStatus:organizationRuns?.at(-1)?.status||rest.organizationStatus,organizationRuns:organizationIndex(organizationRuns),materials:materialsIndex(materials),timing:focusTiming(session,this.clock())};}),activeId:state.sessions.find(s=>['running','paused'].includes(s.status))?.id||null};}
  async list(){await this.queue;return this.project(await this.read());}
  async materials(sessionId){await this.queue;const state=await this.read(),session=state.sessions.find(s=>s.id===sessionId);if(!session)fail('FOCUS_NOT_FOUND','找不到這個專注時段。',404);return {revision:state.revision,sessionId,comparison:materialComparison(session.materials)};}
+ async persist(state,terminal=false){
+   const serialized=JSON.stringify(state,null,2)+'\n';if(Buffer.byteLength(serialized)>(terminal?5_000_000:4_400_000))fail('FOCUS_CAPACITY','專注紀錄已達儲存上限，沒有覆寫。');
+   const target=await this.paths.safePath('focus-sessions.json'),temp=path.join(this.paths.dir,'.focus-'+randomUUID()+'.tmp');
+   try{await writeFile(temp,serialized,{flag:'wx',mode:0o600});await this.paths.safePath('focus-sessions.json');await renameReplace(temp,target);}finally{await rm(temp,{force:true});}
+ }
+ editOrganization(work,completion=false){
+  const run=this.queue.then(async()=>{const state=await this.read(),result=await work(state);if(!result.unchanged){state.revision++;await this.persist(state,completion);}const {unchanged,...value}=result;return {revision:state.revision,...value};});this.queue=run.catch(()=>{});return run;
+ }
  change(action,input){
   const work=async()=>{
    if(!['start','pause','resume','end','cancel','capture'].includes(action))fail('FOCUS_ACTION_INVALID','不支援的專注操作。',400);
@@ -61,9 +71,7 @@ export class FocusSessions{
    }
    const operationSessionId=action==='start'?state.sessions.at(-1).id:input.sessionId;
    state.revision++;state.requests.push({key:input.requestKey,digest,sessionId:operationSessionId});
-   const serialized=JSON.stringify(state,null,2)+'\n';if(Buffer.byteLength(serialized)>(terminal?5_000_000:4_600_000))fail('FOCUS_CAPACITY','專注紀錄已達儲存上限，沒有覆寫。');
-   const target=await this.paths.safePath('focus-sessions.json'),temp=path.join(this.paths.dir,'.focus-'+randomUUID()+'.tmp');
-   try{await writeFile(temp,serialized,{flag:'wx',mode:0o600});await this.paths.safePath('focus-sessions.json');await rename(temp,target);}finally{await rm(temp,{force:true});}
+   await this.persist(state,terminal);
    return {...this.project(state),replayed:false,operationSessionId};
   };
   const result=this.queue.then(work);this.queue=result.catch(()=>{});return result;

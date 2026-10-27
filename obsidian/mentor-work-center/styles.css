@@ -5,3 +5,5 @@
 .mentor-focus button[aria-pressed="true"]{outline:2px solid var(--interactive-accent);outline-offset:1px}
 
 .mentor-focus pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:24rem;overflow:auto}
+
+.mentor-focus textarea{display:block;width:100%;min-height:6rem}

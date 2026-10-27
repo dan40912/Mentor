@@ -76,7 +76,7 @@ class FocusView extends ItemView {
   getViewType(){return FOCUS_VIEW;}
   getDisplayText(){return '專注一輪';}
   getIcon(){return 'timer';}
-  async onOpen(){this.control?.destroy();this.contentEl.empty();if(!this.plugin.token){text(this.contentEl,'p','請先配對 Mentor 本機服務，再重新開啟專注計時。');return;}this.control=mountFocus(this.contentEl,{api:(route,input)=>this.plugin.api(route,input),requestKey:randomUUID,captureStart:()=>this.plugin.focusStartSnapshot(),captureEnd:path=>this.plugin.focusEndSnapshot(path),onTarget:()=>new Notice('專注目標時間已到，計時繼續。')});}
+  async onOpen(){this.control?.destroy();this.contentEl.empty();if(!this.plugin.token){text(this.contentEl,'p','請先配對 Mentor 本機服務，再重新開啟專注計時。');return;}this.control=mountFocus(this.contentEl,{api:(route,input)=>this.plugin.api(route,input),requestKey:randomUUID,exportMarkdown:output=>this.plugin.saveFocusPublication(output),exportLabel:'保存這個版本到 Obsidian',captureStart:()=>this.plugin.focusStartSnapshot(),captureEnd:path=>this.plugin.focusEndSnapshot(path),onTarget:()=>new Notice('專注目標時間已到，計時繼續。')});}
   async onClose(){this.control?.destroy();}
 }
 
@@ -117,6 +117,13 @@ module.exports = class MentorPlugin extends Plugin {
   async focusEndSnapshot(path){
     try{const file=this.app.vault.getAbstractFileByPath(path);if(!file)return {path,status:'missing'};if(file.children)throw Error('來源變成資料夾。');const content=await this.app.vault.read(file);if(content.length>50000||new TextEncoder().encode(content).length>100000)throw Error('來源超過快照上限。');return {path,status:'present',content};}
     catch{new Notice('來源無法讀取或超過快照上限；可先結束計時，再補記較晚快照。');return {path,status:'unavailable'};}
+  }
+  async saveFocusPublication(output){
+    if(!output||typeof output.markdown!=='string'||!/^[a-f0-9-]{36}-[a-f0-9-]{36}\.md$/.test(output.fileName)||createHash('sha256').update(output.markdown).digest('hex')!==output.sha256)throw new Error('保存版本或內容 hash 不正確，沒有寫入筆記。');
+    const path=ORGANIZED_ROOT+'/專注/'+output.fileName,current=await this.organization.io.read(path);
+    if(current===output.markdown){await this.app.workspace.openLinkText(path,'',false);return;}
+    if(current!==null)throw new Error('這個保存版本的筆記已存在且內容不同，保留人工修改，不覆寫。');
+    const plan=await this.organization.previewWrites([],[{path,after:output.markdown}],'保存專注整理的歷史快照版本');this.showOrganizationPlan(plan);
   }
   async savePreferences() { await this.saveData({address:this.address,sources:this.sources}); }
   refresh() { for(const leaf of this.app.workspace.getLeavesOfType(VIEW)) leaf.view.refresh(); }

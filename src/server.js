@@ -1,3 +1,4 @@
+import {FocusOrganization} from './focus-organization.js';
 import { FocusSessions } from './focus-sessions.js';
 import { ObsidianBridge } from './obsidian-bridge.js';
 import { workCards } from './work-cards.js';
@@ -174,6 +175,8 @@ export async function createRequestHandler({ root = appDir, port = 4317, runAgen
   const projects = new Projects(path.join(memory, 'projects'));
   const coach = new Coach(tasks, () => settings, root, memoryStore, runAgent, executeFile);
   await coach.recover();
+  const focusOrganization=new FocusOrganization(focus,{agent:()=>coach.agentFor('B'),run:input=>coach.runAgent(input)});
+  await focusOrganization.recover();
   const trash = new Trash(memory, tasks, coach);
   const handler = async (req, res) => {
     const requestPort = typeof port === 'function' ? port() : port;
@@ -234,6 +237,11 @@ export async function createRequestHandler({ root = appDir, port = 4317, runAgen
       }
       if (req.method === 'GET' && req.url === '/api/health') {
         return send(200, { status: 'ok', execution: 'controlled-cli-and-manual-handoff', memory });
+      }
+      if(req.method==='GET'&&(req.url.startsWith('/api/focus/organization?')||req.url.startsWith('/api/focus/export?'))){
+        if(!req.headers.cookie?.split('; ').includes(`awc=${token}`))return send(403,{code:'SESSION_REQUIRED'});
+        const params=new URL(req.url,'http://127.0.0.1').searchParams;
+        return send(200,req.url.startsWith('/api/focus/export?')?await focusOrganization.export(params.get('sessionId'),params.get('jobId'),params.get('publicationId')):await focusOrganization.get(params.get('sessionId'),params.get('jobId')));
       }
       if(req.method==='GET'&&req.url.startsWith('/api/focus/materials?')){if(!req.headers.cookie?.split('; ').includes(`awc=${token}`))return send(403,{code:'SESSION_REQUIRED'});return send(200,await focus.materials(new URL(req.url,'http://127.0.0.1').searchParams.get('sessionId')));}
       if(req.method==='GET'&&req.url==='/api/focus'){if(!req.headers.cookie?.split('; ').includes(`awc=${token}`))return send(403,{code:'SESSION_REQUIRED'});return send(200,await focus.list());}
@@ -357,6 +365,8 @@ export async function createRequestHandler({ root = appDir, port = 4317, runAgen
         return send(201, { attachment: await coach.attachments.stage(params.get('name'), req, params.has('batch') ? params.get('batch') : undefined, params.has('index') ? Number(params.get('index')) : undefined) });
       }
       const input = await body(req);
+      const focusOrgAction=req.url.match(/^\/api\/focus\/(prepare-organization|organize|stop-organization|reconcile-organization|save-organization)$/)?.[1];
+      if(focusOrgAction){const method={'prepare-organization':'prepare',organize:'start','stop-organization':'stop','reconcile-organization':'reconcile','save-organization':'save'}[focusOrgAction];return send(focusOrgAction==='organize'?202:200,await focusOrganization[method](input));}
       const focusAction=req.url.match(/^\/api\/focus\/(start|pause|resume|end|cancel|capture)$/)?.[1];
       if(focusAction){
         if(focusAction==='start'&&input.taskId){const {task}=await tasks.get(input.taskId);if(task.trashed)throw new TaskError(409,'TASK_TRASHED','請先還原任務。');if(input.workItemId&&!task.planning?.workItems?.some(item=>item.id===input.workItemId))throw new TaskError(400,'FOCUS_LINK_INVALID','找不到關聯的工作項目。');}
@@ -511,7 +521,7 @@ export async function createRequestHandler({ root = appDir, port = 4317, runAgen
       send(400, { code: 'REQUEST_FAILED', message: error.message, nextStep: '檢查輸入；保存失敗時查看終端錯誤。' });
     }
   };
-  return { handler, coach };
+  return { handler, coach, focusOrganization };
 }
 
 // 測試用：不監聽埠，回傳可直接呼叫 request listener 的 server。

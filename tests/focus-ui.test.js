@@ -5,6 +5,7 @@ import {readFile,mkdtemp,mkdir,rm} from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import {FocusSessions} from '../src/focus-sessions.js';
+import {FocusOrganization} from '../src/focus-organization.js';
 const module={exports:{}};vm.runInNewContext(await readFile(new URL('../obsidian/mentor-work-center/focus.js',import.meta.url),'utf8'),{module,encodeURIComponent});
 const {mountFocus}=module.exports;
 class El{
@@ -23,7 +24,7 @@ test('shared control ticks beyond target, alerts only initiating view and preser
  all(a.host).find(n=>n.tag==='input'&&n.type==='number').value='1';await a.button('開始專注').onclick();await b.control.refresh();
  f.now+=65000;a.tick();b.tick();a.tick();assert.equal(a.notices,1);assert.equal(a.beeps,1);assert.equal(b.notices,0);assert.ok(all(a.host).some(n=>n.textContent==='目標時間已到 · 已延長 00:05'));
  await b.button('暫停').onclick();await a.control.refresh();assert.ok(a.button('繼續專注'));f.now+=10000;a.tick();assert.ok(all(a.host).some(n=>n.textContent==='已暫停 · 已計時 01:05'));
- await a.button('結束這一輪').onclick();assert.equal((await f.store.list()).activeId,null);assert.ok(a.button('開始專注'));assert.ok(all(a.host).some(n=>n.textContent.includes('AI 整理尚未接上')));
+ await a.button('結束這一輪').onclick();assert.equal((await f.store.list()).activeId,null);assert.ok(a.button('開始專注'));assert.ok(all(a.host).some(n=>n.textContent.includes('AI 整理需另行確認')));
 });
 test('lost start reply retries the exact persisted request and never creates another session',async t=>{
  const f=await fixture(t),seen=[];let lost=true;
@@ -39,5 +40,14 @@ test('shared control attaches explicitly chosen source and previews both version
  const f=await fixture(t),source={path:'研究/來源.md',status:'present',content:'開始 <script>not executable</script>'};
  const a=ui(t,f,null,{captureStart:async()=>({sourceBefore:source}),captureEnd:async path=>({path,status:'present',content:'結束的新內容'})});await a.control.refresh();await a.button('開始專注').onclick();
  assert.ok(all(a.host).some(n=>n.textContent.includes('已選來源：研究/來源.md')));await a.button('結束這一輪').onclick();await a.button('核對本輪材料與變更').onclick();
- const pres=all(a.host).filter(n=>n.tag==='pre');assert.ok(pres.some(n=>n.textContent===source.content));assert.ok(pres.some(n=>n.textContent==='結束的新內容'));assert.ok(all(a.host).some(n=>n.textContent.includes('尚未交給 AI')));
+ const pres=all(a.host).filter(n=>n.tag==='pre');assert.ok(pres.some(n=>n.textContent===source.content));assert.ok(pres.some(n=>n.textContent==='結束的新內容'));assert.ok(all(a.host).some(n=>n.textContent.includes('送出前可選片段')));
+});
+
+test('shared organization UI previews before invoking AI, saves edits, exports a fixed version and keeps prior sessions reachable',async t=>{
+ const f=await fixture(t),started=await f.store.change('start',{revision:0,requestKey:'ui-org-focus-start',targetMinutes:15,goal:'整理本輪',sourceBefore:{path:'來源.md',status:'present',content:'old point'}});await f.store.change('end',{revision:1,requestKey:'ui-org-focus-end',sessionId:started.activeId,sourceAfter:{path:'來源.md',status:'present',content:'new point'}});
+ let calls=0;const service=new FocusOrganization(f.store,{agent:()=>({provider:'claude',modelId:'fictional-model',effort:'low'}),run:async()=>{calls++;return {text:JSON.stringify({points:[{text:'留下新重點',kind:'observation',source:'after',quote:'new point'}],openQuestions:[],nextSteps:['先請人核對'],handoff:'沿用這個來源版本。'})};}}),exports=[];
+ const api=(route,input)=>{const url=new URL(route,'http://127.0.0.1');if(input){const methods={'prepare-organization':'prepare',organize:'start','save-organization':'save'};const action=route.split('/').at(-1);return methods[action]?service[methods[action]](input):f.store.change(action,input);}if(url.pathname==='/focus/materials')return f.store.materials(url.searchParams.get('sessionId'));if(url.pathname==='/focus/organization')return service.get(url.searchParams.get('sessionId'),url.searchParams.get('jobId'));if(url.pathname==='/focus/export')return service.export(url.searchParams.get('sessionId'),url.searchParams.get('jobId'),url.searchParams.get('publicationId'));return f.store.list();};
+ const a=ui(t,f,api,{exportMarkdown:async output=>exports.push(output)});await a.control.refresh();await a.button('核對本輪材料與變更').onclick();await a.button('預覽送給 AI 的內容與模型').onclick();assert.equal(calls,0);assert.ok(all(a.host).some(n=>n.textContent.includes('fictional-model')));
+ await a.button('確認這份材料，呼叫 AI 整理').onclick();await Promise.all([...service.pending.values()]);await a.button('查看 AI 整理與保存版本').onclick();const edit=all(a.host).find(n=>n.tag==='textarea'&&n.attrs['aria-label']==='核對並修改整理草稿');assert.ok(edit);edit.value='我核對後保留的重點';edit.oninput();await a.button('保存這份整理到 Mentor').onclick();await a.button('匯出這個保存版本').onclick();assert.equal(calls,1);assert.match(exports[0].markdown,/我核對後保留的重點/);assert.match(exports[0].markdown,/不表示事實已獨立驗證/);
+ await f.store.change('start',{revision:(await f.store.list()).revision,requestKey:'ui-next-focus-start',targetMinutes:10,goal:'下一輪'});await a.control.refresh();assert.ok(a.button('查看這輪整理'));await a.button('查看這輪整理').onclick();assert.ok(all(a.host).some(n=>n.tag==='textarea'&&n.value==='我核對後保留的重點'));
 });

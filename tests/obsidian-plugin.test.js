@@ -233,3 +233,9 @@ test('focus source preview needs explicit confirmation and end capture stays bou
  await all(f.modal.contentEl).find(n=>n.tag==='button'&&n.text==='保存這份來源並開始計時').onclick();const input=await waiting;assert.equal(input.sourceBefore.path,'測試.md');assert.equal(input.sourceBefore.content,'原始筆記');
  f.read='後來的內容';assert.equal((await f.plugin.focusEndSnapshot('測試.md')).content,'後來的內容');assert.equal((await f.plugin.focusEndSnapshot('已搬走.md')).status,'missing');f.read='x'.repeat(50001);assert.equal((await f.plugin.focusEndSnapshot('測試.md')).status,'unavailable');assert.equal(f.requests.length,0);
 });
+
+test('focus publication saves only a verified managed Markdown version and refuses existing human edits',async()=>{
+ const f=fixture();await f.plugin.onload();let existing=null,preview=null;f.plugin.organization={io:{read:async()=>existing},previewWrites:async(sources,outputs)=>({sources,outputs})};f.plugin.showOrganizationPlan=value=>{preview=value;};f.plugin.app.workspace.openLinkText=async()=>{};
+ const markdown='# 已保存的專注整理\n',output={fileName:crypto.randomUUID()+'-'+crypto.randomUUID()+'.md',markdown,sha256:crypto.createHash('sha256').update(markdown).digest('hex')};await f.plugin.saveFocusPublication(output);assert.equal(preview.sources.length,0);assert.ok(preview.outputs[0].path.startsWith('Mentor 整理/專注/'));assert.equal(preview.outputs[0].after,markdown);
+ existing='使用者後來編輯';await assert.rejects(f.plugin.saveFocusPublication(output),/保留人工修改/);await assert.rejects(f.plugin.saveFocusPublication({...output,fileName:'../outside.md'}),/hash 不正確/);assert.equal(f.requests.length,0);
+});
