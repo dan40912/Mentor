@@ -42,3 +42,11 @@ test('operation capacity reserves the ability to end an already active session',
  await assert.rejects(f.store.change('pause',{revision:1,requestKey:'pause-capacity',sessionId:started.activeId}),{code:'FOCUS_CAPACITY'});
  const ended=await f.store.change('end',{revision:1,requestKey:'end-capacity',sessionId:started.activeId,sourceAfter:before});assert.equal(ended.activeId,null);assert.equal((await f.store.list()).sessions[0].status,'ended');
 });
+
+
+test('source collection labels persist without claiming file authenticity and invalid labels are refused',async t=>{
+ const f=await fixture(t),session=await f.store.change('start',{revision:0,requestKey:'manual-source-start',targetMinutes:10,goal:'手動材料',sourceBefore:{...before,origin:'manual_paste'}});
+ await f.store.change('end',{revision:1,requestKey:'manual-source-end',sessionId:session.activeId,sourceAfter:{...before,origin:'obsidian_note'}});
+ const index=(await f.store.list()).sessions[0].materials;assert.equal(index.beforeOrigin,'manual_paste');assert.equal(index.afterOrigin,'obsidian_note');assert.equal((await f.store.materials(session.activeId)).comparison.before.origin,'manual_paste');
+ await assert.rejects(f.store.change('start',{revision:2,requestKey:'invalid-source-method',targetMinutes:10,goal:'拒絕錯誤方式',sourceBefore:{...before,origin:'verified-authentic'}}),{code:'FOCUS_SOURCE_INVALID'});
+});

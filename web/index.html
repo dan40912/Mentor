@@ -1448,9 +1448,9 @@ $('#tab-human').onclick=()=>selectTab(false);$('#tab-ai').onclick=()=>selectTab(
 document.querySelector('[role=tablist]').onkeydown=event=>{if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;event.preventDefault();const ai=event.key==='End'||(event.key!=='Home'&&$('#tab-ai').getAttribute('aria-selected')!=='true');selectTab(ai);$(ai?'#tab-ai':'#tab-human').focus();};
 try{const saved=JSON.parse(localStorage.getItem('awc-drafts-v1')||'[]');if(!Array.isArray(saved)||saved.some(t=>typeof t.id!=='string'||!t.id.startsWith('TASK-')||t.status!=='DRAFT'||['goal','project','scope','acceptance'].some(k=>typeof t[k]!=='string')))throw new Error('草稿格式不支援，原始資料未覆寫。');drafts=saved;}catch(error){tell(`草稿讀取失敗：${error.message}`);}
 renderOverview();init();
-let focusControl=window.MentorFocus.mountFocus($('#focus-center'),{api:(route,input)=>request('/api'+route,input),exportMarkdown:output=>download(output.fileName,output.markdown),exportLabel:'下載這個 Markdown 保存版本',onTarget:()=>tell('專注目標時間已到，計時繼續。')});
+let focusControl=window.MentorFocus.mountFocus($('#focus-center'),{api:(route,input)=>request('/api'+route,input),captureStart:()=>window.MentorFocus.capturePastedSource(document.body),captureEnd:path=>window.MentorFocus.capturePastedSource(document.body,{path}),exportMarkdown:output=>download(output.fileName,output.markdown),exportLabel:'下載這個 Markdown 保存版本',onTarget:()=>tell('專注目標時間已到，計時繼續。')});
 window.addEventListener('pagehide',()=>focusControl.destroy());
-window.addEventListener('pageshow',event=>{if(event.persisted)focusControl=window.MentorFocus.mountFocus($('#focus-center'),{api:(route,input)=>request('/api'+route,input),exportMarkdown:output=>download(output.fileName,output.markdown),exportLabel:'下載這個 Markdown 保存版本',onTarget:()=>tell('專注目標時間已到，計時繼續。')});});
+window.addEventListener('pageshow',event=>{if(event.persisted)focusControl=window.MentorFocus.mountFocus($('#focus-center'),{api:(route,input)=>request('/api'+route,input),captureStart:()=>window.MentorFocus.capturePastedSource(document.body),captureEnd:path=>window.MentorFocus.capturePastedSource(document.body,{path}),exportMarkdown:output=>download(output.fileName,output.markdown),exportLabel:'下載這個 Markdown 保存版本',onTarget:()=>tell('專注目標時間已到，計時繼續。')});});
 </script>
 </body>
 </html>

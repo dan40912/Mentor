@@ -110,13 +110,13 @@ module.exports = class MentorPlugin extends Plugin {
     return new Promise(resolve=>{
       const modal=new ReviewModal(this.app,'開始前，核對本輪來源',(host,dialog)=>{
         text(host,'p','這份筆記的開始／結束快照會保存到 Mentor 本機服務。本步不傳給 AI、不修改筆記，切換頁籤不改變範圍。');text(host,'p',file.path);if(withinLimit)text(host,'pre',content,'mentor-source');else text(host,'p','筆記超過 50,000 字元／100 KB 快照上限；不會截斷，可以只開始計時。');
-        if(withinLimit)button(host,'保存這份來源並開始計時',async()=>{const current=await this.app.vault.read(file);if(createHash('sha256').update(current).digest('hex')!==hash)throw new Error('來源已變更，請關閉後重新開始預覽。');resolve({sourceBefore:{path:file.path,status:'present',content}});dialog.close();},true);
+        if(withinLimit)button(host,'保存這份來源並開始計時',async()=>{const current=await this.app.vault.read(file);if(createHash('sha256').update(current).digest('hex')!==hash)throw new Error('來源已變更，請關閉後重新開始預覽。');resolve({sourceBefore:{path:file.path,status:'present',origin:'obsidian_note',content}});dialog.close();},true);
         button(host,'只開始計時，不保存來源',()=>{resolve({});dialog.close();});button(host,'取消開始',()=>dialog.close());
       });const close=modal.onClose.bind(modal);modal.onClose=()=>{resolve(null);close();};modal.open();
     });
   }
   async focusEndSnapshot(path){
-    try{const file=this.app.vault.getAbstractFileByPath(path);if(!file)return {path,status:'missing'};if(file.children)throw Error('來源變成資料夾。');const content=await this.app.vault.read(file);if(content.length>50000||new TextEncoder().encode(content).length>100000)throw Error('來源超過快照上限。');return {path,status:'present',content};}
+    try{const file=this.app.vault.getAbstractFileByPath(path);if(!file)return {path,status:'missing'};if(file.children)throw Error('來源變成資料夾。');const content=await this.app.vault.read(file);if(content.length>50000||new TextEncoder().encode(content).length>100000)throw Error('來源超過快照上限。');return {path,status:'present',origin:'obsidian_note',content};}
     catch{new Notice('來源無法讀取或超過快照上限；可先結束計時，再補記較晚快照。');return {path,status:'unavailable'};}
   }
   async saveFocusPublication(output){

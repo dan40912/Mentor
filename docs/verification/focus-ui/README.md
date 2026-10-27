@@ -25,3 +25,8 @@
 
 
 窄螢幕補驗：390×844 的已保存整理畫面，focus-center clientWidth=scrollWidth=301；organization-narrow.png 保留草稿、保存及匯出控制。此檢查是 Web 響應式外觀，不能替代原生驗收。任務預填與草稿保護另有共用控制及插件呼叫測試。
+
+
+## Web 手動貼上材料
+
+在 4363 隔離示範操作開始來源預覽、確認開始、結束時同路徑輸入與預覽，最後核對兩份保存材料與差異。測試約 14 秒，非專注效率證據；沒有呼叫 AI。pasted-source-preview.png 保存同意前原文，pasted-source-comparison.png 保存開始／結束核對畫面。含 script 標籤的文字以原文呈現，不執行。來源方式標籤的較後更新另由儲存與格式測試核對；不回寫此較早畫面的歷史證據。

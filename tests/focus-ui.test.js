@@ -6,8 +6,8 @@ import path from 'node:path';
 import os from 'node:os';
 import {FocusSessions} from '../src/focus-sessions.js';
 import {FocusOrganization} from '../src/focus-organization.js';
-const module={exports:{}};vm.runInNewContext(await readFile(new URL('../obsidian/mentor-work-center/focus.js',import.meta.url),'utf8'),{module,encodeURIComponent});
-const {mountFocus}=module.exports;
+const module={exports:{}};vm.runInNewContext(await readFile(new URL('../obsidian/mentor-work-center/focus.js',import.meta.url),'utf8'),{module,encodeURIComponent,TextEncoder});
+const {mountFocus,pastedSource,capturePastedSource}=module.exports;
 class El{
  constructor(tag,doc,text=''){this.tag=tag;this.ownerDocument=doc;this.textContent=text;this.children=[];this.value='';this.attrs={};this.classList={add(){}};}
  append(...nodes){this.children.push(...nodes);}replaceChildren(...nodes){this.children=[...nodes];}setAttribute(k,v){this.attrs[k]=v;}
@@ -81,4 +81,20 @@ test('source ending capture cannot double-end and closing during capture leaves 
  const f=await fixture(t);let finish,captures=0;
  const a=ui(t,f,null,{captureStart:async()=>({sourceBefore:{path:'示範.md',status:'present',content:'開始'}}),captureEnd:()=>{captures++;return new Promise(resolve=>{finish=resolve;});}});await a.control.refresh();await a.button('開始專注').onclick();
  const end=a.button('結束這一輪'),first=end.onclick();await end.onclick();assert.equal(captures,1);a.control.destroy();finish({path:'示範.md',status:'present',content:'結束'});await first;assert.equal((await f.store.list()).sessions[0].status,'running');
+});
+
+
+test('pasted materials require explicit unchanged preview, enforce limits and keep source labels fixed at ending',async()=>{
+ const doc={createElement:tag=>new El(tag,doc)},host=new El('body',doc);let modal;
+ const create=doc.createElement;doc.createElement=tag=>{const node=create(tag);if(tag==='dialog'){modal=node;node.showModal=()=>{};node.close=()=>node.onclose?.();node.remove=()=>{};}return node;};
+ const pending=capturePastedSource(host),input=all(modal).find(n=>n.tag==='input'),content=all(modal).find(n=>n.tag==='textarea'),find=text=>all(modal).find(n=>n.tag==='button'&&n.textContent===text);
+ input.value='研究/方案.md';content.value='<script>只當材料</script>';find('保存貼上內容並開始').onclick();assert.equal(find('保存貼上內容並開始').disabled,true);
+ find('預覽將保存的材料').onclick();assert.ok(all(modal).some(n=>n.tag==='pre'&&n.textContent===content.value));assert.equal(find('保存貼上內容並開始').disabled,false);
+ content.value='修改後';content.oninput();assert.equal(find('保存貼上內容並開始').disabled,true);find('預覽將保存的材料').onclick();find('保存貼上內容並開始').onclick();const result=await pending;assert.equal(result.sourceBefore.content,'修改後');
+ const ending=capturePastedSource(host,{path:'研究/方案.md'});assert.equal(all(modal).find(n=>n.tag==='input').readOnly,true);find('先結束，標記尚未取得結束內容').onclick();assert.deepEqual(JSON.parse(JSON.stringify(await ending)),{path:'研究/方案.md',status:'unavailable',origin:'manual_paste'});
+ for(const source of ['../outside.md','/outside.md','C:/outside.md'])assert.throws(()=>pastedSource(source,''));assert.throws(()=>pastedSource('來源.md','字'.repeat(34000)),/100 KB/);assert.throws(()=>pastedSource('來源.md','x'.repeat(50001)),/50,000/);
+ const cancelled=capturePastedSource(host);modal.oncancel({preventDefault(){}});assert.equal(await cancelled,null);
+});
+test('cancelling end material entry keeps the session running',async t=>{
+ const f=await fixture(t),a=ui(t,f,null,{captureStart:async()=>({sourceBefore:{path:'來源.md',status:'present',content:'原文'}}),captureEnd:async()=>null});await a.control.refresh();await a.button('開始專注').onclick();await a.button('結束這一輪').onclick();assert.equal((await f.store.list()).sessions[0].status,'running');
 });

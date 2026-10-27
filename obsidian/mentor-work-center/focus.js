@@ -3,6 +3,29 @@
  const organizationLabels={running:'AI 整理中，尚未保存',stopping:'正在確認停止',unknown:'結果未知，先核對原 CLI',failed:'整理失敗，可查看原始回覆',cancelled:'已停止／取消，未當成成果',draft:'草稿已產生，等待你核對',saved:'已有使用者保存版本'};
  const agentLabel=agent=>[({codex:'Codex',claude:'Claude Code',copilot:'GitHub Copilot'})[agent.provider]||agent.provider,agent.modelId||'預設模型',agent.effort||''].filter(Boolean).join(' · ');
  const format=ms=>{const seconds=Math.floor(Math.max(0,ms)/1000);return String(Math.floor(seconds/60)).padStart(2,'0')+':'+String(seconds%60).padStart(2,'0');};
+ function pastedSource(path,content){
+  if(typeof path!=='string'||path.length>500||!path.toLowerCase().endsWith('.md')||path.startsWith('/')||path.includes('\\')||/[\x00-\x1f:]/.test(path)||path.split('/').some(part=>!part||part==='.'||part==='..'))throw Error('請填入筆記庫內的 Markdown 相對路徑，例如「研究/方案.md」。');
+  if(typeof content!=='string'||content.length>50000||new TextEncoder().encode(content).length>100000)throw Error('單份材料上限 50,000 字元／100 KB；請縮小來源，不會自動截斷。');
+  return {path,status:'present',origin:'manual_paste',content};
+ }
+ function capturePastedSource(host,{path:fixedPath}={}){
+  const doc=host.ownerDocument,dialog=doc.createElement('dialog');dialog.className='wide mentor-focus';dialog.setAttribute('aria-label',fixedPath?'結束來源材料':'開始來源材料');const inner=doc.createElement('div');inner.className='dialog-inner';dialog.append(inner);
+  const add=(tag,text,parent=inner)=>{const node=doc.createElement(tag);if(text!==undefined)node.textContent=text;parent.append(node);return node;};
+  add('h2',fixedPath?'貼上這份來源的結束內容':'開始前，選擇是否保存來源');
+  add('p','僅保存你貼上的內容至 Mentor 本機；不自動讀取電腦或 Vault，也不傳給 AI。相同路徑只是你的來源標籤，不是已驗證的檔案讀取。');
+  const pathLabel=add('label','Markdown 相對路徑'),pathInput=add('input',undefined,pathLabel);pathLabel.className='field';pathInput.type='text';pathInput.setAttribute('aria-label','來源 Markdown 相對路徑');pathInput.maxLength=500;pathInput.value=fixedPath||'';pathInput.readOnly=Boolean(fixedPath);
+  const contentLabel=add('label','貼上此刻的完整來源（可為空白筆記）'),content=add('textarea',undefined,contentLabel);contentLabel.className='field';content.setAttribute('aria-label','手動貼上的來源內容');content.rows=10;
+  const status=add('p','');status.setAttribute('role','status');const preview=add('section');let approved=null,settled=false;
+  const button=(label,fn)=>{const b=add('button',label);b.type='button';b.className='btn';b.onclick=()=>{try{fn();}catch(error){status.textContent=error.message;}};return b;};
+  let resolve;const result=new Promise(done=>{resolve=done;});
+  const finish=value=>{if(settled)return;settled=true;resolve(value);dialog.close();dialog.remove();};
+  const confirm=button(fixedPath?'保存貼上內容並結束':'保存貼上內容並開始',()=>{const current=pastedSource(pathInput.value,content.value);if(!approved||current.path!==approved.path||current.content!==approved.content)throw Error('內容已變更，請先重新預覽。');finish(fixedPath?current:{sourceBefore:current});});confirm.disabled=true;
+  const invalidate=()=>{approved=null;confirm.disabled=true;preview.replaceChildren();};pathInput.oninput=content.oninput=invalidate;
+  button('預覽將保存的材料',()=>{approved=pastedSource(pathInput.value,content.value);preview.replaceChildren();add('h3','即將保存到 Mentor 本機的內容',preview);add('p',approved.path,preview);const pre=add('pre',approved.content,preview);pre.className='mentor-source';confirm.disabled=false;status.textContent='請核對上方原文；尚未開始／結束計時，也沒有呼叫 AI。';});
+  inner.append(confirm);
+  button(fixedPath?'先結束，標記尚未取得結束內容':'只開始計時，不保存來源',()=>finish(fixedPath?{path:fixedPath,status:'unavailable',origin:'manual_paste'}:{}));button('取消，保留目前計時狀態',()=>finish(null));
+  dialog.oncancel=event=>{event.preventDefault();finish(null);};dialog.onclose=()=>finish(null);host.append(dialog);dialog.showModal();return result;
+ }
  function mountFocus(host,options){
   const doc=host.ownerDocument,api=options.api,now=options.now||Date.now,every=options.setInterval||setInterval,clear=options.clearInterval||clearInterval,key=options.requestKey||(()=>crypto.randomUUID());
   let data=null,drawKey=null,busy=false,actionBusy=false,disposed=false,pending=null,goal,minutes,display,note,controls,sound=true,audio=null,owned=null,notified=false,lastReceived=0,draftGoal='',draftMinutes='15',draftLink=null,organizationLine=null,organizationSessionId=null;const editedDrafts=new Map();
@@ -31,7 +54,7 @@
    const s=active(),latest=data.sessions.at(-1),nextKey=s?s.id+':'+s.status:'idle:'+latest?.id+':'+latest?.materials?.afterStatus+':'+latest?.materials?.afterSha256;if(nextKey===drawKey){tick();return;}if(drawKey?.startsWith('idle:')){draftGoal=goal?.value||'';draftMinutes=minutes?.value||'15';}drawKey=nextKey;body.replaceChildren();materialsPanel.replaceChildren();display=null;organizationLine=null;organizationSessionId=null;
    if(s){
     display=el('p','','mentor-focus-clock');display.setAttribute('role','timer');display.setAttribute('aria-live','off');note=el('p','','mentor-caption');controls=el('div',undefined,'mentor-actions');body.append(display,note,controls);if(s.taskId)body.append(el('p','關聯任務：'+s.taskId+'；結束專注不代表任務完成。','mentor-caption'));if(s.materials)body.append(el('p','已選來源：'+s.materials.sourcePath+'；切換筆記不改變本輪範圍。','mentor-caption'));
-    button(controls,s.status==='paused'?'繼續專注':'暫停',()=>mutate(s.status==='paused'?'resume':'pause'));button(controls,'結束這一輪',async()=>{const extra=options.captureEnd&&s.materials&&!pending?{sourceAfter:await options.captureEnd(s.materials.sourcePath)}:{};await mutate('end',extra);});button(controls,'取消這一輪',()=>mutate('cancel'));tick();
+    button(controls,s.status==='paused'?'繼續專注':'暫停',()=>mutate(s.status==='paused'?'resume':'pause'));button(controls,'結束這一輪',async()=>{const extra=options.captureEnd&&s.materials&&!pending?{sourceAfter:await options.captureEnd(s.materials.sourcePath)}:{};if(extra.sourceAfter===null)return;await mutate('end',extra);});button(controls,'取消這一輪',()=>mutate('cancel'));tick();
    }else{
     const startBox=el(latest?'details':'div');if(latest){startBox.append(el('summary','開始下一輪專注'));if(draftLink)startBox.open=true;}body.append(startBox);if(draftLink){startBox.append(el('p','關聯任務：'+draftLink.title+'（'+draftLink.taskId+'）；僅記錄關聯，不更動任務進度。','mentor-caption'));button(startBox,'移除任務關聯',async()=>{draftGoal=goal?.value||draftGoal;draftMinutes=minutes?.value||draftMinutes;draftLink=null;drawKey=null;render();});}
     const label=el('label','本輪想完成什麼（選填）');goal=el('input');goal.type='text';goal.value=draftGoal;goal.maxLength=1000;goal.setAttribute('aria-label','本輪想完成什麼');goal.placeholder='例如：整理三個設計取捨';label.append(goal);startBox.append(label);
@@ -46,7 +69,7 @@
      const source=options.captureStart&&!pending?await options.captureStart():{};if(source===null)return;await mutate('start',{targetMinutes,goal:goal.value,...(draftLink?{taskId:draftLink.taskId}:{}),...source});
     });
     if(latest){body.append(el('p',`上一輪：${latest.status==='ended'?'已結束':'已取消'} · ${latest.goal||'目標未填'} · 計時 ${format(latest.elapsedMs)}。`,'mentor-caption'));
-     if(latest.materials){organizationLine=el('p','','mentor-caption');organizationSessionId=latest.id;body.append(organizationLine);button(body,'查看 AI 整理與保存版本',()=>showOrganization(latest));button(body,'核對本輪材料與變更',()=>showMaterials(latest));if(latest.status==='ended'&&['unavailable','not_captured'].includes(latest.materials.afterStatus)&&options.captureEnd)button(body,'補記目前來源內容（較晚快照）',async()=>{const sourceAfter=await options.captureEnd(latest.materials.sourcePath);if(sourceAfter.status==='unavailable')throw Error('仍無法讀取來源，沒有補記。');await mutate('capture',{sessionId:latest.id,sourceAfter});});}
+     if(latest.materials){organizationLine=el('p','','mentor-caption');organizationSessionId=latest.id;body.append(organizationLine);button(body,'查看 AI 整理與保存版本',()=>showOrganization(latest));button(body,'核對本輪材料與變更',()=>showMaterials(latest));if(latest.status==='ended'&&['unavailable','not_captured'].includes(latest.materials.afterStatus)&&options.captureEnd)button(body,'補記目前來源內容（較晚快照）',async()=>{const sourceAfter=await options.captureEnd(latest.materials.sourcePath);if(sourceAfter===null)return;if(sourceAfter.status==='unavailable')throw Error('仍無法讀取來源，沒有補記。');await mutate('capture',{sessionId:latest.id,sourceAfter});});}
     }
    }
    const previous=data.sessions.slice(0,-1);if(previous.length){const history=el('details');history.append(el('summary',`先前專注與整理（${previous.length}）`));for(const session of [...previous].reverse()){const row=el('div');row.append(el('p',session.goal||'目標未填'));if(session.materials)button(row,'核對這輪材料',()=>showMaterials(session));if(session.organizationRuns?.length)button(row,'查看這輪整理',()=>showOrganization(session));history.append(row);}body.append(history);}
@@ -55,7 +78,7 @@
   async function showMaterials(session){
    const {comparison:c}=await api('/focus/materials?sessionId='+encodeURIComponent(session.id));if(disposed)return;
    materialsPanel.replaceChildren();materialsPanel.append(el('h4','本輪保存材料（送出前可選片段）'),el('p',c.note,'mentor-caption'));
-   if(!c.before)return;materialsPanel.append(el('p',c.before.path),el('p','開始 SHA-256：'+c.before.sha256,'mentor-caption'));
+   if(!c.before)return;materialsPanel.append(el('p',c.before.path),el('p','收集方式：開始 '+(({manual_paste:'手動貼上',obsidian_note:'Obsidian 讀取'})[c.before.origin]||'未記錄')+'；結束 '+(({manual_paste:'手動貼上',obsidian_note:'Obsidian 讀取'})[c.after?.origin]||'未記錄／未取得')+'。來源方式為收集紀錄，不是獨立證明。','mentor-caption'),el('p','開始 SHA-256：'+c.before.sha256,'mentor-caption'));
    if(c.index?.lateCapture)materialsPanel.append(el('p','結束材料是較晚補記，不代表結束當時的內容。','mentor-caption'));
    const original=el('details');original.append(el('summary','閱讀開始快照'),el('pre',c.before.content,'mentor-source'));materialsPanel.append(original);
    if(c.after?.status==='present'){materialsPanel.append(el('p','結束 SHA-256：'+c.after.sha256,'mentor-caption'));const end=el('details');end.append(el('summary','閱讀結束快照'),el('pre',c.after.content,'mentor-source'));materialsPanel.append(end);}
@@ -124,5 +147,5 @@
   }
   return {refresh,prepareTask,destroy(){disposed=true;clear(tickTimer);clear(pollTimer);if(audio)void audio.close().catch(()=>{});host.replaceChildren();}};
  }
- if(typeof module!=='undefined'&&module.exports)module.exports={mountFocus,format};else window.MentorFocus={mountFocus,format};
+ if(typeof module!=='undefined'&&module.exports)module.exports={mountFocus,format,pastedSource,capturePastedSource};else window.MentorFocus={mountFocus,format,pastedSource,capturePastedSource};
 })();
