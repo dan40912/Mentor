@@ -53,6 +53,7 @@ class MentorView extends ItemView {
       if(latest){text(box,'h4','這一輪');text(box,'p',latest.context?.interpretation||'當時理解未記錄');text(box,'p',latest.outcome);if(latest.simulated)text(box,'p','示範／模擬回合，未呼叫真實 AI。','mentor-caption');const usage=box.createEl('details');text(usage,'summary','本輪用量');text(usage,'p',latest.contextMetrics?.usageLabel||'Token 與費用未知。');text(usage,'p',latest.contextMetrics?.elapsedMs==null?'執行時間未記錄。':`本機量測執行時間：${latest.contextMetrics.elapsedMs} ms。`);}
       const row=box.createDiv({cls:'mentor-actions'});
       button(row,'開啟任務與下一步',()=>this.plugin.task(task),true);
+      button(row,'為這個任務專注一輪',()=>this.plugin.openFocus(task));
       button(row,'準備接手包',()=>this.plugin.handoff(task));
       const drafts=(task.planning?.messages||[]).filter(m=>m.role==='user'&&m.organizationDraft);if(drafts.length){const saved=box.createEl('details');text(saved,'summary',`內容草稿（${drafts.length}）`);for(const message of drafts){const kind=ContentDrafts.KINDS[message.organizationDraft.kind];if(kind)button(saved,`查看${kind.label}草稿：${message.organizationDraft.sourcePath}`,()=>this.plugin.contentDraft(task.id,message.requestKey));}}
       const source=this.plugin.sources[task.id];if(source)button(row,'開啟來源筆記',()=>this.app.workspace.openLinkText(source.path,'',false));
@@ -102,7 +103,7 @@ module.exports = class MentorPlugin extends Plugin {
     this.addCommand({id:'organization-history',name:'查看整理紀錄與復原',callback:()=>this.organizationHistory().catch(e=>new Notice(e.message))});
   }
   onunload() { for(const leaf of this.app.workspace.getLeavesOfType(FOCUS_VIEW))leaf.view.control?.destroy();this.token=null; }
-  async openFocus(){const source=this.app.workspace.getActiveViewOfType(MarkdownView)?.file;if(source)this.focusCandidatePath=source.path;let leaf=this.app.workspace.getLeavesOfType(FOCUS_VIEW)[0];if(!leaf){leaf=this.app.workspace.getRightLeaf(true);if(!leaf)throw new Error('無法開啟專注側欄。');await leaf.setViewState({type:FOCUS_VIEW,active:true});}else await leaf.view.onOpen();await this.app.workspace.revealLeaf(leaf);}
+  async openFocus(task=null){const source=this.app.workspace.getActiveViewOfType(MarkdownView)?.file;if(source)this.focusCandidatePath=source.path;let leaf=this.app.workspace.getLeavesOfType(FOCUS_VIEW)[0];if(!leaf){leaf=this.app.workspace.getRightLeaf(true);if(!leaf)throw new Error('無法開啟專注側欄。');await leaf.setViewState({type:FOCUS_VIEW,active:true});}else if(!leaf.view.control)await leaf.view.onOpen();else await leaf.view.control.refresh();await this.app.workspace.revealLeaf(leaf);if(task)await leaf.view.control.prepareTask({taskId:task.id,title:task.title,goal:task.title});}
   async focusStartSnapshot(){
     const file=this.focusCandidatePath&&this.app.vault.getAbstractFileByPath(this.focusCandidatePath);if(!file||file.children)return {};
     const content=await this.app.vault.read(file),hash=createHash('sha256').update(content).digest('hex'),withinLimit=content.length<=50000&&new TextEncoder().encode(content).length<=100000;

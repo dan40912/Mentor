@@ -51,3 +51,21 @@ test('shared organization UI previews before invoking AI, saves edits, exports a
  await a.button('確認這份材料，呼叫 AI 整理').onclick();await Promise.all([...service.pending.values()]);await a.button('查看 AI 整理與保存版本').onclick();const edit=all(a.host).find(n=>n.tag==='textarea'&&n.attrs['aria-label']==='核對並修改整理草稿');assert.ok(edit);edit.value='我核對後保留的重點';edit.oninput();await a.button('保存這份整理到 Mentor').onclick();await a.button('匯出這個保存版本').onclick();assert.equal(calls,1);assert.match(exports[0].markdown,/我核對後保留的重點/);assert.match(exports[0].markdown,/不表示事實已獨立驗證/);
  await f.store.change('start',{revision:(await f.store.list()).revision,requestKey:'ui-next-focus-start',targetMinutes:10,goal:'下一輪'});await a.control.refresh();assert.ok(a.button('查看這輪整理'));await a.button('查看這輪整理').onclick();assert.ok(all(a.host).some(n=>n.tag==='textarea'&&n.value==='我核對後保留的重點'));
 });
+
+
+test('task focus entry previews an editable linked goal, persists linkage only on start and protects an active session',async t=>{
+ const f=await fixture(t),a=ui(t,f);await a.control.refresh();
+ await a.control.prepareTask({taskId:'TASK-focus-one',title:'核對表格閱讀模式',goal:'核對表格閱讀模式'});
+ assert.equal((await f.store.list()).sessions.length,0);
+ const goal=all(a.host).find(n=>n.tag==='input'&&n.type==='text');assert.equal(goal.value,'核對表格閱讀模式');goal.value='只核對其中一張表';await a.control.prepareTask({taskId:'TASK-focus-one',title:'核對表格閱讀模式',goal:'核對表格閱讀模式'});assert.equal(all(a.host).find(n=>n.tag==='input'&&n.type==='text').value,'只核對其中一張表');
+ await a.button('開始專注').onclick();const started=await f.store.list();assert.equal(started.sessions[0].taskId,'TASK-focus-one');assert.equal(started.sessions[0].goal,'只核對其中一張表');
+ await assert.rejects(a.control.prepareTask({taskId:'TASK-focus-two',title:'另一個任務',goal:'另一個任務'}),/已有進行中/);assert.equal((await f.store.list()).revision,started.revision);
+ await a.button('結束這一輪').onclick();assert.equal(all(a.host).find(n=>n.tag==='input'&&n.type==='text').value,'');
+ await a.control.prepareTask({taskId:'TASK-focus-two',title:'另一個任務',goal:'另一個任務'});await a.button('移除任務關聯').onclick();await a.button('開始專注').onclick();assert.equal((await f.store.list()).sessions.at(-1).taskId,null);
+});
+test('task focus entry preserves an unrelated unsent goal and refuses to prepare while offline',async t=>{
+ const f=await fixture(t);let offline=false;const a=ui(t,f,async()=>{if(offline)throw Error('offline');return f.store.list();});await a.control.refresh();
+ const goal=all(a.host).find(n=>n.tag==='input'&&n.type==='text');goal.value='我的未開始目標';
+ await assert.rejects(a.control.prepareTask({taskId:'TASK-focus-one',title:'任務',goal:'任務'}),/草稿/);assert.equal(goal.value,'我的未開始目標');goal.value='';offline=true;
+ await assert.rejects(a.control.prepareTask({taskId:'TASK-focus-one',title:'任務',goal:'任務'}),/核對專注狀態/);assert.equal((await f.store.list()).sessions.length,0);
+});

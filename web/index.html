@@ -1232,6 +1232,7 @@ function openTask(id,{background=false}={}){
  if(sharePanel.dataset.task!==id||!dialog.open){sharePanel.hidden=true;shareToggle.setAttribute('aria-expanded','false');}sharePanel.dataset.task=id;sharePanel.replaceChildren();shareToggle.hidden=!!t.error;
  shareToggle.onclick=()=>{sharePanel.hidden=!sharePanel.hidden;shareToggle.setAttribute('aria-expanded',String(!sharePanel.hidden));};
  if(t.error){detail.append(element('p',t.error,'notice'));if(!dialog.open)dialog.showModal();return;}
+ const focusTask=element('button','為這個任務專注一輪','btn subtle');focusTask.onclick=busy(focusTask,async()=>{await focusControl.prepareTask({taskId:t.id,title:t.title,goal:t.title});dialog.close();go('overview');const host=$('#focus-center');host.closest('details').open=true;host.scrollIntoView({block:'start'});host.querySelector('input')?.focus();});detail.append(focusTask);
  if(t.workCards?.length){
   const latest=t.workCards.at(-1),round=section('這一輪，實際做了什麼');round.classList.add('work-round');
   round.append(element('span',`${latest.roleLabel||latest.stage} · ${latest.label} · ${latest.agent}${latest.simulated?'（測試 CLI）':''}`,'badge'),definition([['你的要求',latest.userInput||'未記錄'],['當時理解',latest.context?.interpretation||'舊紀錄未保存，不以目前目標回填'],['目前結果',latest.outcome]]));

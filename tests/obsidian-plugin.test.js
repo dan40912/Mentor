@@ -239,3 +239,11 @@ test('focus publication saves only a verified managed Markdown version and refus
  const markdown='# 已保存的專注整理\n',output={fileName:crypto.randomUUID()+'-'+crypto.randomUUID()+'.md',markdown,sha256:crypto.createHash('sha256').update(markdown).digest('hex')};await f.plugin.saveFocusPublication(output);assert.equal(preview.sources.length,0);assert.ok(preview.outputs[0].path.startsWith('Mentor 整理/專注/'));assert.equal(preview.outputs[0].after,markdown);
  existing='使用者後來編輯';await assert.rejects(f.plugin.saveFocusPublication(output),/保留人工修改/);await assert.rejects(f.plugin.saveFocusPublication({...output,fileName:'../outside.md'}),/hash 不正確/);assert.equal(f.requests.length,0);
 });
+
+
+test('opening task focus reuses the mounted controller instead of discarding an unfinished draft',async()=>{
+ const f=fixture();await f.plugin.onload();const calls=[];let opens=0,reveals=0;
+ const leaf={view:{control:{refresh:async()=>calls.push('refresh'),prepareTask:async context=>calls.push(context)},onOpen:async()=>opens++}};
+ f.plugin.app.workspace.getLeavesOfType=()=>[leaf];f.plugin.app.workspace.revealLeaf=async()=>reveals++;
+ await f.plugin.openFocus({id:'TASK-focus-one',title:'核對表格'});assert.equal(opens,0);assert.equal(reveals,1);assert.deepEqual(JSON.parse(JSON.stringify(calls)),['refresh',{taskId:'TASK-focus-one',title:'核對表格',goal:'核對表格'}]);assert.equal(f.requests.length,0);
+});

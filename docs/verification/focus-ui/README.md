@@ -22,3 +22,6 @@
 4363 使用隔離虛構來源與模擬 runner，畫面及結果明示模擬，不消耗真實 CLI 額度。已透過 Web 操作材料片段、免費 Prompt 預覽、確認模擬整理、修改草稿、保存固定版本；organization-context.png 與 organization-saved.png 是操作畫面。這不是原生或真人驗收，也不證明真實模型成功。
 
 下載按鈕的瀏覽器事件觀察工具逾時，尚未取得實際下載檔收件證據，沒有將該步列為通過；匯出內容與指定版本由自動測試另行核對。真實 CLI 的逾時結果獨立保存在上一層 focus-organization-live-2026-10-27.md。
+
+
+窄螢幕補驗：390×844 的已保存整理畫面，focus-center clientWidth=scrollWidth=301；organization-narrow.png 保留草稿、保存及匯出控制。此檢查是 Web 響應式外觀，不能替代原生驗收。任務預填與草稿保護另有共用控制及插件呼叫測試。

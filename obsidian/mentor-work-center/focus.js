@@ -5,7 +5,7 @@
  const format=ms=>{const seconds=Math.floor(Math.max(0,ms)/1000);return String(Math.floor(seconds/60)).padStart(2,'0')+':'+String(seconds%60).padStart(2,'0');};
  function mountFocus(host,options){
   const doc=host.ownerDocument,api=options.api,now=options.now||Date.now,every=options.setInterval||setInterval,clear=options.clearInterval||clearInterval,key=options.requestKey||(()=>crypto.randomUUID());
-  let data=null,drawKey=null,busy=false,disposed=false,pending=null,goal,minutes,display,note,controls,sound=true,audio=null,owned=null,notified=false,lastReceived=0,draftGoal='',draftMinutes='15',organizationLine=null,organizationSessionId=null;const editedDrafts=new Map();
+  let data=null,drawKey=null,busy=false,disposed=false,pending=null,goal,minutes,display,note,controls,sound=true,audio=null,owned=null,notified=false,lastReceived=0,draftGoal='',draftMinutes='15',draftLink=null,organizationLine=null,organizationSessionId=null;const editedDrafts=new Map();
   const el=(tag,text,cls)=>{const node=doc.createElement(tag);if(text!==undefined)node.textContent=text;if(cls)node.className=cls;return node;};
   host.classList.add('mentor-focus');host.replaceChildren();const heading=el('h3','專注一輪'),body=el('div'),materialsPanel=el('section'),message=el('p','','mentor-caption');message.setAttribute('role','status');host.append(heading,body,materialsPanel,message);
   const active=()=>data?.sessions.find(session=>session.id===data.activeId);
@@ -23,17 +23,17 @@
    const input=pending?.action===action?pending.input:{revision:data.revision,requestKey:key(),...(action==='start'?extra:{sessionId:active()?.id,...extra})};pending={action,input};retry.hidden=false;
    try{
     const result=await api('/focus/'+action,input);if(disposed)return;data=result;lastReceived=now();pending=null;retry.hidden=true;
-    if(action==='start'){owned=result.operationSessionId||result.activeId;notified=false;}message.textContent=action==='end'?'本輪計時已保存；有選定來源時可核對快照。AI 整理需另行確認。':action==='cancel'?'已取消本輪，計時紀錄保留。':'專注狀態已同步。';drawKey=null;render();
+    if(action==='start'){owned=result.operationSessionId||result.activeId;notified=false;draftGoal='';draftLink=null;}message.textContent=action==='end'?'本輪計時已保存；有選定來源時可核對快照。AI 整理需另行確認。':action==='cancel'?'已取消本輪，計時紀錄保留。':'專注狀態已同步。';drawKey=null;render();
    }catch(error){if(!disposed){if(['FOCUS_REVISION_CONFLICT','FOCUS_ALREADY_ACTIVE','FOCUS_INPUT_INVALID','FOCUS_SOURCE_INVALID','FOCUS_STATE_CONFLICT','FOCUS_CLOCK_CHANGED'].includes(error.code)){pending=null;retry.hidden=true;}message.textContent='操作未完成：'+error.message+(pending?'。請重試未確認操作。':'。請重新核對狀態。');}}
    finally{busy=false;if(!disposed)for(const b of host.querySelectorAll('button'))b.disabled=false;}
   }
   function render(){
    const s=active(),latest=data.sessions.at(-1),nextKey=s?s.id+':'+s.status:'idle:'+latest?.id+':'+latest?.materials?.afterStatus+':'+latest?.materials?.afterSha256;if(nextKey===drawKey){tick();return;}if(drawKey?.startsWith('idle:')){draftGoal=goal?.value||'';draftMinutes=minutes?.value||'15';}drawKey=nextKey;body.replaceChildren();materialsPanel.replaceChildren();display=null;organizationLine=null;organizationSessionId=null;
    if(s){
-    display=el('p','','mentor-focus-clock');display.setAttribute('role','timer');display.setAttribute('aria-live','off');note=el('p','','mentor-caption');controls=el('div',undefined,'mentor-actions');body.append(display,note,controls);if(s.materials)body.append(el('p','已選來源：'+s.materials.sourcePath+'；切換筆記不改變本輪範圍。','mentor-caption'));
+    display=el('p','','mentor-focus-clock');display.setAttribute('role','timer');display.setAttribute('aria-live','off');note=el('p','','mentor-caption');controls=el('div',undefined,'mentor-actions');body.append(display,note,controls);if(s.taskId)body.append(el('p','關聯任務：'+s.taskId+'；結束專注不代表任務完成。','mentor-caption'));if(s.materials)body.append(el('p','已選來源：'+s.materials.sourcePath+'；切換筆記不改變本輪範圍。','mentor-caption'));
     button(controls,s.status==='paused'?'繼續專注':'暫停',()=>mutate(s.status==='paused'?'resume':'pause'));button(controls,'結束這一輪',async()=>{const extra=options.captureEnd&&s.materials&&!pending?{sourceAfter:await options.captureEnd(s.materials.sourcePath)}:{};await mutate('end',extra);});button(controls,'取消這一輪',()=>mutate('cancel'));tick();
    }else{
-    const startBox=el(latest?'details':'div');if(latest)startBox.append(el('summary','開始下一輪專注'));body.append(startBox);
+    const startBox=el(latest?'details':'div');if(latest){startBox.append(el('summary','開始下一輪專注'));if(draftLink)startBox.open=true;}body.append(startBox);if(draftLink){startBox.append(el('p','關聯任務：'+draftLink.title+'（'+draftLink.taskId+'）；僅記錄關聯，不更動任務進度。','mentor-caption'));button(startBox,'移除任務關聯',async()=>{draftGoal=goal?.value||draftGoal;draftMinutes=minutes?.value||draftMinutes;draftLink=null;drawKey=null;render();});}
     const label=el('label','本輪想完成什麼（選填）');goal=el('input');goal.type='text';goal.value=draftGoal;goal.maxLength=1000;goal.setAttribute('aria-label','本輪想完成什麼');goal.placeholder='例如：整理三個設計取捨';label.append(goal);startBox.append(label);
     const duration=el('div',undefined,'mentor-actions');minutes=el('input');minutes.type='number';minutes.min='1';minutes.max='180';minutes.step='1';minutes.value=draftMinutes;minutes.setAttribute('aria-label','專注分鐘數');
     for(const value of [10,15,30]){const b=button(duration,value+' 分鐘',async()=>{minutes.value=String(value);for(const control of duration.querySelectorAll('button'))control.setAttribute('aria-pressed',String(control===b));});b.setAttribute('aria-pressed',String(value===Number(minutes.value)));}
@@ -43,7 +43,7 @@
     button(startBox,'開始專注',async()=>{
      const targetMinutes=Number(minutes.value);if(!Number.isInteger(targetMinutes)||targetMinutes<1||targetMinutes>180){message.textContent='請填入 1–180 的整數分鐘。';return;}
      if(sound&&!audio){try{const Audio=options.AudioContext||(typeof window!=='undefined'&&(window.AudioContext||window.webkitAudioContext));if(Audio){audio=new Audio();await audio.resume();}}catch{audio=null;}}
-     const source=options.captureStart&&!pending?await options.captureStart():{};if(source===null)return;await mutate('start',{targetMinutes,goal:goal.value,...source});
+     const source=options.captureStart&&!pending?await options.captureStart():{};if(source===null)return;await mutate('start',{targetMinutes,goal:goal.value,...(draftLink?{taskId:draftLink.taskId}:{}),...source});
     });
     if(latest){body.append(el('p',`上一輪：${latest.status==='ended'?'已結束':'已取消'} · ${latest.goal||'目標未填'} · 計時 ${format(latest.elapsedMs)}。`,'mentor-caption'));
      if(latest.materials){organizationLine=el('p','','mentor-caption');organizationSessionId=latest.id;body.append(organizationLine);button(body,'查看 AI 整理與保存版本',()=>showOrganization(latest));button(body,'核對本輪材料與變更',()=>showMaterials(latest));if(latest.status==='ended'&&['unavailable','not_captured'].includes(latest.materials.afterStatus)&&options.captureEnd)button(body,'補記目前來源內容（較晚快照）',async()=>{const sourceAfter=await options.captureEnd(latest.materials.sourcePath);if(sourceAfter.status==='unavailable')throw Error('仍無法讀取來源，沒有補記。');await mutate('capture',{sessionId:latest.id,sourceAfter});});}
@@ -112,9 +112,17 @@
    }
    if(response.jobs.length>1){const older=el('details');older.append(el('summary','先前整理執行（保留失敗與原始回覆）'));for(const other of response.jobs.filter(other=>other.id!==job.id))button(older,(organizationLabels[other.status]||'未知')+' · '+other.id.slice(0,8),()=>showOrganization(session,other.id));materialsPanel.append(older);}
   }
-  async function refresh(){if(disposed||busy)return;try{const result=await api('/focus');if(disposed||busy||result.revision<(data?.revision||0))return;data=result;lastReceived=now();render();}catch(error){if(!disposed)message.textContent='專注狀態未同步：'+error.message;}}
+  async function refresh(){if(disposed||busy)return;try{const result=await api('/focus');if(disposed||busy||result.revision<(data?.revision||0))return;data=result;lastReceived=now();render();return true;}catch(error){if(!disposed)message.textContent='專注狀態未同步：'+error.message;return false;}}
   const retry=button(host,'重試未確認操作',()=>pending&&mutate(pending.action));retry.hidden=true;button(host,'重新核對專注狀態',refresh);const tickTimer=every(tick,1000),pollTimer=every(refresh,5000);void refresh();
-  return {refresh,destroy(){disposed=true;clear(tickTimer);clear(pollTimer);if(audio)void audio.close().catch(()=>{});host.replaceChildren();}};
+  async function prepareTask(context){
+   if(disposed||busy||pending)throw Error('請先完成目前未確認的專注操作。');
+   if(!context||!/^TASK-[a-zA-Z0-9-]+$/.test(context.taskId)||typeof context.title!=='string'||typeof context.goal!=='string'||context.goal.length>1000)throw Error('任務關聯或目標格式不正確。');
+   if(!await refresh())throw Error('請先核對專注狀態，再準備任務計時。');
+   if(active())throw Error('已有進行中的專注；請先結束或取消，不會替換原任務。');
+   const current=goal?.value||draftGoal;if(current&&draftLink?.taskId!==context.taskId)throw Error('專注目標已有未開始的草稿；請先清空目標或完成該輪，再切換任務。');
+   draftMinutes=minutes?.value||draftMinutes;draftLink={taskId:context.taskId,title:context.title};draftGoal=current||context.goal;drawKey=null;render();message.textContent='已帶入任務目標，請核對時間後按開始；尚未開始計時。';
+  }
+  return {refresh,prepareTask,destroy(){disposed=true;clear(tickTimer);clear(pollTimer);if(audio)void audio.close().catch(()=>{});host.replaceChildren();}};
  }
  if(typeof module!=='undefined'&&module.exports)module.exports={mountFocus,format};else window.MentorFocus={mountFocus,format};
 })();
