@@ -17,10 +17,11 @@ export function turnContext(task) {
   });
 }
 
+const roles={A:'任務整理',B:'需求釐清',C:'計畫草稿',D:'成果製作',E:'AI 審閱',F:'依意見修改'};
 const states = { running: '執行中', completed: '已回覆，仍需核對', failed: '未完成', unknown: '結果未知', stopped: '已停止，未完成' };
 export function workCards(task) {
   return (task.planning?.learningTurns || []).map(turn => ({
-    id: turn.id, stage: turn.stage, roleLabel: turn.inputKind==='question'?'任務問答':turn.stage, status: turn.status, label: states[turn.status] || '未知狀態',
+    id: turn.id, stage: turn.stage, roleLabel: turn.inputKind==='question'?'任務問答':roles[turn.stage]||'階段未知', status: turn.status, label: states[turn.status] || '未知狀態',
     provider: turn.provider || null, model: turn.modelId || null, agent: turn.agent || '未記錄',
     startedAt: turn.startedAt, completedAt: turn.completedAt || null,
     baseRevision: turn.beforeRevision, resultRevision: turn.afterRevision || null,
@@ -44,11 +45,12 @@ export function workCardsMarkdown(task) {
   if (!cards.length) return '';
   return ['## 每輪工作紀錄', '> AI 自述、已登記成果與機器檢查分開呈現；已回覆不代表人工驗收通過。',
     ...cards.map(card => [
-      `### ${card.stage} · ${card.label} · ${card.agent}`,
+      `### ${card.roleLabel}（${card.stage}） · ${card.label} · ${card.agent}`,
       `- 開始版本：${card.baseRevision ?? '未記錄'}；結果版本：${card.resultRevision ?? '未記錄'}`,
       `- 本輪要求：${card.userInput || '未記錄'}`,
       `- 當時理解：${card.context?.interpretation || '舊紀錄未保存，不以目前目標回填'}`,
       `- 結果：${card.outcome}`,
+      ...(card.simulated ? ['- 執行類型：示範／模擬回合，未呼叫真實 AI，不作為實際成果或驗收證據。'] : []),
       ...(card.answer ? [`- 問答回答（不是修改授權）：${card.answer}`] : []),
       ...(card.aiClaims?.change ? [`- AI 自述改動：${card.aiClaims.change}`] : []),
       ...card.outputs.map(output => `- 已登記成果：${typeof output === 'string' ? output : output.file || output.path}`),

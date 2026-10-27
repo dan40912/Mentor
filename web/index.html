@@ -1338,10 +1338,11 @@ async function showRoundCards(t){
  const {cards}=await request(`/api/tasks/${t.id}/work-cards`);const d=workDialog('每輪工作卡');
  for(const c of [...cards].reverse()){
   const box=section(`${c.roleLabel||c.stage} · ${c.label} · ${c.agent}`);
+  if(c.simulated)box.append(element('p','示範／模擬回合，未呼叫真實 AI，不作為實際成果或驗收證據。','notice'));
   box.append(definition([['本輪要求',c.userInput||'未記錄'],['當時理解',c.context?.interpretation||'舊紀錄未保存'],['實際結果',c.outcome],['版本',`${c.baseRevision??'未知'} → ${c.resultRevision??'尚無'}`],['當輪下一步',c.next?.label||'未記錄，請查看任務目前狀態']]));
   if(c.aiClaims?.change)box.append(element('p',`AI 自述改動：${c.aiClaims.change}`,'small'));
   if(c.aiClaims?.evidence)box.append(element('p',`AI 聲稱的證據（非獨立驗證）：${c.aiClaims.evidence}`,'small muted'));
-  for(const o of c.outputs){const file=typeof o==='string'?o:o.file||o.path,b=element('button',`開啟成果：${file}`,'btn');b.onclick=busy(b,async()=>{d.close();await openPreview(t.id,file,b);});box.append(b);}
+  for(const o of c.outputs){const file=typeof o==='string'?o:o.file||o.path,b=element('button',`查看目前檔案：${file}`,'btn');b.onclick=busy(b,async()=>{d.close();await openPreview(t.id,file,b);});box.append(b,element('p',`這輪登記 SHA-256：${typeof o==='object'&&o.sha?o.sha:'未記錄'}。按鍵開啟目前檔案，不能據此當成這輪原始內容。`,'small muted'));}
   if(c.checks.length)box.append(sensorList(c.checks));else box.append(element('p','機器檢查未記錄，不視為通過。','small muted'));
   box.append(element('p',`本輪輸入 ${c.contextMetrics.input.characters} 字元／${c.contextMetrics.input.utf8Bytes} UTF-8 bytes；輸出 ${c.contextMetrics.output.characters} 字元。${c.contextMetrics.usageLabel||'Token 與費用未知。'}`,'small muted'),element('p',`來源：${c.source}`,'small muted'));d.append(box);
  }
