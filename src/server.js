@@ -1,3 +1,4 @@
+import { FocusSessions } from './focus-sessions.js';
 import { ObsidianBridge } from './obsidian-bridge.js';
 import { workCards } from './work-cards.js';
 import { planPreview } from './plan-preview.js';
@@ -152,6 +153,7 @@ export async function createRequestHandler({ root = appDir, port = 4317, runAgen
   const diagnosisPath = path.join(root, '.diagnosis.json');
   try { const saved = JSON.parse(await readFile(diagnosisPath, 'utf8')); for (const id of ['codex','claude','copilot']) if (typeof saved[id]?.ok === 'boolean') diagnosis[id] = saved[id]; } catch (error) { if (error.code !== 'ENOENT') throw error; }
   const tasks = new TaskStore(memory);
+  const focus = new FocusSessions(memory);
   try {
     const saved = JSON.parse(await readFile(settingsPath, 'utf8'));
     if (!Number.isInteger(saved.revision) || saved.revision < 1 || !saved.stages) throw new Error('INVALID_SETTINGS');
@@ -232,6 +234,7 @@ export async function createRequestHandler({ root = appDir, port = 4317, runAgen
       if (req.method === 'GET' && req.url === '/api/health') {
         return send(200, { status: 'ok', execution: 'controlled-cli-and-manual-handoff', memory });
       }
+      if(req.method==='GET'&&req.url==='/api/focus'){if(!req.headers.cookie?.split('; ').includes(`awc=${token}`))return send(403,{code:'SESSION_REQUIRED'});return send(200,await focus.list());}
       const taskRoute = req.url.match(/^\/api\/tasks(?:\/(TASK-[a-zA-Z0-9-]+)(?:\/([a-z-]+))?)?(?:\?(.*))?$/);
       const projectRoute = req.url.match(/^\/api\/projects(?:\/([^/]+)(?:\/(save|summary|trash|stop-all))?)?$/);
       const trashRoute = req.url.match(/^\/api\/trash(?:\/(T-[0-9]{8}-[a-f0-9]{8})\/(restore|purge))?$/);
@@ -352,6 +355,11 @@ export async function createRequestHandler({ root = appDir, port = 4317, runAgen
         return send(201, { attachment: await coach.attachments.stage(params.get('name'), req, params.has('batch') ? params.get('batch') : undefined, params.has('index') ? Number(params.get('index')) : undefined) });
       }
       const input = await body(req);
+      const focusAction=req.url.match(/^\/api\/focus\/(start|pause|resume|end|cancel)$/)?.[1];
+      if(focusAction){
+        if(focusAction==='start'&&input.taskId){const {task}=await tasks.get(input.taskId);if(task.trashed)throw new TaskError(409,'TASK_TRASHED','請先還原任務。');if(input.workItemId&&!task.planning?.workItems?.some(item=>item.id===input.workItemId))throw new TaskError(400,'FOCUS_LINK_INVALID','找不到關聯的工作項目。');}
+        return send(200,await focus.change(focusAction,input));
+      }
       if (req.url === '/api/obsidian/pairing') return send(200, obsidian.prepare());
       if (req.url === '/api/obsidian/revoke') { obsidian.revoke(input.id); return send(200, { revoked: true }); }
       if (bridgeClient && taskRoute && !taskRoute[1]) {
