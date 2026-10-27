@@ -1,0 +1,11 @@
+{
+  "date": "2026-10-27",
+  "implementationSha256": "52e77e4150b3ecf42b13fe1ec87ba47dd0b1279f39dc444a8262d8f1c3cfe27b",
+  "simulated": true,
+  "modelCalls": 0,
+  "runnerReceivesLiveOutputDirectory": true,
+  "concurrentHumanEditPreserved": false,
+  "finalContent": "simulated agent output",
+  "itemStatus": "BLOCKED",
+  "conclusion": "Reproduced concurrent human edit overwrite; historical snapshots do not prevent it."
+}

@@ -91,7 +91,9 @@ test('stopping D keeps partial files as unverified, item stays TODO, resume chec
   mode('slow');
   const run = await coach.execute(task.id, 'W1');
   assert.ok(await waitFor(() => coach.children.has(task.id)));
-  assert.ok(await waitFor(() => exists(path.join(task.allowedRoots[0], 'partial.html'))));
+  const workspace=(await latest(store,task.id)).planning.learningTurns.at(-1).executionWorkspace;
+  const candidate=path.join(workspace.directory,'candidate');
+  assert.ok(await waitFor(() => exists(path.join(candidate, 'partial.html'))));
   await coach.stop(task.id);
   await run.done;
   task = await latest(store, task.id);
@@ -100,7 +102,7 @@ test('stopping D keeps partial files as unverified, item stays TODO, resume chec
   assert.deepEqual(w1.outputs, []);
   assert.deepEqual(task.planning.stopped.changed, ['partial.html']);
   assert.equal(task.planning.stopped.itemId, 'W1');
-  assert.ok(await exists(path.join(task.allowedRoots[0], 'partial.html')), '部分檔案保留');
+  assert.ok(await exists(path.join(candidate,'partial.html')), '未發布半成品留在候選副本');assert.equal(await exists(path.join(task.allowedRoots[0],'partial.html')),false);
   mode();
   const resumed = await coach.resume(task.id, task.revision, 'k-r');
   await resumed.done;
@@ -204,7 +206,9 @@ test('trash keeps outputs, blocks running and depended tasks, restore stays stop
   const run = await coach.execute(task.id, 'W1');
   assert.ok(await waitFor(() => coach.children.has(task.id)));
   await assert.rejects(trash.trashTask(task.id), { code: 'TASK_RUNNING' });
-  assert.ok(await waitFor(() => exists(path.join(task.allowedRoots[0], 'partial.html'))));
+  const workspace=(await latest(store,task.id)).planning.learningTurns.at(-1).executionWorkspace;
+  const candidate=path.join(workspace.directory,'candidate');
+  assert.ok(await waitFor(() => exists(path.join(candidate, 'partial.html'))));
   await coach.stop(task.id);
   await run.done;
   mode();
@@ -222,7 +226,7 @@ test('trash keeps outputs, blocks running and depended tasks, restore stays stop
   assert.equal(trashed.kind, 'task');
   assert.ok(trashed.files.includes(`${task.id}.md`) && trashed.files.includes(`events/${task.id}.jsonl`));
   assert.ok(!(await store.list()).some(t => t.id === task.id));
-  assert.ok(await exists(path.join(task.allowedRoots[0], 'partial.html')), '產出檔案保留');
+  assert.ok(await exists(path.join(candidate, 'partial.html')), '未發布候選保留');
   await assert.rejects(coach.execute(task.id, 'W1'), { code: 'TASK_NOT_FOUND' });
   assert.equal((await trash.list())[0].name, task.title);
 
@@ -238,7 +242,7 @@ test('trash keeps outputs, blocks running and depended tasks, restore stays stop
   const purged = await trash.purge(again.id, { confirm: again.name });
   assert.equal(purged.purged.id, again.id);
   assert.deepEqual(await trash.list(), []);
-  assert.ok(await exists(path.join(task.allowedRoots[0], 'partial.html')), '永久刪除紀錄也不動產出');
+  assert.ok(await exists(path.join(candidate, 'partial.html')), '永久刪除任務紀錄也不動未發布候選');
   await assert.rejects(trash.restore(again.id), { code: 'TRASH_NOT_FOUND' });
 });
 

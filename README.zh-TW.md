@@ -77,6 +77,12 @@ npm run verify:obsidian -- --vault dist/mentor-obsidian
 
 停用 Theme／插件後，Markdown 仍可閱讀。套裝生成器不安裝到正式 Vault；`dist/` 是可重建產出，不要放正式筆記。重建遇到人工改過的範本會停止，不默默覆寫。升級前備份，插件需一併替換 main.js、organization.js、content-drafts.js、relocation.js、reference-coverage.js、manifest.json、styles.css。[完整安裝、復原與限制](docs/obsidian-work-center.md)。
 
+## 專注一輪（開發中）
+
+Web「現在」頁展開「專注一輪」，或在已配對的 Obsidian 工作中心／命令選單開啟同名側欄。選 10／15／30 分鐘或自訂 1–180 分鐘，再按開始；到期只提醒，計時繼續。暫停／繼續及結束會同步到本機服務，不呼叫 AI、不停止 CLI，也不自動通過任務驗收。
+
+提醒聲需啟動那輪的畫面仍開啟；關閉、睡眠、重載或音訊受阻時不能保證響鈴。時間尚未排除電腦睡眠，不代表實際注意力時數。Obsidian 可在開始前預覽並選定一份筆記，結束後核對開始／結束快照及變更；無法取得內容時標為未知，較晚補記另有提示。快照正文保存在 Mentor 本機，原筆記不改動，Web 僅按需讀取，也可先預覽再確認貼上開始／結束材料，不自動讀取檔案。AI 整理已接上片段／模型預覽、確認呼叫、草稿修改、保存版本與匯出。一次真實 Claude 測試逾時，尚未證明真實模型流程成功；完整離線同步與原生實機驗收仍待完成。[完整規格與限制](docs/implementation/focus-session-integration-plan.zh-TW.md)。
+
 ## 資料、權限與隱私
 
 - 任務在 `MENTOR_HOME/vault`，成果在 `MENTOR_HOME/outputs`；設定與日記也在本機。備份整個 home，另備份你的 Obsidian Vault。
@@ -133,3 +139,6 @@ node scripts/live-cross-ai.mjs --run
 保留零 runtime dependencies、使用 argv／stdin 呼叫 CLI、維持版本與路徑驗證。以虛構資料新增回歸測試，提交前跑 npm test；UI 修改附截圖。PR 請說明範圍、測試、未驗證項目與資料復原方式，不自行合併。
 
 [改版 Prompt](prompts/mentor-obsidian-redesign-prompt.md) · [工作閉環 Prompt](prompts/mentor-obsidian-workflow-optimization-prompt.md) · [教學](docs/tutorials/01-first-task.md) · [MIT 授權](LICENSE)
+
+
+執行與修正成果現在先寫入隔離候選，測試也在候選內執行；來源衝突不發布，候選與實際原成果備份會保留。未知發布需在任務詳情明確核對，不能自動重跑或驗收。此機制不是 OS 沙箱；目錄切換中斷可能暫時缺少成果路徑，需從備份恢復。大型或含連結的成果樹會拒絕執行。候選與備份不隨任務回收桶清除，請依任務詳情列示位置備份與管理。

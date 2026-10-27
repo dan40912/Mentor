@@ -12,6 +12,8 @@ const relocationModule={exports:{}};
 const coverageModule={exports:{}};
 vm.runInNewContext(await readFile(new URL('../obsidian/mentor-work-center/reference-coverage.js',import.meta.url),'utf8'),{module:coverageModule});
 vm.runInNewContext(await readFile(new URL('../obsidian/mentor-work-center/relocation.js',import.meta.url),'utf8'),{module:relocationModule,require:name=>name==='./reference-coverage'?coverageModule.exports:name==='./organization'?organizationModule.exports:name==='node:crypto'?crypto:path});
+const focusModule={exports:{}};
+vm.runInNewContext(await readFile(new URL('../obsidian/mentor-work-center/focus.js',import.meta.url),'utf8'),{module:focusModule});
 const source=await readFile(new URL('../obsidian/mentor-work-center/main.js',import.meta.url),'utf8');
 class El {
   constructor(tag='',options={}){this.tag=tag;this.text=options.text||'';this.value=options.value||'';this.children=[];this.attrs=options.attr||{};}
@@ -28,8 +30,9 @@ function fixture(){
   class ItemView{} class MarkdownView{}
   const view={file:{path:'測試.md',basename:'測試'},editor:{getSelection:()=>''}};
   const app={workspace:{getActiveViewOfType:()=>view,getLeavesOfType:()=>[]},vault:{read:async()=>read}};
-  const context={module:{exports:{}},URL,window:{},document:{},require:name=>{
+  const context={module:{exports:{}},URL,TextEncoder,window:{},document:{},require:name=>{
     if(name==='node:crypto')return crypto;
+    if(name==='./focus')return focusModule.exports;
     if(name==='./organization')return organizationModule.exports;
     if(name==='./relocation')return relocationModule.exports;
     if(name==='./content-drafts')return contentModule.exports;
@@ -222,4 +225,31 @@ test('native saved Markdown reads original text, never executes wrapper HTML or 
  const previous=f.modal;f.responseText='<script>bad()</script>';
  await assert.rejects(f.plugin.output({id:'TASK-reading'},'note.md',{id:'saved-version',index:0}),/格式不正確/);
  assert.equal(f.modal,previous);assert.equal(f.requests.length,2);
+});
+
+test('focus source preview needs explicit confirmation and end capture stays bound to that source path',async()=>{
+ const f=fixture();await f.plugin.onload();f.plugin.focusCandidatePath='測試.md';f.plugin.app.vault.getAbstractFileByPath=p=>p==='測試.md'?{path:p}:null;
+ const waiting=f.plugin.focusStartSnapshot();await new Promise(resolve=>setImmediate(resolve));assert.ok(all(f.modal.contentEl).some(n=>n.tag==='pre'&&n.text==='原始筆記'));assert.equal(f.requests.length,0);
+ await all(f.modal.contentEl).find(n=>n.tag==='button'&&n.text==='保存這份來源並開始計時').onclick();const input=await waiting;assert.equal(input.sourceBefore.path,'測試.md');assert.equal(input.sourceBefore.content,'原始筆記');
+ f.read='後來的內容';assert.equal((await f.plugin.focusEndSnapshot('測試.md')).content,'後來的內容');assert.equal((await f.plugin.focusEndSnapshot('已搬走.md')).status,'missing');f.read='x'.repeat(50001);assert.equal((await f.plugin.focusEndSnapshot('測試.md')).status,'unavailable');assert.equal(f.requests.length,0);
+});
+
+test('focus publication saves only a verified managed Markdown version and refuses existing human edits',async()=>{
+ const f=fixture();await f.plugin.onload();let existing=null,preview=null;f.plugin.organization={io:{read:async()=>existing},previewWrites:async(sources,outputs)=>({sources,outputs})};f.plugin.showOrganizationPlan=value=>{preview=value;};f.plugin.app.workspace.openLinkText=async()=>{};
+ const markdown='# 已保存的專注整理\n',output={fileName:crypto.randomUUID()+'-'+crypto.randomUUID()+'.md',markdown,sha256:crypto.createHash('sha256').update(markdown).digest('hex')};await f.plugin.saveFocusPublication(output);assert.equal(preview.sources.length,0);assert.ok(preview.outputs[0].path.startsWith('Mentor 整理/專注/'));assert.equal(preview.outputs[0].after,markdown);
+ existing='使用者後來編輯';await assert.rejects(f.plugin.saveFocusPublication(output),/保留人工修改/);await assert.rejects(f.plugin.saveFocusPublication({...output,fileName:'../outside.md'}),/hash 不正確/);assert.equal(f.requests.length,0);
+});
+
+
+test('opening task focus reuses the mounted controller instead of discarding an unfinished draft',async()=>{
+ const f=fixture();await f.plugin.onload();const calls=[];let opens=0,reveals=0;
+ const leaf={view:{control:{refresh:async()=>calls.push('refresh'),prepareTask:async context=>calls.push(context)},onOpen:async()=>opens++}};
+ f.plugin.app.workspace.getLeavesOfType=()=>[leaf];f.plugin.app.workspace.revealLeaf=async()=>reveals++;
+ await f.plugin.openFocus({id:'TASK-focus-one',title:'核對表格'});assert.equal(opens,0);assert.equal(reveals,1);assert.deepEqual(JSON.parse(JSON.stringify(calls)),['refresh',{taskId:'TASK-focus-one',title:'核對表格',goal:'核對表格'}]);assert.equal(f.requests.length,0);
+});
+
+
+test('native unknown publication gives recovery controls before AI actions and does not imply acceptance',async()=>{
+ const f=fixture();await f.plugin.onload();const task={id:'TASK-recovery-ui',title:'恢復',revision:3,goal:'恢復',status:'BLOCKED',nextAction:{kind:'publication',label:'成果發布結果待核對'},planning:{learningTurns:[{id:'turn-recovery',stage:'D',executionWorkspace:{directory:'/fixture/candidate',status:'unknown',displaced:'/fixture/original'}}]}};
+ await f.plugin.task(task);const nodes=all(f.modal.contentEl);assert.ok(nodes.some(n=>n.tag==='button'&&n.text==='恢復原成果（只限位置空缺）'));assert.ok(nodes.some(n=>n.text==='請先核對上方發布紀錄；完成前不執行 AI 或驗收。'));assert.equal(nodes.some(n=>n.tag==='button'&&n.text==='交給 AI 做'),false);await nodes.find(n=>n.tag==='button'&&n.text==='恢復原成果（只限位置空缺）').onclick();assert.equal(f.requests.length,0);assert.ok(f.notices.some(n=>n.includes('請先確認原 CLI')));
 });

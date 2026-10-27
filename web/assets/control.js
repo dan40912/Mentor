@@ -10,7 +10,7 @@ const stopNote=s=>s.unconfirmed?'CLI 還沒結束，系統持續確認中。確�
 
 // 狀態列：AI 執行中／正在停止／尚未確認停止／已停止。文字說明狀態，不只靠顏色。
 function controlBar(t){
- const p=t.planning;if(!p||(!p.running&&!p.stopped))return null;
+ const p=t.planning;if(t.nextAction?.kind==='publication'||!p||(!p.running&&!p.stopped))return null;
  const bar=element('div',undefined,'control-bar');bar.dataset.anchor=p.running?'running':'stopped-status';bar.tabIndex=-1;bar.setAttribute('role','status');bar.setAttribute('aria-live','polite');
  const text=element('div',undefined,'control-text');
  if(p.running){

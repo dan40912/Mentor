@@ -32,7 +32,7 @@ test('D and F preserve distinct bytes; failed writes keep before snapshot; trash
  let mode='one',id;
  const app=await requestApp(root,async input=>{
   if(input.mode!=='write')return {text:JSON.stringify(input.prompt.includes('「任務制定」')?{card:{title:'版本測試',goal:'保留成果',project:'demo'}}:{questions:[],ready:true})};
-  const task=await app.coach.latest(id);await writeFile(path.join(task.allowedRoots[0],'result.txt'),mode);
+  await writeFile(path.join(input.cwd,'result.txt'),mode);
   if(mode==='failure')throw new Error('simulated failed write');
   return {text:'STATUS: DONE\nFILES: '+(mode==='empty'?'':'result.txt')};
  });
@@ -57,6 +57,6 @@ test('D and F preserve distinct bytes; failed writes keep before snapshot; trash
  await assert.rejects(app.coach.artifactHistory.read(id,first.artifactHistory.after.id,0),{code:'ARTIFACT_HISTORY_MISSING'});
  await trash.restore(removed.trashed.id);assert.equal(await read(first.artifactHistory.after),'one');
  const again=await trash.trashTask(id);await trash.purge(again.trashed.id,{confirm:again.trashed.name});
- const {readFile}=await import('node:fs/promises');assert.equal(await readFile(path.join(task.allowedRoots[0],'result.txt'),'utf8'),'empty');
+ const {readFile}=await import('node:fs/promises');assert.equal(await readFile(path.join(task.allowedRoots[0],'result.txt'),'utf8'),'two');
  await assert.rejects(app.coach.artifactHistory.read(id,first.artifactHistory.after.id,0),{code:'ARTIFACT_HISTORY_MISSING'});
 });

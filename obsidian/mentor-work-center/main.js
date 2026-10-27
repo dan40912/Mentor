@@ -5,6 +5,8 @@ const { Organization, ROOT: ORGANIZED_ROOT, HISTORY: ORGANIZATION_HISTORY } = re
 const ContentDrafts = require('./content-drafts');
 const {compileRelocation,Relocation}=require('./relocation');
 const VIEW = 'mentor-work-center';
+const FOCUS_VIEW='mentor-focus-session';
+const {mountFocus}=require('./focus');
 
 function localAddress(value) {
   const url = new URL(value);
@@ -42,7 +44,7 @@ class MentorView extends ItemView {
     const { tasks } = await this.plugin.api('/tasks');
     host.empty();text(host,'h2','現在，需要你做什麼？');
     text(host,'p','原生筆記與本機任務，共用同一份狀態。','mentor-caption');
-    const actions=host.createDiv({cls:'mentor-actions'});button(actions,'從目前筆記準備任務',()=>this.plugin.prepare(),true);button(actions,'重新整理',this.refresh);const tools=host.createEl('details');text(tools,'summary','整理筆記與復原');const toolActions=tools.createDiv({cls:'mentor-actions'});button(toolActions,'預寫資料夾索引',()=>this.plugin.prepareIndex());button(toolActions,'預寫內容與分類',()=>this.plugin.prepareContentDraft());button(toolActions,'整理紀錄與復原',()=>this.plugin.organizationHistory());
+    const actions=host.createDiv({cls:'mentor-actions'});button(actions,'從目前筆記準備任務',()=>this.plugin.prepare(),true);button(actions,'專注一輪',()=>this.plugin.openFocus());button(actions,'重新整理',this.refresh);const tools=host.createEl('details');text(tools,'summary','整理筆記與復原');const toolActions=tools.createDiv({cls:'mentor-actions'});button(toolActions,'預寫資料夾索引',()=>this.plugin.prepareIndex());button(toolActions,'預寫內容與分類',()=>this.plugin.prepareContentDraft());button(toolActions,'整理紀錄與復原',()=>this.plugin.organizationHistory());
     if (!tasks.filter(t=>!t.error&&!t.trashed).length) text(host,'p','還沒有任務。從目前筆記或選取內容開始。');
     for (const task of tasks.filter(t=>!t.error&&!t.trashed).sort((a,b)=>(a.status==='COMPLETED')-(b.status==='COMPLETED'))) {
       const box=host.createDiv({cls:'mentor-task'});text(box,'h3',task.title);text(box,'p',task.nextAction?.label||task.current?.summary);
@@ -51,6 +53,7 @@ class MentorView extends ItemView {
       if(latest){text(box,'h4','這一輪');text(box,'p',latest.context?.interpretation||'當時理解未記錄');text(box,'p',latest.outcome);if(latest.simulated)text(box,'p','示範／模擬回合，未呼叫真實 AI。','mentor-caption');const usage=box.createEl('details');text(usage,'summary','本輪用量');text(usage,'p',latest.contextMetrics?.usageLabel||'Token 與費用未知。');text(usage,'p',latest.contextMetrics?.elapsedMs==null?'執行時間未記錄。':`本機量測執行時間：${latest.contextMetrics.elapsedMs} ms。`);}
       const row=box.createDiv({cls:'mentor-actions'});
       button(row,'開啟任務與下一步',()=>this.plugin.task(task),true);
+      button(row,'為這個任務專注一輪',()=>this.plugin.openFocus(task));
       button(row,'準備接手包',()=>this.plugin.handoff(task));
       const drafts=(task.planning?.messages||[]).filter(m=>m.role==='user'&&m.organizationDraft);if(drafts.length){const saved=box.createEl('details');text(saved,'summary',`內容草稿（${drafts.length}）`);for(const message of drafts){const kind=ContentDrafts.KINDS[message.organizationDraft.kind];if(kind)button(saved,`查看${kind.label}草稿：${message.organizationDraft.sourcePath}`,()=>this.plugin.contentDraft(task.id,message.requestKey));}}
       const source=this.plugin.sources[task.id];if(source)button(row,'開啟來源筆記',()=>this.app.workspace.openLinkText(source.path,'',false));
@@ -69,12 +72,23 @@ class MentorSettings extends PluginSettingTab {
   }
 }
 
+class FocusView extends ItemView {
+  constructor(leaf,plugin){super(leaf);this.plugin=plugin;}
+  getViewType(){return FOCUS_VIEW;}
+  getDisplayText(){return '專注一輪';}
+  getIcon(){return 'timer';}
+  async onOpen(){this.control?.destroy();this.contentEl.empty();if(!this.plugin.token){text(this.contentEl,'p','請先配對 Mentor 本機服務，再重新開啟專注計時。');return;}this.control=mountFocus(this.contentEl,{api:(route,input)=>this.plugin.api(route,input),requestKey:randomUUID,exportMarkdown:output=>this.plugin.saveFocusPublication(output),exportLabel:'保存這個版本到 Obsidian',captureStart:()=>this.plugin.focusStartSnapshot(),captureEnd:path=>this.plugin.focusEndSnapshot(path),onTarget:()=>new Notice('專注目標時間已到，計時繼續。')});}
+  async onClose(){this.control?.destroy();}
+}
+
 module.exports = class MentorPlugin extends Plugin {
   async onload() {
     const data = await this.loadData() || {};
     try { this.address=localAddress(data.address||'http://127.0.0.1:4317'); }catch{this.address='http://127.0.0.1:4317';}
     this.sources=data.sources||{};this.token=null;
     this.registerView(VIEW, leaf=>new MentorView(leaf,this));
+    this.registerView(FOCUS_VIEW,leaf=>new FocusView(leaf,this));
+    this.addCommand({id:'open-focus-session',name:'專注一輪（10／15／30 分鐘或自訂）',callback:()=>this.openFocus()});
     this.addRibbonIcon('notebook-pen','Mentor 工作中心',()=>this.open());
     this.addCommand({id:'open-work-center',name:'開啟工作中心',callback:()=>this.open()});
     this.addCommand({id:'prepare-from-note',name:'從目前筆記或選取內容準備任務',callback:()=>this.prepare()});
@@ -88,7 +102,30 @@ module.exports = class MentorPlugin extends Plugin {
     this.addCommand({id:'preview-note-relocation',name:'搬移或重新命名筆記（先預覽連結變更）',callback:()=>this.previewRelocation().catch(e=>new Notice(e.message))});
     this.addCommand({id:'organization-history',name:'查看整理紀錄與復原',callback:()=>this.organizationHistory().catch(e=>new Notice(e.message))});
   }
-  onunload() { this.token=null; }
+  onunload() { for(const leaf of this.app.workspace.getLeavesOfType(FOCUS_VIEW))leaf.view.control?.destroy();this.token=null; }
+  async openFocus(task=null){const source=this.app.workspace.getActiveViewOfType(MarkdownView)?.file;if(source)this.focusCandidatePath=source.path;let leaf=this.app.workspace.getLeavesOfType(FOCUS_VIEW)[0];if(!leaf){leaf=this.app.workspace.getRightLeaf(true);if(!leaf)throw new Error('無法開啟專注側欄。');await leaf.setViewState({type:FOCUS_VIEW,active:true});}else if(!leaf.view.control)await leaf.view.onOpen();else await leaf.view.control.refresh();await this.app.workspace.revealLeaf(leaf);if(task)await leaf.view.control.prepareTask({taskId:task.id,title:task.title,goal:task.title});}
+  async focusStartSnapshot(){
+    const file=this.focusCandidatePath&&this.app.vault.getAbstractFileByPath(this.focusCandidatePath);if(!file||file.children)return {};
+    const content=await this.app.vault.read(file),hash=createHash('sha256').update(content).digest('hex'),withinLimit=content.length<=50000&&new TextEncoder().encode(content).length<=100000;
+    return new Promise(resolve=>{
+      const modal=new ReviewModal(this.app,'開始前，核對本輪來源',(host,dialog)=>{
+        text(host,'p','這份筆記的開始／結束快照會保存到 Mentor 本機服務。本步不傳給 AI、不修改筆記，切換頁籤不改變範圍。');text(host,'p',file.path);if(withinLimit)text(host,'pre',content,'mentor-source');else text(host,'p','筆記超過 50,000 字元／100 KB 快照上限；不會截斷，可以只開始計時。');
+        if(withinLimit)button(host,'保存這份來源並開始計時',async()=>{const current=await this.app.vault.read(file);if(createHash('sha256').update(current).digest('hex')!==hash)throw new Error('來源已變更，請關閉後重新開始預覽。');resolve({sourceBefore:{path:file.path,status:'present',origin:'obsidian_note',content}});dialog.close();},true);
+        button(host,'只開始計時，不保存來源',()=>{resolve({});dialog.close();});button(host,'取消開始',()=>dialog.close());
+      });const close=modal.onClose.bind(modal);modal.onClose=()=>{resolve(null);close();};modal.open();
+    });
+  }
+  async focusEndSnapshot(path){
+    try{const file=this.app.vault.getAbstractFileByPath(path);if(!file)return {path,status:'missing'};if(file.children)throw Error('來源變成資料夾。');const content=await this.app.vault.read(file);if(content.length>50000||new TextEncoder().encode(content).length>100000)throw Error('來源超過快照上限。');return {path,status:'present',origin:'obsidian_note',content};}
+    catch{new Notice('來源無法讀取或超過快照上限；可先結束計時，再補記較晚快照。');return {path,status:'unavailable'};}
+  }
+  async saveFocusPublication(output){
+    if(!output||typeof output.markdown!=='string'||!/^[a-f0-9-]{36}-[a-f0-9-]{36}\.md$/.test(output.fileName)||createHash('sha256').update(output.markdown).digest('hex')!==output.sha256)throw new Error('保存版本或內容 hash 不正確，沒有寫入筆記。');
+    const path=ORGANIZED_ROOT+'/專注/'+output.fileName,current=await this.organization.io.read(path);
+    if(current===output.markdown){await this.app.workspace.openLinkText(path,'',false);return;}
+    if(current!==null)throw new Error('這個保存版本的筆記已存在且內容不同，保留人工修改，不覆寫。');
+    const plan=await this.organization.previewWrites([],[{path,after:output.markdown}],'保存專注整理的歷史快照版本');this.showOrganizationPlan(plan);
+  }
   async savePreferences() { await this.saveData({address:this.address,sources:this.sources}); }
   refresh() { for(const leaf of this.app.workspace.getLeavesOfType(VIEW)) leaf.view.refresh(); }
   async open() {
@@ -98,7 +135,7 @@ module.exports = class MentorPlugin extends Plugin {
     if(!this.token)throw new Error('請先配對本機 Mentor。');
     const response=await requestUrl({url:localAddress(this.address)+'/api/obsidian'+route,method:input?'POST':'GET',headers:{Authorization:'Bearer '+this.token,...(input?{'Content-Type':'application/json','Idempotency-Key':key||randomUUID()}:{})},...(input?{body:JSON.stringify(input)}:{}),throw:false});
     const data=response.json;
-    if(response.status>=400){if(data.code==='BRIDGE_AUTH_REQUIRED')this.token=null;throw new Error(data.message||data.code||'操作未完成');}return data;
+    if(response.status>=400){if(data.code==='BRIDGE_AUTH_REQUIRED')this.token=null;throw Object.assign(new Error(data.message||data.code||'操作未完成'),{code:data.code});}return data;
   }
   pair() {
     new ReviewModal(this.app,'配對 Mentor 本機服務',(host,modal)=>{
@@ -371,6 +408,8 @@ module.exports = class MentorPlugin extends Plugin {
       const rounds=task.workCards||[];if(rounds.length){text(host,'h3','最近這一輪');renderRound(host,rounds.at(-1));if(rounds.length>1){const history=host.createEl('details');text(history,'summary',`查看先前 ${rounds.length-1} 輪工作`);for(const round of rounds.slice(0,-1))renderRound(history,round);}}
 
       const invoke=async(action,input={})=>{await this.api(`/tasks/${task.id}/${action}`,{revision:task.revision,...input});modal.close();this.refresh();};
+      for(const turn of p?.learningTurns||[]){if(!turn.executionWorkspace)continue;const w=turn.executionWorkspace,details=host.createEl('details');text(details,'summary','AI 候選與發布紀錄');text(details,'p','狀態：'+({prepared:'候選保留，未發布',published:'已發布，仍需審閱與人工驗收',conflict:'來源衝突，未發布',publishing:'發布結果待核對',original_moved:'原成果已備份，發布待核對',unknown:'發布結果未知',reconciled:'已由使用者核對'})[w.status]);text(details,'p','候選與紀錄：'+w.directory);if(w.recoveryChoice==='restore-original')text(details,'p','原成果已恢復至成果目錄；原備份已移回。');else if(w.displaced)text(details,'p','原成果備份：'+w.displaced);if(['publishing','original_moved','unknown'].includes(w.status)){const label=details.createEl('label'),check=label.createEl('input',{attr:{type:'checkbox'}});label.appendText('我已確認原 CLI 已停止，並核對候選、目前成果與備份。');for(const [choice,label] of [['keep-current','保留目前成果'],['restore-original','恢復原成果（只限位置空缺）']])button(details,label,async()=>{if(!check.checked)throw Error('請先確認原 CLI 已停止並核對內容。');await invoke('reconcile-publication',{turnId:turn.id,choice,confirmed:true});});}}
+      if(task.nextAction?.kind==='publication'){text(host,'p','請先核對上方發布紀錄；完成前不執行 AI 或驗收。');return;}
       for(const message of (p?.messages||[]).filter(m=>m.kind==='discussion').slice(-4)){
         if(message.organizationDraft){text(host,'h3','整理草稿要求');text(host,'p',`${ContentDrafts.KINDS[message.organizationDraft.kind]?.label||'草稿'} · ${message.organizationDraft.sourcePath}`);const snapshot=host.createEl('details');text(snapshot,'summary','來源快照與原始要求');text(snapshot,'pre',message.text,'mentor-source');button(host,'查看與套用這份草稿',()=>this.contentDraft(task.id,message.requestKey));continue;}
         const draftReply=(p.messages||[]).some(m=>m.organizationDraft&&m.requestKey===message.inReplyTo);

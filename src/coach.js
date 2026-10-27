@@ -1,3 +1,4 @@
+import {prepareExecutionWorkspace,publishExecutionWorkspace,loadExecutionWorkspace,reconcileExecutionPublication} from './execution-workspace.js';
 import { discussionResult, organizationDraftMetadata } from './task-discussion.js';
 import { compactHandoff } from './compact-handoff.js';
 import { instructionPreview } from './instruction-preview.js';
@@ -153,7 +154,7 @@ ${transcript(task.planning.messages,task.planning.request)}
 成果要寫成檔案；只在回覆裡描述、沒有產出檔案，不算完成。
 資訊不足時不要猜，回報 NEEDS_INPUT 並寫出缺什麼。${rules}
 
-測試由 Mentor server 在執行 AI 的沙箱外、產出資料夾內執行，以 Mentor 保存的測試結果為準。沙箱內因監聽被拒（例如 listen EPERM／EACCES）造成的測試失敗不算阻擋，不要因此回報 BLOCKED。
+測試由 Mentor server 在執行 AI 的沙箱外、候選成果副本內執行，以 Mentor 保存的測試結果為準。沙箱內因監聽被拒（例如 listen EPERM／EACCES）造成的測試失敗不算阻擋，不要因此回報 BLOCKED。
 可在最後 JSON 提供 testCommand（例如 "npm test"）；省略就沿用任務卡，空字串表示不執行。
 ${testEvidence(item)}
 
@@ -319,13 +320,13 @@ export class Coach {
     for (const listed of await this.store.list()) {
       if (!listed.planning?.running) continue;
       const running = listed.planning.running;
-      await this.store.mutate(listed.id, listed.revision, null, t => {
+      await this.store.mutate(listed.id, listed.revision, null, async t => {
         t.planning.running = null;
         if (t.planning.autopilot) { t.planning.autopilot = null; }
         // 停止請求送出後服務就重啟：無法確認 CLI 是否結束，仍記為已停止，讓你核對後接續。
         if (running.stopping && !running.discussion) t.planning.stopped = { stage: running.stage, itemId: running.workItemId || null, agent: running.agent, turnId: running.turnId, phase: t.planning.phase, startedAt: running.startedAt, at: now(), changed: [], afterRestart: true };
         const turn = t.planning.learningTurns?.find(entry => entry.id === running.turnId);
-        if (turn) Object.assign(turn, { status: 'unknown', completedAt: now(), error: '服務重啟，結果未知。' });
+        if (turn) {Object.assign(turn, { status: 'unknown', completedAt: now(), error: '服務重啟，結果未知。' });if(turn.executionWorkspace){try{const w=await loadExecutionWorkspace(turn.executionWorkspace.directory,{storageRoot:this.store.dir,outputRoot:t.allowedRoots[0],taskId:t.id});turn.executionWorkspace={...turn.executionWorkspace,status:w.manifest.status,displaced:w.manifest.displaced||null};}catch{turn.executionWorkspace.status='unknown';}}}
         t.planning.messages.push({ id: randomUUID(), role: 'system', stage: running.stage, text: `服務重啟時，${running.discussion?'問答':stageName(running.stage)}（${running.agent}）沒有完成，結果未知。${running.discussion?'這次問答未完成，可重新提問；原工作沒有接續。':'請檢查產出資料夾後重新執行。'}`, at: now() });
         return { status: planningStatus(t) };
       });
@@ -494,6 +495,7 @@ export class Coach {
   // 一次確認所有 AI 驗收通過的項目。仍是你按下的確認，不是系統代按。
   confirmAll(id, revision, key) {
     return this.store.mutate(id, revision, key, async t => {
+      await this.ensurePublicationReady(t);
       const items = (t.planning?.workItems || []).filter(i => i.owner === 'ai' && i.status === 'REVIEWED');
       if (!items.length) throw new TaskError(409, 'NOTHING_TO_CONFIRM', '目前沒有等你確認的成果。');
       for(const item of items)await verifyReviewedArtifacts(t.allowedRoots[0],item);
@@ -553,24 +555,30 @@ export class Coach {
     const agent = this.agentFor(stageId, metadata.provider || this.overrides.get(id), task);
     task.folderListing = await this.listing(task.allowedRoots[0]);
     if (task.planning.running || this.pending.has(id)) throw new TaskError(409, 'AGENT_BUSY', 'AI 還在進行中，等它完成再操作。');
+    await this.ensurePublicationReady(task);
     if (task.trashed) throw new TaskError(409, 'TASK_TRASHED', '任務在回收桶，請先還原。');
     const stopped = task.planning.stopped;
     const resuming = stopped && stopped.stage === stageId && (stopped.itemId || null) === (metadata.workItemId || null);
     const resumeNote = resuming ? `\n\n【接續說明】上一次「${executionName}」在執行中被使用者停止，沒有完成。${stopped.changed?.length ? `中斷期間有變動的檔案：${stopped.changed.join('、')}。這些檔案可能只寫了一半，不能直接當成完成。` : ''}請先核對產出資料夾現有檔案與任務卡最新版本，沿用已確認的成果，再把這一步做完。` : '';
     const instructionNote = metadata.instruction ? `\n\n【使用者最新補充指示（優先於先前內容，原文）】\n${metadata.instruction}` : '';
     const attached = metadata.discussion ? {text:'',images:[]} : await attachmentContext(task, { provider: agent.provider, mode });
-    const prompt = `${await buildPrompt(task)}${attached.text}${resumeNote}${instructionNote}\n\n${LEARNING}`;
+    let prompt = `${await buildPrompt(task)}${attached.text}${resumeNote}${instructionNote}\n\n${LEARNING}`;
     const lastReply = task.planning.messages.filter(m => m.role === 'user' && m.stage === stageId && m.kind !== 'discussion').at(-1);
     const item = metadata.workItemId && task.planning.workItems.find(w => w.id === metadata.workItemId);
     const userInput = metadata.userInput ?? lastReply?.text ?? (item ? `${executionName}：${item.title}${stageId === 'F' ? `\n修正意見：${(item.fixes || []).join('\n')}` : ''}` : `${executionName}：依目前任務卡接續`);
     const inputKind = metadata.inputKind || (lastReply ? 'user' : stageId === 'B' ? 'automatic' : 'action');
     const turnId = randomUUID();
+    let workspace=null;
+    if(metadata.isolateExecution){
+      workspace=await prepareExecutionWorkspace(cwd,this.store.dir,{taskId:id,turnId});cwd=workspace.candidate;
+      prompt+='\n\n本輪在隔離候選副本內工作；只使用目前工作目錄，不要修改原成果目錄、baseline 或 manifest。成果稍後由 Mentor 核對衝突後發布，不要自行搬移發布。';
+    }
     // 上一次執行剛結束時重按停止會留下標記；此時沒有執行中的 CLI，標記只可能屬於舊的執行。
     this.cancelled.delete(id);
     const started = await this.store.mutate(id, task.revision, null, async t => {
       const before = metadata.preserveArtifacts ? await this.artifactHistory.capture(t,{turnId,phase:'before',outputs:(t.planning.workItems||[]).flatMap(item=>[...(item.previousOutputs||[]),...(item.outputs||[])])}) : null;
       const startedAt = now();
-      (t.planning.learningTurns ||= []).push({ id: turnId, stage: stageId, provider: agent.provider, modelId: agent.modelId, effort: agent.effort, agent: agentLabel(agent), startedAt, status: 'running', prompt, userInput, inputKind, workItemId: metadata.workItemId || null, beforeRevision: task.revision, context: turnContext(task), ...(before?{artifactHistory:{before:{id:before.id,digest:before.digest,count:before.files.filter(file=>file.status==='saved').length,missing:before.files.filter(file=>file.status==='missing').length,at:before.createdAt}}}:{}), simulated: /fake-cli/i.test(path.basename(process.env[{codex:'AWC_CODEX_BIN',claude:'AWC_CLAUDE_BIN',copilot:'AWC_COPILOT_BIN'}[agent.provider]] || '')) });
+      (t.planning.learningTurns ||= []).push({ id: turnId, stage: stageId, provider: agent.provider, modelId: agent.modelId, effort: agent.effort, agent: agentLabel(agent), startedAt, status: 'running', prompt, userInput, inputKind, workItemId: metadata.workItemId || null, beforeRevision: task.revision, context: turnContext(task), ...(workspace?{executionWorkspace:{directory:workspace.directory,status:workspace.manifest.status}}:{}), ...(before?{artifactHistory:{before:{id:before.id,digest:before.digest,count:before.files.filter(file=>file.status==='saved').length,missing:before.files.filter(file=>file.status==='missing').length,at:before.createdAt}}}:{}), simulated: /fake-cli/i.test(path.basename(process.env[{codex:'AWC_CODEX_BIN',claude:'AWC_CLAUDE_BIN',copilot:'AWC_COPILOT_BIN'}[agent.provider]] || '')) });
       t.planning.running = { stage: stageId, provider: agent.provider, modelId: agent.modelId, effort: agent.effort, agent: agentLabel(agent), startedAt, turnId, workItemId: metadata.workItemId || null, mode, ...(metadata.discussion?{discussion:true}:{}) };
       t.planning.stopped = null;
       return { status: 'RUNNING' };
@@ -581,7 +589,7 @@ export class Coach {
       let result, failure, prepared;
       try {
         result = await this.runAgent({ ...agent, mode, cwd, prompt, images: attached.images, onSpawn: child => { this.children.set(id, child); if (this.cancelled.has(id)) child.kill('SIGTERM'); } });
-        if (metadata.beforeApply) prepared = await metadata.beforeApply(result.text, await this.latest(id));
+        if (metadata.beforeApply) prepared = await metadata.beforeApply(result.text, await this.latest(id),workspace);
       } catch (error) {
         failure = this.cancelled.has(id) ? new AgentError('AGENT_CANCELLED', '你已停止這次執行。') : error;
       } finally {
@@ -595,6 +603,8 @@ export class Coach {
         const running = t.planning.running;
         t.planning.running = null;
         const turn = t.planning.learningTurns.find(entry => entry.id === turnId);
+        if(workspace)turn.executionWorkspace={directory:workspace.directory,status:workspace.manifest.status,...(workspace.manifest.displaced?{displaced:workspace.manifest.displaced}:{})};
+        if(result?.text)turn.response=result.text;
         turn.completedAt = now();
         if (failure?.code === 'AGENT_CANCELLED' && metadata.discussion) {
           Object.assign(turn,{status:'stopped',error:failure.message,errorCode:'AGENT_CANCELLED'});
@@ -933,6 +943,24 @@ export class Coach {
     return item;
   }
 
+  async ensurePublicationReady(task){
+    for(const turn of task.planning?.learningTurns||[]){
+      if(!turn.executionWorkspace)continue;
+      const workspace=await loadExecutionWorkspace(turn.executionWorkspace.directory,{storageRoot:this.store.dir,outputRoot:task.allowedRoots[0],taskId:task.id});
+      if(['publishing','original_moved','unknown'].includes(workspace.manifest.status))throw new TaskError(409,'EXECUTION_PUBLICATION_PENDING','有發布結果待核對；請先使用「核對成果發布」保留目前成果或恢復原成果。');
+    }
+  }
+  async reconcilePublication(id,revision,key,input){
+    if(input.confirmed!==true||typeof input.turnId!=='string'||!['restore-original','keep-current'].includes(input.choice))throw new TaskError(400,'EXECUTION_RECOVERY_INPUT','請核對發布紀錄並明確選擇恢復方式。');
+    return this.store.mutate(id,revision,key,async task=>{
+      if(task.planning.running||this.pending.has(id))throw new TaskError(409,'AGENT_BUSY','執行尚未結束，不能核對發布。');
+      const turn=task.planning.learningTurns?.find(t=>t.id===input.turnId);if(!turn?.executionWorkspace)throw new TaskError(404,'EXECUTION_WORKSPACE_MISSING','找不到這輪發布紀錄。');
+      const workspace=await loadExecutionWorkspace(turn.executionWorkspace.directory,{storageRoot:this.store.dir,outputRoot:task.allowedRoots[0],taskId:id});
+      await reconcileExecutionPublication(workspace,input);turn.executionWorkspace={...turn.executionWorkspace,status:workspace.manifest.status,recoveryChoice:input.choice};
+      task.planning.messages.push({id:randomUUID(),role:'system',stage:turn.stage,text:'已由使用者核對發布：'+(input.choice==='keep-current'?'保留目前成果':'恢復原成果')+'；AI 候選及備份保留，未自動驗收。',at:now()});return {status:planningStatus(task)};
+    },'reconcile-publication',input);
+  }
+
   async execute(id, itemId, stageId = 'D') {
     const outDir = (await this.latest(id)).allowedRoots[0];
     return this.withAgent(id, stageId, 'write', outDir, t => {
@@ -978,12 +1006,14 @@ export class Coach {
       item.sensors = await outputSensors(outDir, item, t.planning.outline);
       if (testResult) item.sensors.push({ ...testResult, attempt: item.attempts, stage: stageId, at: now() });
       this.addDiary(t, stageId, extractJson(text)?.diary, agent);
-    }, { workItemId: itemId,preserveArtifacts:true, beforeApply: async (text, task) => {
+    }, { workItemId: itemId,preserveArtifacts:true,isolateExecution:true, beforeApply: async (text, task,workspace) => {
       const parsed = parseExecution(text, task.preview);
       if (parsed.status !== 'DONE' || parsed.metadataError) return null;
       const command = parsed.testCommand ?? task.planning.card.testCommand;
       // 保持 pending／running，測試結束並保存後才放行 E；執行時不占住任務寫入鎖。
-      return testCommandSensor(command, outDir, { executeFile: this.executeFile });
+      const sensor=await testCommandSensor(command, workspace.candidate, { executeFile: this.executeFile });
+      if(parsed.files.length)await publishExecutionWorkspace(workspace);
+      return sensor;
     } });
   }
 
@@ -1179,6 +1209,7 @@ export class Coach {
 
   confirm(id, revision, key, { itemId, accept, note = '' }) {
     return this.store.mutate(id, revision, key, async t => {
+      await this.ensurePublicationReady(t);
       const item = this.item(t, itemId);
       if ((accept || item.owner === 'human') && !ready(t.planning.workItems,item,unlockOf(t))) throw new TaskError(409,'DEPENDENCY_PENDING','前置項目尚未完成，不能確認這項成果。');
       startFeedback(t.planning);

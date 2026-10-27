@@ -3,8 +3,8 @@ import { TaskError } from './tasks.js';
 
 const digest = value => createHash('sha256').update(String(value)).digest('hex');
 const TASK = 'TASK-[a-zA-Z0-9-]+';
-const reads = new RegExp(`^/api/tasks(?:/${TASK}/(?:work-cards|plan|handoff-summary|events|conversation|preview|artifact-version|brief))?$`);
-const writes = new RegExp(`^/api/tasks(?:/${TASK}/(?:ask|answer|outline|approve|execute|review|fix|confirm|instruct|stop|agents|reflect|learn))?$`);
+const reads = new RegExp(`^/api/(?:focus(?:/(?:materials|organization|export))?|tasks(?:/${TASK}/(?:work-cards|plan|handoff-summary|events|conversation|preview|artifact-version|brief))?)$`);
+const writes = new RegExp(`^/api/(?:focus/(?:start|pause|resume|end|cancel|capture|prepare-organization|organize|stop-organization|reconcile-organization|save-organization)|tasks(?:/${TASK}/(?:reconcile-publication|ask|answer|outline|approve|execute|review|fix|confirm|instruct|stop|agents|reflect|learn))?)$`);
 
 // Session-only credentials: never write tokens to a Vault or the server's disk.
 export class ObsidianBridge {

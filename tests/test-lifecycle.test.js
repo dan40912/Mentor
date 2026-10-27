@@ -101,7 +101,7 @@ test('manual D and consecutive F wait for persisted current-round test evidence 
   assert.doesNotMatch(fix2, /ROUND1 PASS/);
   assert.match(f.calls.at(-1).prompt, /執行回合 3，F.*PASS/); assert.doesNotMatch(f.calls.at(-1).prompt, /ROUND2 尾段原因/);
   for (const c of f.calls.filter(c => c.stage !== 'E')) checkSandbox(c.prompt);
-  assert.equal(f.runs[0].options.cwd, (await f.get()).allowedRoots[0]);
+  assert.notEqual(f.runs[0].options.cwd,(await f.get()).allowedRoots[0]);assert.equal(f.runs[0].options.cwd,path.join((await f.get()).planning.learningTurns.find(turn=>turn.stage==='D').executionWorkspace.directory,'candidate'));
   assert.equal(f.runs[0].options.shell, false);
 });
 

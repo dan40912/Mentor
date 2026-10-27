@@ -2,7 +2,7 @@ import {lstat,open} from 'node:fs/promises';
 import {constants} from 'node:fs';
 import {createHash} from 'node:crypto';
 import path from 'node:path';
-export const PLUGIN_FILES=['manifest.json','main.js','organization.js','content-drafts.js','relocation.js','reference-coverage.js','styles.css'];
+export const PLUGIN_FILES=['manifest.json','main.js','focus.js','organization.js','content-drafts.js','relocation.js','reference-coverage.js','styles.css'];
 export const THEME_FILES=['manifest.json','theme.css'];
 export const runtimeFiles=[...PLUGIN_FILES.map(name=>({source:'obsidian/mentor-work-center/'+name,target:'.obsidian/plugins/mentor-work-center/'+name})),...THEME_FILES.map(name=>({source:'themes/Mentor/'+name,target:'.obsidian/themes/Mentor/'+name}))];
 const identities=new WeakMap();
