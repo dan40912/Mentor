@@ -12,6 +12,8 @@ const relocationModule={exports:{}};
 const coverageModule={exports:{}};
 vm.runInNewContext(await readFile(new URL('../obsidian/mentor-work-center/reference-coverage.js',import.meta.url),'utf8'),{module:coverageModule});
 vm.runInNewContext(await readFile(new URL('../obsidian/mentor-work-center/relocation.js',import.meta.url),'utf8'),{module:relocationModule,require:name=>name==='./reference-coverage'?coverageModule.exports:name==='./organization'?organizationModule.exports:name==='node:crypto'?crypto:path});
+const focusModule={exports:{}};
+vm.runInNewContext(await readFile(new URL('../obsidian/mentor-work-center/focus.js',import.meta.url),'utf8'),{module:focusModule});
 const source=await readFile(new URL('../obsidian/mentor-work-center/main.js',import.meta.url),'utf8');
 class El {
   constructor(tag='',options={}){this.tag=tag;this.text=options.text||'';this.value=options.value||'';this.children=[];this.attrs=options.attr||{};}
@@ -30,6 +32,7 @@ function fixture(){
   const app={workspace:{getActiveViewOfType:()=>view,getLeavesOfType:()=>[]},vault:{read:async()=>read}};
   const context={module:{exports:{}},URL,window:{},document:{},require:name=>{
     if(name==='node:crypto')return crypto;
+    if(name==='./focus')return focusModule.exports;
     if(name==='./organization')return organizationModule.exports;
     if(name==='./relocation')return relocationModule.exports;
     if(name==='./content-drafts')return contentModule.exports;

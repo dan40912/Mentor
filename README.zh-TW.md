@@ -77,6 +77,12 @@ npm run verify:obsidian -- --vault dist/mentor-obsidian
 
 停用 Theme／插件後，Markdown 仍可閱讀。套裝生成器不安裝到正式 Vault；`dist/` 是可重建產出，不要放正式筆記。重建遇到人工改過的範本會停止，不默默覆寫。升級前備份，插件需一併替換 main.js、organization.js、content-drafts.js、relocation.js、reference-coverage.js、manifest.json、styles.css。[完整安裝、復原與限制](docs/obsidian-work-center.md)。
 
+## 專注一輪（開發中）
+
+Web「現在」頁展開「專注一輪」，或在已配對的 Obsidian 工作中心／命令選單開啟同名側欄。選 10／15／30 分鐘或自訂 1–180 分鐘，再按開始；到期只提醒，計時繼續。暫停／繼續及結束會同步到本機服務，不呼叫 AI、不停止 CLI，也不自動通過任務驗收。
+
+提醒聲需啟動那輪的畫面仍開啟；關閉、睡眠、重載或音訊受阻時不能保證響鈴。時間尚未排除電腦睡眠，不代表實際注意力時數。結束後目前只保存計時；筆記材料、AI 整理、完整離線同步與原生實機驗收仍待完成。[完整規格與限制](docs/implementation/focus-session-integration-plan.zh-TW.md)。
+
 ## 資料、權限與隱私
 
 - 任務在 `MENTOR_HOME/vault`，成果在 `MENTOR_HOME/outputs`；設定與日記也在本機。備份整個 home，另備份你的 Obsidian Vault。

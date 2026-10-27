@@ -29,7 +29,7 @@ export class FocusSessions{
    if(!input||Object.keys(input).some(key=>!keys.includes(key)))fail('FOCUS_INPUT_INVALID','專注操作包含不支援的欄位。',400);
    if(typeof input.requestKey!=='string'||!/^[a-zA-Z0-9_-]{8,128}$/.test(input.requestKey))fail('FOCUS_REQUEST_KEY','請提供這次操作的識別。',400);
    const state=await this.read(),digest=sha256(JSON.stringify({action,input})),old=state.requests.find(r=>r.key===input.requestKey);
-   if(old){if(old.digest!==digest)fail('FOCUS_REQUEST_CONFLICT','相同操作識別已用於不同內容。');return {...this.project(state),replayed:true};}
+   if(old){if(old.digest!==digest)fail('FOCUS_REQUEST_CONFLICT','相同操作識別已用於不同內容。');return {...this.project(state),replayed:true,operationSessionId:old.sessionId||null};}
    if(input.revision!==state.revision)fail('FOCUS_REVISION_CONFLICT','專注狀態已更新，請重新讀取。');
    if(state.requests.length>=5000)fail('FOCUS_CAPACITY','專注操作紀錄已達上限，請先匯出整理；沒有刪除舊識別。');
    const at=this.clock();if(!Number.isSafeInteger(at)||at<0)fail('FOCUS_CLOCK_CHANGED','系統時間不正確。');
@@ -45,11 +45,12 @@ export class FocusSessions{
     if(at<session.lastEventAt)fail('FOCUS_CLOCK_CHANGED','系統時間倒退，請先核對時間；沒有改寫紀錄。');
     session.elapsedMs=focusTiming(session,at).elapsedMs;if(!Number.isSafeInteger(session.elapsedMs))fail('FOCUS_CLOCK_CHANGED','計時超過可保存範圍，請核對系統時間。');session.lastEventAt=at;session.status={pause:'paused',resume:'running',end:'ended',cancel:'cancelled'}[action];session.events.push({action,at});if(['end','cancel'].includes(action))session.endedAt=at;
    }
-   state.revision++;state.requests.push({key:input.requestKey,digest});
+   const operationSessionId=action==='start'?state.sessions.at(-1).id:input.sessionId;
+   state.revision++;state.requests.push({key:input.requestKey,digest,sessionId:operationSessionId});
    const serialized=JSON.stringify(state,null,2)+'\n';if(Buffer.byteLength(serialized)>5_000_000)fail('FOCUS_CAPACITY','專注紀錄已達儲存上限，沒有覆寫。');
    const target=await this.paths.safePath('focus-sessions.json'),temp=path.join(this.paths.dir,'.focus-'+randomUUID()+'.tmp');
    try{await writeFile(temp,serialized,{flag:'wx',mode:0o600});await this.paths.safePath('focus-sessions.json');await rename(temp,target);}finally{await rm(temp,{force:true});}
-   return {...this.project(state),replayed:false};
+   return {...this.project(state),replayed:false,operationSessionId};
   };
   const result=this.queue.then(work);this.queue=result.catch(()=>{});return result;
  }

@@ -5,6 +5,8 @@ const { Organization, ROOT: ORGANIZED_ROOT, HISTORY: ORGANIZATION_HISTORY } = re
 const ContentDrafts = require('./content-drafts');
 const {compileRelocation,Relocation}=require('./relocation');
 const VIEW = 'mentor-work-center';
+const FOCUS_VIEW='mentor-focus-session';
+const {mountFocus}=require('./focus');
 
 function localAddress(value) {
   const url = new URL(value);
@@ -42,7 +44,7 @@ class MentorView extends ItemView {
     const { tasks } = await this.plugin.api('/tasks');
     host.empty();text(host,'h2','現在，需要你做什麼？');
     text(host,'p','原生筆記與本機任務，共用同一份狀態。','mentor-caption');
-    const actions=host.createDiv({cls:'mentor-actions'});button(actions,'從目前筆記準備任務',()=>this.plugin.prepare(),true);button(actions,'重新整理',this.refresh);const tools=host.createEl('details');text(tools,'summary','整理筆記與復原');const toolActions=tools.createDiv({cls:'mentor-actions'});button(toolActions,'預寫資料夾索引',()=>this.plugin.prepareIndex());button(toolActions,'預寫內容與分類',()=>this.plugin.prepareContentDraft());button(toolActions,'整理紀錄與復原',()=>this.plugin.organizationHistory());
+    const actions=host.createDiv({cls:'mentor-actions'});button(actions,'從目前筆記準備任務',()=>this.plugin.prepare(),true);button(actions,'專注一輪',()=>this.plugin.openFocus());button(actions,'重新整理',this.refresh);const tools=host.createEl('details');text(tools,'summary','整理筆記與復原');const toolActions=tools.createDiv({cls:'mentor-actions'});button(toolActions,'預寫資料夾索引',()=>this.plugin.prepareIndex());button(toolActions,'預寫內容與分類',()=>this.plugin.prepareContentDraft());button(toolActions,'整理紀錄與復原',()=>this.plugin.organizationHistory());
     if (!tasks.filter(t=>!t.error&&!t.trashed).length) text(host,'p','還沒有任務。從目前筆記或選取內容開始。');
     for (const task of tasks.filter(t=>!t.error&&!t.trashed).sort((a,b)=>(a.status==='COMPLETED')-(b.status==='COMPLETED'))) {
       const box=host.createDiv({cls:'mentor-task'});text(box,'h3',task.title);text(box,'p',task.nextAction?.label||task.current?.summary);
@@ -69,12 +71,23 @@ class MentorSettings extends PluginSettingTab {
   }
 }
 
+class FocusView extends ItemView {
+  constructor(leaf,plugin){super(leaf);this.plugin=plugin;}
+  getViewType(){return FOCUS_VIEW;}
+  getDisplayText(){return '專注一輪';}
+  getIcon(){return 'timer';}
+  async onOpen(){this.control?.destroy();this.contentEl.empty();if(!this.plugin.token){text(this.contentEl,'p','請先配對 Mentor 本機服務，再重新開啟專注計時。');return;}this.control=mountFocus(this.contentEl,{api:(route,input)=>this.plugin.api(route,input),requestKey:randomUUID,onTarget:()=>new Notice('專注目標時間已到，計時繼續。')});}
+  async onClose(){this.control?.destroy();}
+}
+
 module.exports = class MentorPlugin extends Plugin {
   async onload() {
     const data = await this.loadData() || {};
     try { this.address=localAddress(data.address||'http://127.0.0.1:4317'); }catch{this.address='http://127.0.0.1:4317';}
     this.sources=data.sources||{};this.token=null;
     this.registerView(VIEW, leaf=>new MentorView(leaf,this));
+    this.registerView(FOCUS_VIEW,leaf=>new FocusView(leaf,this));
+    this.addCommand({id:'open-focus-session',name:'專注一輪（10／15／30 分鐘或自訂）',callback:()=>this.openFocus()});
     this.addRibbonIcon('notebook-pen','Mentor 工作中心',()=>this.open());
     this.addCommand({id:'open-work-center',name:'開啟工作中心',callback:()=>this.open()});
     this.addCommand({id:'prepare-from-note',name:'從目前筆記或選取內容準備任務',callback:()=>this.prepare()});
@@ -88,7 +101,8 @@ module.exports = class MentorPlugin extends Plugin {
     this.addCommand({id:'preview-note-relocation',name:'搬移或重新命名筆記（先預覽連結變更）',callback:()=>this.previewRelocation().catch(e=>new Notice(e.message))});
     this.addCommand({id:'organization-history',name:'查看整理紀錄與復原',callback:()=>this.organizationHistory().catch(e=>new Notice(e.message))});
   }
-  onunload() { this.token=null; }
+  onunload() { for(const leaf of this.app.workspace.getLeavesOfType(FOCUS_VIEW))leaf.view.control?.destroy();this.token=null; }
+  async openFocus(){let leaf=this.app.workspace.getLeavesOfType(FOCUS_VIEW)[0];if(!leaf){leaf=this.app.workspace.getRightLeaf(true);if(!leaf)throw new Error('無法開啟專注側欄。');await leaf.setViewState({type:FOCUS_VIEW,active:true});}else await leaf.view.onOpen();await this.app.workspace.revealLeaf(leaf);}
   async savePreferences() { await this.saveData({address:this.address,sources:this.sources}); }
   refresh() { for(const leaf of this.app.workspace.getLeavesOfType(VIEW)) leaf.view.refresh(); }
   async open() {
@@ -98,7 +112,7 @@ module.exports = class MentorPlugin extends Plugin {
     if(!this.token)throw new Error('請先配對本機 Mentor。');
     const response=await requestUrl({url:localAddress(this.address)+'/api/obsidian'+route,method:input?'POST':'GET',headers:{Authorization:'Bearer '+this.token,...(input?{'Content-Type':'application/json','Idempotency-Key':key||randomUUID()}:{})},...(input?{body:JSON.stringify(input)}:{}),throw:false});
     const data=response.json;
-    if(response.status>=400){if(data.code==='BRIDGE_AUTH_REQUIRED')this.token=null;throw new Error(data.message||data.code||'操作未完成');}return data;
+    if(response.status>=400){if(data.code==='BRIDGE_AUTH_REQUIRED')this.token=null;throw Object.assign(new Error(data.message||data.code||'操作未完成'),{code:data.code});}return data;
   }
   pair() {
     new ReviewModal(this.app,'配對 Mentor 本機服務',(host,modal)=>{

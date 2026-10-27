@@ -78,6 +78,12 @@ The native task view leads with the latest round; history and detailed checks ex
 
 Markdown remains readable when the theme or plugin is disabled. The packager does not install into a real Vault; dist is rebuildable output. Rebuilding refuses edited generated files. The verifier compares runtime checksums only; it does not prove native behavior. Back up before upgrading and replace main.js, organization.js, content-drafts.js, relocation.js, reference-coverage.js, manifest.json and styles.css together. [Setup, recovery and limitations](docs/obsidian-work-center.md) (Traditional Chinese).
 
+## Focus sessions (in development)
+
+Expand the focus section on the Web Now page, or open the focus command/pane in paired Obsidian. Choose 10/15/30 minutes or a custom 1–180 minute duration. Reaching the target alerts without stopping; pause/resume/end share local service state. Timing never calls AI, stops a CLI, or accepts task results.
+
+Sound requires the initiating view to remain open and audio to be available; sleep, reload or closed views are not guaranteed to alert. Wall time excludes explicit pauses but does not yet detect sleep or measure attention. Ending currently saves timing only. Note capture, AI organization, complete offline synchronization and native desktop acceptance remain pending. See the [integration plan](docs/implementation/focus-session-integration-plan.zh-TW.md).
+
 ## Data, permissions and privacy
 
 - Tasks live in `MENTOR_HOME/vault`, artifacts in `MENTOR_HOME/outputs`; settings and diaries are local too. Back up the whole home and your Obsidian Vault separately.
