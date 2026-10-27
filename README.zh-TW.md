@@ -139,3 +139,6 @@ node scripts/live-cross-ai.mjs --run
 保留零 runtime dependencies、使用 argv／stdin 呼叫 CLI、維持版本與路徑驗證。以虛構資料新增回歸測試，提交前跑 npm test；UI 修改附截圖。PR 請說明範圍、測試、未驗證項目與資料復原方式，不自行合併。
 
 [改版 Prompt](prompts/mentor-obsidian-redesign-prompt.md) · [工作閉環 Prompt](prompts/mentor-obsidian-workflow-optimization-prompt.md) · [教學](docs/tutorials/01-first-task.md) · [MIT 授權](LICENSE)
+
+
+執行與修正成果現在先寫入隔離候選，測試也在候選內執行；來源衝突不發布，候選與實際原成果備份會保留。未知發布需在任務詳情明確核對，不能自動重跑或驗收。此機制不是 OS 沙箱；目錄切換中斷可能暫時缺少成果路徑，需從備份恢復。大型或含連結的成果樹會拒絕執行。候選與備份不隨任務回收桶清除，請依任務詳情列示位置備份與管理。

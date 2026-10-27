@@ -1,0 +1,13 @@
+{
+  "date": "2026-10-27",
+  "implementationSha256": "29a009d207fffee6dcd0759c29acdae6a953b797afbb0882279ec3ba669360e3",
+  "simulated": true,
+  "modelCalls": 0,
+  "runnerReceivesLiveOutputDirectory": false,
+  "concurrentHumanEditPreserved": true,
+  "finalContent": "concurrent human edit",
+  "itemStatus": "TODO",
+  "errorCode": "EXECUTION_OUTPUT_CONFLICT",
+  "candidateContent": "simulated agent output",
+  "conclusion": "preserved in this probe"
+}

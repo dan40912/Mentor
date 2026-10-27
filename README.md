@@ -140,3 +140,6 @@ Read [CONTRIBUTING.md](CONTRIBUTING.md), [design intent](docs/design-intent.md) 
 Keep zero runtime dependencies, argv/stdin CLI invocation, revision checks and path protections. Add fictional regression cases and run npm test. Include screenshots for UI changes and describe scope, tests, unverified items and recovery in your PR. Do not merge your own contribution on behalf of the maintainer.
 
 [Redesign prompt](prompts/mentor-obsidian-redesign-prompt.md) · [Workflow prompt](prompts/mentor-obsidian-workflow-optimization-prompt.md) · [Tutorial](docs/tutorials/01-first-task.md) · [MIT license](LICENSE)
+
+
+Execution and fixes now write to isolated candidates, including test commands. Source conflicts refuse publication and retain both versions. Interrupted publication requires explicit reconciliation in task details; it never auto-retries or accepts work. This is not an OS sandbox or one atomic directory transaction: interruption can leave the output path temporarily absent until recovery. Oversized/linked trees are refused. Candidates and displaced backups are retained independently of task trash; back up the locations shown in task details.

@@ -27,7 +27,7 @@ async function snapshot(root){
  }
  await walk(canonical);return {files,directories};
 }
-const fingerprint=s=>JSON.stringify({files:s.files.map(({path,sha256})=>({path,sha256})),directories:s.directories});
+const fingerprint=s=>JSON.stringify({files:s.files.map(({path,sha256,mode})=>({path,sha256,mode})),directories:s.directories});
 const index=s=>s.files.map(({path,sha256,bytes})=>({path,sha256,bytes:bytes.length}));
 export async function prepareExecutionWorkspace(outputRoot,storageRoot,{taskId,turnId}){
  if(!/^TASK-[a-zA-Z0-9-]+$/.test(taskId)||!/^[a-f0-9-]{36}$/.test(turnId))fail('執行副本識別不正確。');
@@ -102,6 +102,7 @@ export async function loadExecutionWorkspace(directory,{storageRoot,outputRoot,t
  return {directory,candidate:path.join(directory,'candidate'),original:path.join(directory,'baseline'),manifest,baselineFingerprint:manifest.baselineFingerprint};
 }
 export async function reconcileExecutionPublication(workspace,{choice,confirmed}){
+ if(confirmed===true&&workspace.manifest.status==='reconciled'&&workspace.manifest.recoveryChoice===choice)return {status:'reconciled',choice,replayed:true};
  if(confirmed!==true||!['restore-original','keep-current'].includes(choice)||!['publishing','original_moved','unknown'].includes(workspace.manifest.status))fail('需明確核對未知發布，再選擇保留目前成果或恢復原成果。');
  const root=workspace.manifest.outputRoot;
  if(choice==='restore-original'){

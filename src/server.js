@@ -451,6 +451,7 @@ export async function createRequestHandler({ root = appDir, port = 4317, runAgen
         return send(202, { task: result.task });
       }
       const coachActions = {
+        'reconcile-publication':(id,key)=>coach.reconcilePublication(id,input.revision,key,input),
         ask: (id,key) => coach.discuss(id,input.revision,key,input),
         card: (id, key) => coach.saveCard(id, input.revision, key, input),
         retry: (id, key) => coach.retry(id, input.revision, key, input.provider || null),
@@ -481,7 +482,7 @@ export async function createRequestHandler({ root = appDir, port = 4317, runAgen
         if (action === 'instruct' && input.dryRun) return send(200, result);
         // 開著「一路做到完」時，你做完任何一步，AI 會自己接著往下。
         // 評分只是記錄，不推動流程；否則停下時評分會讓 AI 重新判斷又停一次。
-        if (!['ask', 'stop', 'cancel', 'trash', 'autopilot', 'feedback', 'agents', 'change-check'].includes(action)) coach.resumeAuto(id);
+        if (!['reconcile-publication','ask', 'stop', 'cancel', 'trash', 'autopilot', 'feedback', 'agents', 'change-check'].includes(action)) coach.resumeAuto(id);
         if (action === 'cancel' || action === 'stop') return send(202, { stopping: true, task: (await tasks.list()).find(t => t.id === id) || result.task });
         if (action === 'trash') return send(200, result);
         // answer 先寫入回答再啟動 B；回傳時 B 已在背景跑。
