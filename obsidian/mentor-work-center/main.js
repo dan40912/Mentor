@@ -76,7 +76,7 @@ class FocusView extends ItemView {
   getViewType(){return FOCUS_VIEW;}
   getDisplayText(){return '專注一輪';}
   getIcon(){return 'timer';}
-  async onOpen(){this.control?.destroy();this.contentEl.empty();if(!this.plugin.token){text(this.contentEl,'p','請先配對 Mentor 本機服務，再重新開啟專注計時。');return;}this.control=mountFocus(this.contentEl,{api:(route,input)=>this.plugin.api(route,input),requestKey:randomUUID,onTarget:()=>new Notice('專注目標時間已到，計時繼續。')});}
+  async onOpen(){this.control?.destroy();this.contentEl.empty();if(!this.plugin.token){text(this.contentEl,'p','請先配對 Mentor 本機服務，再重新開啟專注計時。');return;}this.control=mountFocus(this.contentEl,{api:(route,input)=>this.plugin.api(route,input),requestKey:randomUUID,captureStart:()=>this.plugin.focusStartSnapshot(),captureEnd:path=>this.plugin.focusEndSnapshot(path),onTarget:()=>new Notice('專注目標時間已到，計時繼續。')});}
   async onClose(){this.control?.destroy();}
 }
 
@@ -102,7 +102,22 @@ module.exports = class MentorPlugin extends Plugin {
     this.addCommand({id:'organization-history',name:'查看整理紀錄與復原',callback:()=>this.organizationHistory().catch(e=>new Notice(e.message))});
   }
   onunload() { for(const leaf of this.app.workspace.getLeavesOfType(FOCUS_VIEW))leaf.view.control?.destroy();this.token=null; }
-  async openFocus(){let leaf=this.app.workspace.getLeavesOfType(FOCUS_VIEW)[0];if(!leaf){leaf=this.app.workspace.getRightLeaf(true);if(!leaf)throw new Error('無法開啟專注側欄。');await leaf.setViewState({type:FOCUS_VIEW,active:true});}else await leaf.view.onOpen();await this.app.workspace.revealLeaf(leaf);}
+  async openFocus(){const source=this.app.workspace.getActiveViewOfType(MarkdownView)?.file;if(source)this.focusCandidatePath=source.path;let leaf=this.app.workspace.getLeavesOfType(FOCUS_VIEW)[0];if(!leaf){leaf=this.app.workspace.getRightLeaf(true);if(!leaf)throw new Error('無法開啟專注側欄。');await leaf.setViewState({type:FOCUS_VIEW,active:true});}else await leaf.view.onOpen();await this.app.workspace.revealLeaf(leaf);}
+  async focusStartSnapshot(){
+    const file=this.focusCandidatePath&&this.app.vault.getAbstractFileByPath(this.focusCandidatePath);if(!file||file.children)return {};
+    const content=await this.app.vault.read(file),hash=createHash('sha256').update(content).digest('hex'),withinLimit=content.length<=50000&&new TextEncoder().encode(content).length<=100000;
+    return new Promise(resolve=>{
+      const modal=new ReviewModal(this.app,'開始前，核對本輪來源',(host,dialog)=>{
+        text(host,'p','這份筆記的開始／結束快照會保存到 Mentor 本機服務。本步不傳給 AI、不修改筆記，切換頁籤不改變範圍。');text(host,'p',file.path);if(withinLimit)text(host,'pre',content,'mentor-source');else text(host,'p','筆記超過 50,000 字元／100 KB 快照上限；不會截斷，可以只開始計時。');
+        if(withinLimit)button(host,'保存這份來源並開始計時',async()=>{const current=await this.app.vault.read(file);if(createHash('sha256').update(current).digest('hex')!==hash)throw new Error('來源已變更，請關閉後重新開始預覽。');resolve({sourceBefore:{path:file.path,status:'present',content}});dialog.close();},true);
+        button(host,'只開始計時，不保存來源',()=>{resolve({});dialog.close();});button(host,'取消開始',()=>dialog.close());
+      });const close=modal.onClose.bind(modal);modal.onClose=()=>{resolve(null);close();};modal.open();
+    });
+  }
+  async focusEndSnapshot(path){
+    try{const file=this.app.vault.getAbstractFileByPath(path);if(!file)return {path,status:'missing'};if(file.children)throw Error('來源變成資料夾。');const content=await this.app.vault.read(file);if(content.length>50000||new TextEncoder().encode(content).length>100000)throw Error('來源超過快照上限。');return {path,status:'present',content};}
+    catch{new Notice('來源無法讀取或超過快照上限；可先結束計時，再補記較晚快照。');return {path,status:'unavailable'};}
+  }
   async savePreferences() { await this.saveData({address:this.address,sources:this.sources}); }
   refresh() { for(const leaf of this.app.workspace.getLeavesOfType(VIEW)) leaf.view.refresh(); }
   async open() {

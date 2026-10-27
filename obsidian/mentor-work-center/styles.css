@@ -3,3 +3,5 @@
 .mentor-focus{display:grid;gap:12px;padding:12px;overflow-wrap:anywhere}.mentor-focus label{display:block;margin:8px 0}.mentor-focus input[type="text"]{display:block;width:100%}.mentor-focus input[type="number"]{width:6rem}.mentor-focus-clock{font-size:var(--font-ui-large);font-variant-numeric:tabular-nums}.mentor-focus .mentor-actions{display:flex;flex-wrap:wrap;gap:8px}
 
 .mentor-focus button[aria-pressed="true"]{outline:2px solid var(--interactive-accent);outline-offset:1px}
+
+.mentor-focus pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:24rem;overflow:auto}

@@ -30,7 +30,7 @@ function fixture(){
   class ItemView{} class MarkdownView{}
   const view={file:{path:'測試.md',basename:'測試'},editor:{getSelection:()=>''}};
   const app={workspace:{getActiveViewOfType:()=>view,getLeavesOfType:()=>[]},vault:{read:async()=>read}};
-  const context={module:{exports:{}},URL,window:{},document:{},require:name=>{
+  const context={module:{exports:{}},URL,TextEncoder,window:{},document:{},require:name=>{
     if(name==='node:crypto')return crypto;
     if(name==='./focus')return focusModule.exports;
     if(name==='./organization')return organizationModule.exports;
@@ -225,4 +225,11 @@ test('native saved Markdown reads original text, never executes wrapper HTML or 
  const previous=f.modal;f.responseText='<script>bad()</script>';
  await assert.rejects(f.plugin.output({id:'TASK-reading'},'note.md',{id:'saved-version',index:0}),/格式不正確/);
  assert.equal(f.modal,previous);assert.equal(f.requests.length,2);
+});
+
+test('focus source preview needs explicit confirmation and end capture stays bound to that source path',async()=>{
+ const f=fixture();await f.plugin.onload();f.plugin.focusCandidatePath='測試.md';f.plugin.app.vault.getAbstractFileByPath=p=>p==='測試.md'?{path:p}:null;
+ const waiting=f.plugin.focusStartSnapshot();await new Promise(resolve=>setImmediate(resolve));assert.ok(all(f.modal.contentEl).some(n=>n.tag==='pre'&&n.text==='原始筆記'));assert.equal(f.requests.length,0);
+ await all(f.modal.contentEl).find(n=>n.tag==='button'&&n.text==='保存這份來源並開始計時').onclick();const input=await waiting;assert.equal(input.sourceBefore.path,'測試.md');assert.equal(input.sourceBefore.content,'原始筆記');
+ f.read='後來的內容';assert.equal((await f.plugin.focusEndSnapshot('測試.md')).content,'後來的內容');assert.equal((await f.plugin.focusEndSnapshot('已搬走.md')).status,'missing');f.read='x'.repeat(50001);assert.equal((await f.plugin.focusEndSnapshot('測試.md')).status,'unavailable');assert.equal(f.requests.length,0);
 });
