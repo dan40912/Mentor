@@ -1,0 +1,60 @@
+{
+  "schema": 1,
+  "baseCommit": "758ef2fdb32b05c8b2826055473d9090d43ca37b",
+  "fixture": "Fictional 30-times repeated initial request with one later correction; pressure case, not typical traffic.",
+  "method": "Exact supplied prompt character/UTF-8 comparison only; no provider calls, tokenization, cache or task completion measured.",
+  "node": "v26.7.0",
+  "rows": [
+    {
+      "stage": "A",
+      "before": {
+        "characters": 3076,
+        "utf8Bytes": 6232,
+        "sha256": "cde875942f06ece0619bb5aa1a2e0a899df94ca5c5426537a6336dd771ce3fd5"
+      },
+      "after": {
+        "characters": 2107,
+        "utf8Bytes": 4411,
+        "sha256": "f71ec16882fc5ed9b799109ab7bd20caa95db93dde893fd35394c72dffad4483"
+      },
+      "removedCharacters": 969,
+      "removedUtf8Bytes": 1821,
+      "correctionPreserved": true
+    },
+    {
+      "stage": "B",
+      "before": {
+        "characters": 3267,
+        "utf8Bytes": 6638,
+        "sha256": "91ee6e22794f52e48b186a9c58f387230c8e1dd0e1595f892d54c0b8fd2ac671"
+      },
+      "after": {
+        "characters": 2302,
+        "utf8Bytes": 4825,
+        "sha256": "185aeafd245742d67f493f7ed2ddb9978228968fcfc62ae2433b524cd05b0480"
+      },
+      "removedCharacters": 965,
+      "removedUtf8Bytes": 1813,
+      "correctionPreserved": true
+    },
+    {
+      "stage": "C",
+      "before": {
+        "characters": 3752,
+        "utf8Bytes": 7532,
+        "sha256": "b583319a6379cbc61c5adc0a5ffde434d71c71a61c34ce48a2f486e22293d8a5"
+      },
+      "after": {
+        "characters": 2787,
+        "utf8Bytes": 5719,
+        "sha256": "96299c4b73a9938d8a78473e22b3cbcfd2f869e20715ffd2dd6533c894f417d2"
+      },
+      "removedCharacters": 965,
+      "removedUtf8Bytes": 1813,
+      "correctionPreserved": true
+    }
+  ],
+  "tokens": null,
+  "cost": null,
+  "quality": "Two regression tests retain later corrections, reassertions and non-identical initial messages; not a live model quality evaluation."
+}

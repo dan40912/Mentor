@@ -80,11 +80,13 @@ npm run verify:obsidian -- --vault dist/mentor-obsidian
 ## 資料、權限與隱私
 
 - 任務在 `MENTOR_HOME/vault`，成果在 `MENTOR_HOME/outputs`；設定與日記也在本機。備份整個 home，另備份你的 Obsidian Vault。
+- D／F 回合的成果副本在 `vault/artifact-history`，含完整內容。工作卡可讀保存版本；接手摘要提供檔案 hash 與最近三輪副本索引，正文按需取得。回收桶永久清空會刪除副本，原成果不刪除；舊回合不回填。[保存範圍與限制](docs/implementation/artifact-history.md)。
 - Markdown 的 `awc:begin`／`awc:end` 是系統產生區塊；人工筆記放在區塊外，勿直接改產生資料。
 - Mentor 呼叫已登入 CLI；被選取的來源與 Prompt 會交給對應 AI 服務，本機儲存不代表模型離線執行。工作紀錄可能含來源內容，應依機密需求管理。
 - 整理復原紀錄保存修改前後內容，會隨 Vault 同步與備份。不要把正式筆記、憑證或私人執行紀錄提交到 Git。
 - 本機服務保留 loopback、Host／Origin、session 與 CSRF 檢查。Obsidian 使用有限權限的配對橋接，可在 Web 撤銷；撤銷不會自動停止已啟動的工作。
 - Codex 使用 CLI sandbox；Claude／Copilot 主要依工具白名單與工作目錄，Mentor 沒有額外 OS 沙箱。所有 provider 的隔離強度並不相同。
+- 人工接受前會核對審閱時的成果 hash。成果變動或舊審閱缺少版本時，先用「重新檢查目前成果」重新審閱；只核對已登記檔案，不是外部程序鎖。
 - `DONE`、結束碼 0、模型自評及檔案存在都不等於人工驗收。服務重啟後未知結果需先核對。
 
 安全問題見 [SECURITY.md](SECURITY.md)。

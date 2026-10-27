@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { TaskError } from './tasks.js';
 import { slug } from './memory.js';
+import { ArtifactHistory } from './artifact-history.js';
 
 // 回收桶：只搬動Mentor的紀錄（任務檔、事件、對話、專案說明、專案規則），產出資料夾與來源 session 一律不動。
 // 沒有自動清空期限；永久刪除要輸入完整名稱，只刪除清單上列出的紀錄。
@@ -40,7 +41,8 @@ export class Trash {
 
   // 任務在Mentor內的紀錄（相對於工作記憶）。
   async taskFiles(id) {
-    const candidates = [`${id}.md`, `events/${id}.jsonl`, `conversations/${id}.json`, `conversations/${id}.md`];
+    await new ArtifactHistory(this.memoryDir).taskDir(id);
+    const candidates = [`${id}.md`, `events/${id}.jsonl`, `conversations/${id}.json`, `conversations/${id}.md`, `artifact-history/${id}`];
     const found = [];
     for (const rel of candidates) if (await exists(path.join(this.memoryDir, rel))) found.push(rel);
     return found;
@@ -124,6 +126,7 @@ export class Trash {
   restore(trashId) {
     return this.serial(async () => {
       const manifest = await this.manifest(trashId);
+      for(const id of manifest.taskIds)await new ArtifactHistory(this.memoryDir).taskDir(id);
       const conflicts = [];
       for (const rel of manifest.files) if (await exists(path.join(this.memoryDir, rel))) conflicts.push(rel);
       if (conflicts.length) throw new TaskError(409, 'RESTORE_CONFLICT', `原位置已有同名紀錄：${conflicts.join('、')}。請先處理後再還原。`, { conflicts });

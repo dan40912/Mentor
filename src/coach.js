@@ -2,6 +2,7 @@ import { discussionResult, organizationDraftMetadata } from './task-discussion.j
 import { compactHandoff } from './compact-handoff.js';
 import { instructionPreview } from './instruction-preview.js';
 import { downstreamItems, sameWorkDefinition, invalidateDownstream } from './work-item-impact.js';
+import { ArtifactHistory, artifactFingerprints, verifyReviewedArtifacts } from './artifact-history.js';
 import { turnContext } from './work-cards.js';
 import { planPreview } from './plan-preview.js';
 import { normalizePreview, normalizeChanges } from './review-settings.js';
@@ -35,8 +36,10 @@ function cardText(card) {
     `成功標準：${(card.success || []).join('；')}`, `限制：${(card.constraints || []).join('；')}`, `未知：${(card.unknowns || []).join('；')}`].join('\n');
 }
 
-function transcript(messages) {
+function transcript(messages,originalRequest) {
   messages=messages.filter(m=>m.kind!=='discussion');
+  // The common context already carries the initial request; keep later repetitions and all corrections.
+  if(messages[0]?.role==='user'&&messages[0].text===originalRequest)messages=messages.slice(1);
   const recentAi = new Set(messages.filter(m => m.role === 'ai').slice(-8));
   // 人的修正不能因為 AI 中間多回了幾次就被截掉；新指令的優先序在共同契約說明。
   return messages.filter(m => m.role === 'user' || recentAi.has(m)).map(m => m.role === 'user' ? `使用者：${m.text}` :
@@ -89,9 +92,6 @@ project 填這件事所屬的專案或主題名稱（10 字內），看不出來
 constraints 只寫這件任務本身的限制，不要寫「本階段不讀資料」這類階段規則；產出資料夾的路徑與檔案已經給你，不要再問使用者。
 另外寫一段 coaching：指出這個需求原本缺了什麼（例如讀者、要對方做的決定、成功標準），並示範一句更好的寫法，讓使用者下次可以直接這樣下 prompt。${diary}${rules}
 
-使用者需求：
-${task.planning.request}
-
 只輸出一個 JSON（放在 \`\`\`json 區塊）：
 {"card":{"title":"10 字內","project":"","goal":"","audience":"","deliverable":"","success":[""],"constraints":[""],"unknowns":[""]},"coaching":""${diaryField}}`;
   },
@@ -110,7 +110,7 @@ coaching 要具體：評論使用者剛才的回答哪裡好、哪裡還不夠�
 ${cardText(task.planning.card)}
 
 對話紀錄：
-${transcript(task.planning.messages)}
+${transcript(task.planning.messages,task.planning.request)}
 
 只輸出一個 JSON（放在 \`\`\`json 區塊）：
 {"questions":[{"q":"","why":""}],"coaching":"","card":{"title":"","goal":"","audience":"","deliverable":"","success":[""],"constraints":[""],"unknowns":[""]},"ready":false,"readyReason":""${diaryField}}`;
@@ -140,7 +140,7 @@ ${feedback}
 ${cardText(task.planning.card)}
 
 Grill 對話：
-${transcript(task.planning.messages)}
+${transcript(task.planning.messages,task.planning.request)}
 
 只輸出一個 JSON（放在 \`\`\`json 區塊）：
 {"outline":{"storyline":"","logic":[""],"sections":[{"no":1,"title":"","point":"","evidence":"",${profile.evidence ? '"risk":"",' : ''}"visual":{"type":"none","count":0,"note":""}}],"imageTotal":0},"workItems":[{"id":"W1","title":"","detail":"","owner":"ai","acceptance":[""],"dependsOn":[]}],"coaching":""${diaryField}}`;
@@ -241,6 +241,7 @@ export class Coach {
     this.questions = new Map();
     this.executeFile = executeFile;
     this.attachments = new Attachments(root);
+    this.artifactHistory = new ArtifactHistory(store?.dir||path.join(root,'vault'));
     Object.assign(this, { store, settings, root, memory, children: new Map(), drivers: new Set(), overrides: new Map(), cancelled: new Set(), pending: new Map(), retries: new Map() });
   }
 
@@ -349,11 +350,14 @@ export class Coach {
     const kill = setTimeout(() => killTree(this.children.get(id), 'SIGKILL'), graceMs);
     const flag = setTimeout(async () => {
       if (!this.pending.has(id)) return;
-      await this.store.mutate(id, 'latest', null, t => {
-        if (t.planning.running?.stopping) t.planning.running.stopping.unconfirmed = true;
+      await this.store.mutate(id, 'latest', null, async t => {
+        if (t.planning.running?.turnId===task.planning.running.turnId && t.planning.running?.stopping) {
+          t.planning.running.stopping.unconfirmed = true;
+          // Keep the event in the same writer queue; a completed stop must not leave a late audit write.
+          await this.audit(id, 'STOP_UNCONFIRMED', {});
+        }
         return { status: planningStatus(t) };
       }).catch(() => {});
-      await this.audit(id, 'STOP_UNCONFIRMED', {});
     }, confirmMs);
     kill.unref?.(); flag.unref?.();
     this.pending.get(id)?.finally(() => { clearTimeout(kill); clearTimeout(flag); });
@@ -489,9 +493,10 @@ export class Coach {
 
   // 一次確認所有 AI 驗收通過的項目。仍是你按下的確認，不是系統代按。
   confirmAll(id, revision, key) {
-    return this.store.mutate(id, revision, key, t => {
+    return this.store.mutate(id, revision, key, async t => {
       const items = (t.planning?.workItems || []).filter(i => i.owner === 'ai' && i.status === 'REVIEWED');
       if (!items.length) throw new TaskError(409, 'NOTHING_TO_CONFIRM', '目前沒有等你確認的成果。');
+      for(const item of items)await verifyReviewedArtifacts(t.allowedRoots[0],item);
       startFeedback(t.planning);
       for (const item of items) Object.assign(item, { status: 'DONE', humanNote: '', doneAt: now() });
       if (t.planning.workItems.every(i => i.status === 'DONE')) { t.planning.phase = 'done'; t.current.summary = `全部 ${t.planning.workItems.length} 個工作項目已由你確認。`; }
@@ -562,9 +567,10 @@ export class Coach {
     const turnId = randomUUID();
     // 上一次執行剛結束時重按停止會留下標記；此時沒有執行中的 CLI，標記只可能屬於舊的執行。
     this.cancelled.delete(id);
-    const started = await this.store.mutate(id, task.revision, null, t => {
+    const started = await this.store.mutate(id, task.revision, null, async t => {
+      const before = metadata.preserveArtifacts ? await this.artifactHistory.capture(t,{turnId,phase:'before',outputs:(t.planning.workItems||[]).flatMap(item=>[...(item.previousOutputs||[]),...(item.outputs||[])])}) : null;
       const startedAt = now();
-      (t.planning.learningTurns ||= []).push({ id: turnId, stage: stageId, provider: agent.provider, modelId: agent.modelId, effort: agent.effort, agent: agentLabel(agent), startedAt, status: 'running', prompt, userInput, inputKind, workItemId: metadata.workItemId || null, beforeRevision: task.revision, context: turnContext(task), simulated: /fake-cli/i.test(path.basename(process.env[{codex:'AWC_CODEX_BIN',claude:'AWC_CLAUDE_BIN',copilot:'AWC_COPILOT_BIN'}[agent.provider]] || '')) });
+      (t.planning.learningTurns ||= []).push({ id: turnId, stage: stageId, provider: agent.provider, modelId: agent.modelId, effort: agent.effort, agent: agentLabel(agent), startedAt, status: 'running', prompt, userInput, inputKind, workItemId: metadata.workItemId || null, beforeRevision: task.revision, context: turnContext(task), ...(before?{artifactHistory:{before:{id:before.id,digest:before.digest,count:before.files.filter(file=>file.status==='saved').length,missing:before.files.filter(file=>file.status==='missing').length,at:before.createdAt}}}:{}), simulated: /fake-cli/i.test(path.basename(process.env[{codex:'AWC_CODEX_BIN',claude:'AWC_CLAUDE_BIN',copilot:'AWC_COPILOT_BIN'}[agent.provider]] || '')) });
       t.planning.running = { stage: stageId, provider: agent.provider, modelId: agent.modelId, effort: agent.effort, agent: agentLabel(agent), startedAt, turnId, workItemId: metadata.workItemId || null, mode, ...(metadata.discussion?{discussion:true}:{}) };
       t.planning.stopped = null;
       return { status: 'RUNNING' };
@@ -612,10 +618,18 @@ export class Coach {
         turn.response = result.text;
         // 回覆解析失敗也留住當次 prompt，且不讓任務永遠卡在 running。
         const draft = structuredClone(t);
-        try { await apply(draft, result.text, agentLabel(agent), prepared); }
+        try {
+          await apply(draft, result.text, agentLabel(agent), prepared,turnId);
+          if(metadata.preserveArtifacts){
+            const completed=draft.planning.learningTurns.find(entry=>entry.id===turnId),outputs=completed.outputs||[];
+            const after=await this.artifactHistory.capture({...draft,revision:t.revision+1},{turnId,phase:'after',outputs});
+            if(after){completed.artifactHistory={...completed.artifactHistory,after:{id:after.id,digest:after.digest,count:after.files.length,at:after.createdAt}};completed.outputs=outputs.map(output=>({...output,snapshot:{id:after.id,index:after.files.find(file=>file.file===output.file).index,sha:output.sha}}));}
+          }
+        }
         catch (error) {
-          await this.audit(id, 'STAGE_FAILED', { stage: stageId, agent: agentLabel(agent), code: 'RESPONSE_INVALID', message: error.message });
-          Object.assign(turn, { status: 'failed', error: error.message, errorCode: 'RESPONSE_INVALID' });
+          const code=(error.code?.startsWith('ARTIFACT_HISTORY_')||error.code?.startsWith('REVIEW_VERSION_'))?error.code:'RESPONSE_INVALID';
+          await this.audit(id, 'STAGE_FAILED', { stage: stageId, agent: agentLabel(agent), code, message: error.message });
+          Object.assign(turn, { status: 'failed', error: error.message, errorCode: code });
           t.planning.messages.push({ id: randomUUID(), role: 'system', stage: stageId, text: `回覆無法使用：${error.message}。當次 prompt 與回覆已保留，可檢查後重試。`, at: now() });
           return { status: planningStatus(t), extra: { error: { code: 'RESPONSE_INVALID', message: error.message } } };
         }
@@ -626,7 +640,7 @@ export class Coach {
         completed.usage = result.usage || null;
         completed.elapsedMs = Number.isSafeInteger(result.elapsedMs) ? result.elapsedMs : null;
         completed.checks = structuredClone(metadata.workItemId ? draft.planning.workItems.find(w => w.id === metadata.workItemId)?.sensors || [] : []);
-        completed.outputs = metadata.workItemId ? draft.planning.workItems.find(w => w.id === metadata.workItemId)?.outputs || [] : [];
+        completed.outputs = metadata.preserveArtifacts ? completed.outputs||[] : metadata.workItemId ? draft.planning.workItems.find(w => w.id === metadata.workItemId)?.outputs || [] : [];
         const learning = extractJson(result.text)?.learning;
         completed.learning = Object.fromEntries(['change', 'reason', 'evidence', 'lesson', 'nextPrompt', 'question'].map(key => [key, typeof learning?.[key] === 'string' ? learning[key].trim().slice(0, 2000) : '']));
         completed.learningStatus = Object.values(completed.learning).every(Boolean) ? 'suggested' : 'pending';
@@ -929,7 +943,7 @@ export class Coach {
       if (stageId === 'F' && item.status !== 'REVIEW_FAIL') throw new TaskError(409, 'NOTHING_TO_FIX', '這一項目前沒有待修正的驗收意見。');
       if (!ready(t.planning.workItems, item, unlockOf(t))) throw new TaskError(409, 'DEPENDENCY_PENDING', '前置項目還沒完成。');
       return prompts.D(t, item, t.planning.workItems.filter(i => unlockOf(t).includes(i.status))) + (item.instructions?.length ? `\n\n這一項的使用者補充指示（原文）：\n${item.instructions.map(x => `- ${x.text}`).join('\n')}` : '');
-    }, async (t, text, agent, testResult) => {
+    }, async (t, text, agent, testResult,turnId) => {
       const item = this.item(t, itemId);
       const parsed = parseExecution(text, t.preview);
       if (parsed.preview !== undefined) t.preview = parsed.preview;
@@ -946,11 +960,12 @@ export class Coach {
           outputs.push({ file: path.relative(outDir, real).split(path.sep).join('/'), sha: sha256(await readFile(real)) });
         } catch {}
       }
+      t.planning.learningTurns.find(turn=>turn.id===turnId).outputs=outputs;
       item.attempts += 1;
       item.outputs = [...new Map([...(item.outputs || []), ...outputs].map(output => [output.file, output])).values()];
       item.log = [...(item.log || []), { stage: stageId, agent, status: parsed.status, text: text.slice(-4000), at: now() }].slice(-6);
       // AI 說完成卻沒有任何產出檔案，視為假完成，不送驗收
-      const noFiles = parsed.status === 'DONE' && !item.outputs.length;
+      const noFiles = parsed.status === 'DONE' && !outputs.length;
       item.status = parsed.status === 'DONE' && !noFiles && !item.metadataError ? 'AWAITING_REVIEW' : 'BLOCKED';
       if (noFiles) item.fixes = [...(item.fixes || []), 'AI 回報完成，但產出資料夾沒有新的檔案。請把成果寫成檔案並在 FILES 列出。'];
       if (item.status === 'BLOCKED') {
@@ -963,7 +978,7 @@ export class Coach {
       item.sensors = await outputSensors(outDir, item, t.planning.outline);
       if (testResult) item.sensors.push({ ...testResult, attempt: item.attempts, stage: stageId, at: now() });
       this.addDiary(t, stageId, extractJson(text)?.diary, agent);
-    }, { workItemId: itemId, beforeApply: async (text, task) => {
+    }, { workItemId: itemId,preserveArtifacts:true, beforeApply: async (text, task) => {
       const parsed = parseExecution(text, task.preview);
       if (parsed.status !== 'DONE' || parsed.metadataError) return null;
       const command = parsed.testCommand ?? task.planning.card.testCommand;
@@ -989,19 +1004,25 @@ export class Coach {
     const task = await this.latest(id);
     const copy = await this.reviewCopy(task.allowedRoots[0]);
     const cleanup = () => copy && rm(path.dirname(copy), { recursive: true, force: true }).catch(() => {});
-    let started;
+    let started,reviewedOutputs;
     try {
-      started = await this.withAgent(id, 'E', copy ? 'write' : 'read', copy || task.allowedRoots[0], t => {
+      started = await this.withAgent(id, 'E', copy ? 'write' : 'read', copy || task.allowedRoots[0], async t => {
       const item = this.item(t, itemId);
       if (item.recheck && !ready(t.planning.workItems,item,unlockOf(t))) throw new TaskError(409, 'DEPENDENCY_PENDING', '前置項目尚未重新確認，不能先驗收依賴它的成果。');
-      if (item.status !== 'AWAITING_REVIEW') throw new TaskError(409, 'NOT_READY_FOR_REVIEW', '這一項還沒有可驗收的成果。');
+      if (!['AWAITING_REVIEW','REVIEWED'].includes(item.status)) throw new TaskError(409, 'NOT_READY_FOR_REVIEW', '這一項還沒有可驗收的成果。');
+      reviewedOutputs=await artifactFingerprints(copy||task.allowedRoots[0],item.outputs);
+      const current=await artifactFingerprints(task.allowedRoots[0],item.outputs);
+      if(JSON.stringify(current)!==JSON.stringify(reviewedOutputs))throw new TaskError(409,'REVIEW_VERSION_CHANGED','建立審閱副本期間成果已變更，請重新檢查。');
       return prompts.E(t, item, { copy: Boolean(copy) });
-    }, (t, text, agent) => {
+    }, async (t, text, agent) => {
       const item = this.item(t, itemId);
+      const current=await artifactFingerprints(t.allowedRoots[0],item.outputs);
+      const reviewedCopy=copy?await artifactFingerprints(copy,item.outputs):current;
+      if(JSON.stringify(current)!==JSON.stringify(reviewedOutputs)||JSON.stringify(reviewedCopy)!==JSON.stringify(reviewedOutputs))throw new TaskError(409,'REVIEW_VERSION_CHANGED','審閱期間成果已變更，不能沿用這次結果。');
       const json = extractJson(text);
       const results = (json?.results || []).map(r => ({ criterion: String(r.criterion), result: ['PASS', 'FAIL', 'NOT_RUN'].includes(r.result) ? r.result : 'NOT_RUN', evidence: String(r.evidence || '') }));
       const pass = json && json.verdict === 'PASS' && results.length && results.every(r => r.result === 'PASS');
-      item.review = { agent, results, coaching: json?.coaching || '', raw: json ? '' : text.slice(0, 3000), at: now() };
+      item.review = { agent, results, outputs:reviewedOutputs, coaching: json?.coaching || '', raw: json ? '' : text.slice(0, 3000), at: now() };
       item.fixes = pass ? [] : (json?.fixes || []).map(String).filter(Boolean);
       // AI 驗收通過只是輔助證據，最後由人確認。
       item.status = pass ? 'REVIEWED' : 'REVIEW_FAIL';
@@ -1157,7 +1178,7 @@ export class Coach {
   }
 
   confirm(id, revision, key, { itemId, accept, note = '' }) {
-    return this.store.mutate(id, revision, key, t => {
+    return this.store.mutate(id, revision, key, async t => {
       const item = this.item(t, itemId);
       if ((accept || item.owner === 'human') && !ready(t.planning.workItems,item,unlockOf(t))) throw new TaskError(409,'DEPENDENCY_PENDING','前置項目尚未完成，不能確認這項成果。');
       startFeedback(t.planning);
@@ -1167,6 +1188,7 @@ export class Coach {
       } else {
         if (item.status !== 'REVIEWED' && item.status !== 'REVIEW_FAIL' && item.status !== 'BLOCKED') throw new TaskError(409, 'NOT_REVIEWED', '先讓 AI 檢查，再由你確認。');
         if (accept && item.status !== 'REVIEWED') throw new TaskError(409, 'NOT_REVIEWED', '這一項還沒通過驗收；可以退回並寫下要補的資訊。');
+        if(accept)await verifyReviewedArtifacts(t.allowedRoots[0],item);
         if (accept) Object.assign(item, { status: 'DONE', humanNote: String(note).slice(0, 2000), doneAt: now() });
         else {
           if (!String(note).trim()) throw new TaskError(400, 'NOTE_REQUIRED', '退回時寫下要修什麼，修改的 AI 會照這段做。');

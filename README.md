@@ -81,10 +81,12 @@ Markdown remains readable when the theme or plugin is disabled. The packager doe
 ## Data, permissions and privacy
 
 - Tasks live in `MENTOR_HOME/vault`, artifacts in `MENTOR_HOME/outputs`; settings and diaries are local too. Back up the whole home and your Obsidian Vault separately.
+- D/F artifact copies live in `vault/artifact-history` and contain full content. Work cards read saved versions; compact handoffs include current hashes and the last three rounds’ snapshot indexes, with bodies loaded on demand. Purging task trash deletes copies, not original outputs; old rounds are not backfilled. See [scope and limits](docs/implementation/artifact-history.md).
 - Keep human notes outside the generated awc:begin / awc:end block. Do not manually change serialized task state.
 - Selected sources and prompts go to the configured AI service through its CLI. Local storage does not mean offline inference. Saved work history may contain source material.
 - Organization journals contain before/after content and follow your Vault’s sync and backup settings. Never commit private notes, credentials or real execution records.
 - Loopback, Host/Origin, session and CSRF protections remain. The plugin uses a limited pairing bridge; revocation does not stop already-running work.
+- Human acceptance checks the reviewed artifact hashes again. Changed outputs or legacy reviews without versions require a fresh review; this covers registered files and does not lock external processes.
 - Codex uses its CLI sandbox. Claude and Copilot rely mainly on tool allowlists and working directories; Mentor adds no OS sandbox. Isolation is not equivalent across providers.
 - DONE, exit code zero, self-review and file existence do not constitute human acceptance. Check unknown results after restart before continuing.
 
