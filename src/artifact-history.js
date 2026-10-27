@@ -19,6 +19,19 @@ async function readSafe(root,file,limit){
   if(bytes.length>limit||current!==resolved||onPath.isSymbolicLink()||onPath.dev!==first.dev||onPath.ino!==first.ino||last.size!==first.size||last.mtimeMs!==first.mtimeMs||last.ctimeMs!==first.ctimeMs)fail('ARTIFACT_HISTORY_CHANGED','讀取期間成果已改變，沒有把它當成穩定版本。');return bytes;
  }finally{await handle.close();}
 }
+export async function artifactFingerprints(root,outputs){
+ const files=[...new Set((outputs||[]).map(output=>name(typeof output==='string'?output:output.file||output.path)))].sort();
+ if(!files.length||files.length>MAX_FILES)fail('REVIEW_OUTPUTS_MISSING','沒有可綁定版本的成果，請先完成成果登記。');
+ const result=[];let total=0;
+ for(const file of files){const bytes=await readSafe(root,file,MAX_FILE);total+=bytes.length;if(total>MAX_TOTAL)fail('ARTIFACT_HISTORY_LIMIT','成果超過版本核對上限。',413);result.push({file,sha:sha256(bytes)});}
+ return result;
+}
+export async function verifyReviewedArtifacts(root,item){
+ const expected=item.review?.outputs;
+ if(!Array.isArray(expected)||!expected.length)fail('REVIEW_VERSION_UNKNOWN','這次審閱未保存成果版本，請重新讓 AI 檢查目前內容。');
+ const actual=await artifactFingerprints(root,item.outputs);
+ if(JSON.stringify(actual)!==JSON.stringify(expected))fail('REVIEW_VERSION_CHANGED','成果已不同於審閱版本，請重新讓 AI 檢查目前內容。');
+}
 export class ArtifactHistory {
  constructor(vault){this.vault=path.resolve(vault);}
  async taskDir(id,create=false){

@@ -392,7 +392,7 @@ module.exports = class MentorPlugin extends Plugin {
         for(const output of item.outputs||[])button(box,'閱讀成果：'+output.file,()=>this.output(task,output.file));
         for(const r of item.review?.results||[])text(box,'p',`${r.result} · ${r.criterion} · ${r.evidence}`);
         if(item.owner==='ai'&&item.status==='TODO')button(box,'交給 AI 執行',()=>invoke('execute',{itemId:item.id}),true);
-        if(item.status==='AWAITING_REVIEW')button(box,'讓另一階段 AI 檢查',()=>invoke('review',{itemId:item.id}),true);
+        if(['AWAITING_REVIEW','REVIEWED'].includes(item.status))button(box,'讓另一階段 AI 檢查',()=>invoke('review',{itemId:item.id}),true);
         if(item.status==='REVIEW_FAIL')button(box,'依意見修改',()=>invoke('fix',{itemId:item.id}));
         if(item.status==='REVIEWED'||(item.owner==='human'&&item.status==='TODO')){
           const label=box.createEl('label'),check=label.createEl('input',{type:'checkbox'});label.appendText('我已閱讀成果並核對以上驗收條件。');

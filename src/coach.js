@@ -2,7 +2,7 @@ import { discussionResult, organizationDraftMetadata } from './task-discussion.j
 import { compactHandoff } from './compact-handoff.js';
 import { instructionPreview } from './instruction-preview.js';
 import { downstreamItems, sameWorkDefinition, invalidateDownstream } from './work-item-impact.js';
-import { ArtifactHistory } from './artifact-history.js';
+import { ArtifactHistory, artifactFingerprints, verifyReviewedArtifacts } from './artifact-history.js';
 import { turnContext } from './work-cards.js';
 import { planPreview } from './plan-preview.js';
 import { normalizePreview, normalizeChanges } from './review-settings.js';
@@ -493,9 +493,10 @@ export class Coach {
 
   // 一次確認所有 AI 驗收通過的項目。仍是你按下的確認，不是系統代按。
   confirmAll(id, revision, key) {
-    return this.store.mutate(id, revision, key, t => {
+    return this.store.mutate(id, revision, key, async t => {
       const items = (t.planning?.workItems || []).filter(i => i.owner === 'ai' && i.status === 'REVIEWED');
       if (!items.length) throw new TaskError(409, 'NOTHING_TO_CONFIRM', '目前沒有等你確認的成果。');
+      for(const item of items)await verifyReviewedArtifacts(t.allowedRoots[0],item);
       startFeedback(t.planning);
       for (const item of items) Object.assign(item, { status: 'DONE', humanNote: '', doneAt: now() });
       if (t.planning.workItems.every(i => i.status === 'DONE')) { t.planning.phase = 'done'; t.current.summary = `全部 ${t.planning.workItems.length} 個工作項目已由你確認。`; }
@@ -626,7 +627,7 @@ export class Coach {
           }
         }
         catch (error) {
-          const code=error.code?.startsWith('ARTIFACT_HISTORY_')?error.code:'RESPONSE_INVALID';
+          const code=(error.code?.startsWith('ARTIFACT_HISTORY_')||error.code?.startsWith('REVIEW_VERSION_'))?error.code:'RESPONSE_INVALID';
           await this.audit(id, 'STAGE_FAILED', { stage: stageId, agent: agentLabel(agent), code, message: error.message });
           Object.assign(turn, { status: 'failed', error: error.message, errorCode: code });
           t.planning.messages.push({ id: randomUUID(), role: 'system', stage: stageId, text: `回覆無法使用：${error.message}。當次 prompt 與回覆已保留，可檢查後重試。`, at: now() });
@@ -1003,19 +1004,25 @@ export class Coach {
     const task = await this.latest(id);
     const copy = await this.reviewCopy(task.allowedRoots[0]);
     const cleanup = () => copy && rm(path.dirname(copy), { recursive: true, force: true }).catch(() => {});
-    let started;
+    let started,reviewedOutputs;
     try {
-      started = await this.withAgent(id, 'E', copy ? 'write' : 'read', copy || task.allowedRoots[0], t => {
+      started = await this.withAgent(id, 'E', copy ? 'write' : 'read', copy || task.allowedRoots[0], async t => {
       const item = this.item(t, itemId);
       if (item.recheck && !ready(t.planning.workItems,item,unlockOf(t))) throw new TaskError(409, 'DEPENDENCY_PENDING', '前置項目尚未重新確認，不能先驗收依賴它的成果。');
-      if (item.status !== 'AWAITING_REVIEW') throw new TaskError(409, 'NOT_READY_FOR_REVIEW', '這一項還沒有可驗收的成果。');
+      if (!['AWAITING_REVIEW','REVIEWED'].includes(item.status)) throw new TaskError(409, 'NOT_READY_FOR_REVIEW', '這一項還沒有可驗收的成果。');
+      reviewedOutputs=await artifactFingerprints(copy||task.allowedRoots[0],item.outputs);
+      const current=await artifactFingerprints(task.allowedRoots[0],item.outputs);
+      if(JSON.stringify(current)!==JSON.stringify(reviewedOutputs))throw new TaskError(409,'REVIEW_VERSION_CHANGED','建立審閱副本期間成果已變更，請重新檢查。');
       return prompts.E(t, item, { copy: Boolean(copy) });
-    }, (t, text, agent) => {
+    }, async (t, text, agent) => {
       const item = this.item(t, itemId);
+      const current=await artifactFingerprints(t.allowedRoots[0],item.outputs);
+      const reviewedCopy=copy?await artifactFingerprints(copy,item.outputs):current;
+      if(JSON.stringify(current)!==JSON.stringify(reviewedOutputs)||JSON.stringify(reviewedCopy)!==JSON.stringify(reviewedOutputs))throw new TaskError(409,'REVIEW_VERSION_CHANGED','審閱期間成果已變更，不能沿用這次結果。');
       const json = extractJson(text);
       const results = (json?.results || []).map(r => ({ criterion: String(r.criterion), result: ['PASS', 'FAIL', 'NOT_RUN'].includes(r.result) ? r.result : 'NOT_RUN', evidence: String(r.evidence || '') }));
       const pass = json && json.verdict === 'PASS' && results.length && results.every(r => r.result === 'PASS');
-      item.review = { agent, results, coaching: json?.coaching || '', raw: json ? '' : text.slice(0, 3000), at: now() };
+      item.review = { agent, results, outputs:reviewedOutputs, coaching: json?.coaching || '', raw: json ? '' : text.slice(0, 3000), at: now() };
       item.fixes = pass ? [] : (json?.fixes || []).map(String).filter(Boolean);
       // AI 驗收通過只是輔助證據，最後由人確認。
       item.status = pass ? 'REVIEWED' : 'REVIEW_FAIL';
@@ -1171,7 +1178,7 @@ export class Coach {
   }
 
   confirm(id, revision, key, { itemId, accept, note = '' }) {
-    return this.store.mutate(id, revision, key, t => {
+    return this.store.mutate(id, revision, key, async t => {
       const item = this.item(t, itemId);
       if ((accept || item.owner === 'human') && !ready(t.planning.workItems,item,unlockOf(t))) throw new TaskError(409,'DEPENDENCY_PENDING','前置項目尚未完成，不能確認這項成果。');
       startFeedback(t.planning);
@@ -1181,6 +1188,7 @@ export class Coach {
       } else {
         if (item.status !== 'REVIEWED' && item.status !== 'REVIEW_FAIL' && item.status !== 'BLOCKED') throw new TaskError(409, 'NOT_REVIEWED', '先讓 AI 檢查，再由你確認。');
         if (accept && item.status !== 'REVIEWED') throw new TaskError(409, 'NOT_REVIEWED', '這一項還沒通過驗收；可以退回並寫下要補的資訊。');
+        if(accept)await verifyReviewedArtifacts(t.allowedRoots[0],item);
         if (accept) Object.assign(item, { status: 'DONE', humanNote: String(note).slice(0, 2000), doneAt: now() });
         else {
           if (!String(note).trim()) throw new TaskError(400, 'NOTE_REQUIRED', '退回時寫下要修什麼，修改的 AI 會照這段做。');

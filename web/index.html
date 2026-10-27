@@ -1200,7 +1200,7 @@ function renderPlanning(t,detail){
     else if(w.owner==='ai'&&w.status==='TODO')add('交給 AI 做','primary',async()=>{await coachAct(t,'execute',{itemId:w.id});tell('已開始執行，完成後會自動更新。');},'exec','D');
     if(w.status==='AWAITING_REVIEW')add('讓 AI 檢查','primary',async()=>{await coachAct(t,'review',{itemId:w.id});},'review','E');
     if(w.status==='REVIEW_FAIL')add('讓 AI 照意見改','primary',async()=>{await coachAct(t,'fix',{itemId:w.id});},'fix','F');
-    if(w.status==='REVIEWED'){add('我確認通過','primary',async()=>{await coachAct(t,'confirm',{itemId:w.id,accept:true});tell(`已確認：${w.title}`);},'accept');const back=focusKey(element('button','寫修改指示','btn'),`reject-${w.id}`);back.onclick=()=>focusInstruct(w.id);buttons.append(back);}
+    if(w.status==='REVIEWED'){add('重新檢查目前成果','subtle',async()=>{await coachAct(t,'review',{itemId:w.id});},'review','E');add('我確認通過','primary',async()=>{await coachAct(t,'confirm',{itemId:w.id,accept:true});tell(`已確認：${w.title}`);},'accept');const back=focusKey(element('button','寫修改指示','btn'),`reject-${w.id}`);back.onclick=()=>focusInstruct(w.id);buttons.append(back);}
     if(w.status==='BLOCKED'){const more=focusKey(element('button','補資訊後讓 AI 照意見改',isNext?'btn primary':'btn'),`info-${w.id}`);more.disabled=Boolean(p.running);more.onclick=()=>focusInstruct(w.id);buttons.append(more);}
     if(w.owner==='human'&&w.status==='TODO'&&ready){const done=focusKey(element('button','完成這項',isNext?'btn primary':'btn'),`human-${w.id}`);done.dataset.opensNote='1';done.onclick=()=>inlineNote(card,{label:'完成說明（放在哪、內容是什麼）',placeholder:'例如：數據已放在產出資料夾 data.csv',confirm:'標記完成',from:done,onSubmit:async note=>{await coachAct(t,'confirm',{itemId:w.id,note});}});buttons.append(done);}
    }
