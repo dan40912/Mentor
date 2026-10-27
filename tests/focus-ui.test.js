@@ -31,6 +31,6 @@ test('lost start reply retries the exact persisted request and never creates ano
  await a.control.refresh();await a.button('重試未確認操作').onclick();assert.deepEqual(seen[0],seen[1]);assert.equal((await f.store.list()).sessions.length,1);assert.equal(a.button('重試未確認操作').hidden,true);
 });
 test('poll refresh keeps the unfinished goal and custom duration; invalid values do not submit',async t=>{
- const f=await fixture(t),a=ui(t,f);await a.control.refresh();const goal=all(a.host).find(n=>n.tag==='input'&&n.type==='text'),duration=all(a.host).find(n=>n.tag==='input'&&n.type==='number');goal.value='保留我的目標';duration.value='0';await a.control.refresh();assert.equal(goal.value,'保留我的目標');assert.equal(duration.value,'0');await a.button('開始專注').onclick();assert.equal((await f.store.list()).sessions.length,0);
+ const f=await fixture(t),a=ui(t,f);await a.control.refresh();const goal=all(a.host).find(n=>n.tag==='input'&&n.type==='text'),duration=all(a.host).find(n=>n.tag==='input'&&n.type==='number');goal.value='保留我的目標';duration.value='0';duration.oninput();assert.ok(all(a.host).filter(n=>n.tag==='button'&&n.attrs['aria-pressed']!==undefined).every(n=>n.attrs['aria-pressed']==='false'));await a.control.refresh();assert.equal(goal.value,'保留我的目標');assert.equal(duration.value,'0');await a.button('開始專注').onclick();assert.equal((await f.store.list()).sessions.length,0);
  duration.value='30';await a.button('開始專注').onclick();assert.equal((await f.store.list()).sessions[0].goal,'保留我的目標');
 });

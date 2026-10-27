@@ -33,6 +33,7 @@
     const label=el('label','本輪想完成什麼（選填）');goal=el('input');goal.type='text';goal.maxLength=1000;goal.setAttribute('aria-label','本輪想完成什麼');goal.placeholder='例如：整理三個設計取捨';label.append(goal);body.append(label);
     const duration=el('div',undefined,'mentor-actions');minutes=el('input');minutes.type='number';minutes.min='1';minutes.max='180';minutes.step='1';minutes.value='15';minutes.setAttribute('aria-label','專注分鐘數');
     for(const value of [10,15,30]){const b=button(duration,value+' 分鐘',async()=>{minutes.value=String(value);for(const control of duration.querySelectorAll('button'))control.setAttribute('aria-pressed',String(control===b));});b.setAttribute('aria-pressed',String(value===15));}
+    minutes.oninput=()=>{for(const b of duration.querySelectorAll('button'))b.setAttribute('aria-pressed',String(Number(minutes.value)===Number(b.textContent.split(' ')[0])));};
     const custom=el('label','自訂分鐘：');custom.append(minutes);const hint=el('p','1–180 分鐘；到時只提醒，計時繼續。計時不呼叫 AI。','mentor-caption');body.append(duration,custom,hint);
     const soundLabel=el('label'),toggle=el('input');toggle.type='checkbox';toggle.checked=sound;toggle.onchange=()=>sound=toggle.checked;soundLabel.append(toggle,doc.createTextNode('到時播放提示音（需開始這輪的畫面仍開啟；睡眠時不保證響鈴）'));body.append(soundLabel);
     button(body,'開始專注',async()=>{
