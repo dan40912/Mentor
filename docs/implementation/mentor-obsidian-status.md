@@ -2,6 +2,19 @@
 
 規格：`prompts/mentor-obsidian-redesign-prompt.md` 與 `prompts/mentor-obsidian-workflow-optimization-prompt.md`。完整目標不因第一批實作而縮小。本文件為開發狀態，不是驗收通過宣告。
 
+## 最新交付快照（2026-10-27）
+
+以下快照優先於本文較早的分支／測試數紀錄。
+
+- 功能分支：`codex/mentor-focus-sessions`，程式基準 `5c2d4d18fc85f95487222d05aa7fab3db70714d1`；本機 401 項測試通過。
+- CI run `40477588298`：Windows、macOS、Ubuntu × Node 20／22／24 九組全部 success。
+- Obsidian 套裝已建置，10 個 runtime 檔案比對通過；這不是原生驗收。
+- PR #5、#6、#7、#8 尚未合併；#8 依賴 #7，需待 #7 進 main 後調整 base 並重新驗證，不能合併到功能分支後誤稱正式交付。
+- 已有專注計時、任務關聯、原生來源／Web 手動材料、明確確認的 AI 整理、版本保存及交接匯出。Web 手動開始／結束材料走過隔離介面，沒有呼叫模型。
+- 真實專注整理的一次 Claude 呼叫逾時；來源／模擬畫面與自動測試不代替真實成功證據。
+
+剩餘驗收仍分五類：D/F 與外部編輯的覆寫保護、原生與真人易用性、真實跨 AI 全流程、可重複 Token 效率證據、PR 整合與正式交付。先凍結新增功能，只以既有「實機測試：表格與工作回合」核對核心流程；每個失敗保留具體步驟與證據，只修阻斷或資料損失問題，不因測試數上升就宣告完成。
+
 ## 工作基準
 
 - Repo：dan40912/Mentor；基於既有 lab-zero-touch 的 commit `5b8c7e89eadf6e1a833651a695037b184109864b`。
