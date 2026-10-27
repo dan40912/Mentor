@@ -69,3 +69,16 @@ test('task focus entry preserves an unrelated unsent goal and refuses to prepare
  await assert.rejects(a.control.prepareTask({taskId:'TASK-focus-one',title:'任務',goal:'任務'}),/草稿/);assert.equal(goal.value,'我的未開始目標');goal.value='';offline=true;
  await assert.rejects(a.control.prepareTask({taskId:'TASK-focus-one',title:'任務',goal:'任務'}),/核對專注狀態/);assert.equal((await f.store.list()).sessions.length,0);
 });
+
+
+test('source preview cannot be opened twice and a late capture cannot start after the control closes',async t=>{
+ const f=await fixture(t);let resolveCapture,captures=0;
+ const a=ui(t,f,null,{captureStart:()=>{captures++;return new Promise(resolve=>{resolveCapture=resolve;});}});await a.control.refresh();
+ const start=a.button('開始專注'),first=start.onclick();await start.onclick();assert.equal(captures,1);assert.equal((await f.store.list()).sessions.length,0);
+ a.control.destroy();resolveCapture({sourceBefore:{path:'示範.md',status:'present',content:'選定來源'}});await first;assert.equal((await f.store.list()).sessions.length,0);
+});
+test('source ending capture cannot double-end and closing during capture leaves the active timer unchanged',async t=>{
+ const f=await fixture(t);let finish,captures=0;
+ const a=ui(t,f,null,{captureStart:async()=>({sourceBefore:{path:'示範.md',status:'present',content:'開始'}}),captureEnd:()=>{captures++;return new Promise(resolve=>{finish=resolve;});}});await a.control.refresh();await a.button('開始專注').onclick();
+ const end=a.button('結束這一輪'),first=end.onclick();await end.onclick();assert.equal(captures,1);a.control.destroy();finish({path:'示範.md',status:'present',content:'結束'});await first;assert.equal((await f.store.list()).sessions[0].status,'running');
+});

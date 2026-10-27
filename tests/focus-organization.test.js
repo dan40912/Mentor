@@ -9,7 +9,7 @@ import {FocusOrganization} from '../src/focus-organization.js';
 import {requestApp} from './fixtures/request.js';
 const validReply=()=>JSON.stringify({points:[{text:'本輪留下新觀察',kind:'observation',source:'after',quote:'new point'}],openQuestions:['是否已實機核對？'],nextSteps:['先預覽，再請人確認'],handoff:'沿用本輪來源版本，未驗證的部分先核對。'});
 async function fixture(t,runner){
- const root=await mkdtemp(path.join(os.tmpdir(),'mentor-focus-organize-'));t.after(()=>rm(root,{recursive:true,force:true}));const vault=path.join(root,'vault');await mkdir(vault);const store=new FocusSessions(vault),first=await store.change('start',{revision:0,requestKey:'initial-focus-start',targetMinutes:15,goal:'整理本輪',sourceBefore:{path:'研究/來源.md',status:'present',content:'PRIVATE_UNSELECTED_MARKER\nold point'}});
+ const root=await mkdtemp(path.join(os.tmpdir(),'mentor-focus-organize-'));t.after(()=>rm(root,{recursive:true,force:true}));const vault=path.join(root,'vault');await mkdir(vault);const store=new FocusSessions(vault),first=await store.change('start',{revision:0,requestKey:'initial-focus-start',targetMinutes:15,goal:'整理本輪',taskId:'TASK-focus-handoff',workItemId:'item-one',sourceBefore:{path:'研究/來源.md',status:'present',content:'PRIVATE_UNSELECTED_MARKER\nold point'}});
  await store.change('end',{revision:1,requestKey:'initial-focus-end',sessionId:first.activeId,sourceAfter:{path:'研究/來源.md',status:'present',content:'PRIVATE_UNSELECTED_MARKER\nnew point'}});
  let agent={provider:'claude',modelId:'fictional-model',effort:'low'},calls=[];
  const service=new FocusOrganization(store,{agent:()=>agent,run:async input=>{calls.push(input);return runner?runner(input):{text:validReply(),elapsedMs:12,usage:null};}});
@@ -19,12 +19,12 @@ async function fixture(t,runner){
 async function plan(f){const input={...f.input(),revision:(await f.store.list()).revision};return {input,plan:(await f.service.prepare(input)).plan};}
 async function start(f,key='organization-once'){const p=await plan(f),input={...p.input,planId:p.plan.id,requestKey:key},result=await f.service.start(input);await Promise.all([...f.service.pending.values()]);return {input,result,job:(await f.service.get(f.id,result.jobId)).job};}
 test('preview is free, exact selected context runs once and human edits save/export an explicit version',async t=>{
- const f=await fixture(t),p=await plan(f);assert.equal(f.calls.length,0);assert.doesNotMatch(p.plan.prompt,/PRIVATE_UNSELECTED_MARKER/);const {input,result,job}=await start(f);
+ const f=await fixture(t),p=await plan(f);assert.equal(f.calls.length,0);assert.equal(p.plan.taskId,'TASK-focus-handoff');assert.equal(p.plan.workItemId,'item-one');assert.doesNotMatch(p.plan.prompt,/PRIVATE_UNSELECTED_MARKER/);const {input,result,job}=await start(f);
  assert.equal(f.calls.length,1);assert.equal(f.calls[0].mode,'chat');assert.notEqual(f.calls[0].cwd,f.root);assert.equal(job.status,'draft');assert.equal(job.cliElapsedMs,12);assert.equal((await f.service.start(input)).replayed,true);assert.equal(f.calls.length,1);
  assert.doesNotMatch(JSON.stringify(await f.store.list()),/new point|PRIVATE_UNSELECTED_MARKER|本輪留下新觀察/);
  const current=await f.service.get(f.id,result.jobId),save={revision:current.revision,sessionId:f.id,jobId:job.id,requestKey:'save-publication-once',draftRevision:1,content:'我修改後的重點。\n\n待實機確認。'};
  const published=await f.service.save(save);assert.equal((await f.service.save(save)).replayed,true);assert.equal((await f.service.get(f.id,job.id)).job.publications.length,1);
- const exported=await f.service.export(f.id,job.id,published.publicationId);assert.match(exported.markdown,/我修改後的重點/);assert.match(exported.markdown,/不表示事實已獨立驗證或任務已驗收/);assert.match(exported.markdown,/開始 SHA-256/);assert.equal(exported.fileName.includes('/'),false);assert.match(exported.markdown,/本次核准的來源片段/);assert.match(exported.markdown,/new point/);assert.doesNotMatch(exported.markdown,/PRIVATE_UNSELECTED_MARKER/);
+ const exported=await f.service.export(f.id,job.id,published.publicationId);assert.match(exported.markdown,/我修改後的重點/);assert.match(exported.markdown,/不表示事實已獨立驗證或任務已驗收/);assert.match(exported.markdown,/開始 SHA-256/);assert.equal(exported.fileName.includes('/'),false);assert.match(exported.markdown,/本次核准的來源片段/);assert.match(exported.markdown,/new point/);assert.match(exported.markdown,/關聯任務：TASK-focus-handoff/);assert.match(exported.markdown,/關聯工作項目：item-one/);assert.doesNotMatch(exported.markdown,/PRIVATE_UNSELECTED_MARKER/);
  await assert.rejects(f.service.save({...save,requestKey:'save-stale-version',revision:published.revision}),{code:'FOCUS_DRAFT_CHANGED'});
 });
 test('changed model/plan and fabricated source are rejected before any CLI call',async t=>{

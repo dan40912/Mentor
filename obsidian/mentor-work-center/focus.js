@@ -5,7 +5,7 @@
  const format=ms=>{const seconds=Math.floor(Math.max(0,ms)/1000);return String(Math.floor(seconds/60)).padStart(2,'0')+':'+String(seconds%60).padStart(2,'0');};
  function mountFocus(host,options){
   const doc=host.ownerDocument,api=options.api,now=options.now||Date.now,every=options.setInterval||setInterval,clear=options.clearInterval||clearInterval,key=options.requestKey||(()=>crypto.randomUUID());
-  let data=null,drawKey=null,busy=false,disposed=false,pending=null,goal,minutes,display,note,controls,sound=true,audio=null,owned=null,notified=false,lastReceived=0,draftGoal='',draftMinutes='15',draftLink=null,organizationLine=null,organizationSessionId=null;const editedDrafts=new Map();
+  let data=null,drawKey=null,busy=false,actionBusy=false,disposed=false,pending=null,goal,minutes,display,note,controls,sound=true,audio=null,owned=null,notified=false,lastReceived=0,draftGoal='',draftMinutes='15',draftLink=null,organizationLine=null,organizationSessionId=null;const editedDrafts=new Map();
   const el=(tag,text,cls)=>{const node=doc.createElement(tag);if(text!==undefined)node.textContent=text;if(cls)node.className=cls;return node;};
   host.classList.add('mentor-focus');host.replaceChildren();const heading=el('h3','專注一輪'),body=el('div'),materialsPanel=el('section'),message=el('p','','mentor-caption');message.setAttribute('role','status');host.append(heading,body,materialsPanel,message);
   const active=()=>data?.sessions.find(session=>session.id===data.activeId);
@@ -17,9 +17,9 @@
    note.textContent=`${s.goal||'本輪目標未填'} · 設定 ${s.targetMinutes} 分鐘。計時不代表實際注意力，睡眠尚未排除。${now()<s.lastEventAt?' 系統時間倒退，請先核對時間。':''}${now()-lastReceived>15000?' 連線狀態待確認；畫面時間為本機推算。':''}`;
    if(s.status==='running'&&remaining<=0&&owned===s.id&&!notified){notified=true;message.textContent='目標時間已到，計時繼續；你可以繼續寫，準備好再結束。';options.onTarget?.();if(sound&&audio){try{const oscillator=audio.createOscillator(),gain=audio.createGain();oscillator.connect(gain);gain.connect(audio.destination);gain.gain.value=0.12;oscillator.frequency.value=660;oscillator.start();oscillator.stop(audio.currentTime+0.35);}catch{message.textContent+=' 聲音未能播放。';}}}
   }
-  function button(parent,label,fn){const b=el('button',label,'btn');b.type='button';b.onclick=async()=>{if(busy)return;try{await fn();}catch(error){message.textContent='未完成：'+error.message;}};parent.append(b);return b;}
+  function button(parent,label,fn){const b=el('button',label,'btn');b.type='button';b.onclick=async()=>{if(busy||actionBusy||disposed)return;actionBusy=true;try{await fn();}catch(error){if(!disposed)message.textContent='未完成：'+error.message;}finally{actionBusy=false;}};parent.append(b);return b;}
   async function mutate(action,extra={}){
-   if(busy||!data)return;if(pending&&pending.action!==action){message.textContent='請先重試未確認的操作，再進行其他動作。';return;}busy=true;for(const b of host.querySelectorAll('button'))b.disabled=true;
+   if(disposed||busy||!data)return;if(pending&&pending.action!==action){message.textContent='請先重試未確認的操作，再進行其他動作。';return;}busy=true;for(const b of host.querySelectorAll('button'))b.disabled=true;
    const input=pending?.action===action?pending.input:{revision:data.revision,requestKey:key(),...(action==='start'?extra:{sessionId:active()?.id,...extra})};pending={action,input};retry.hidden=false;
    try{
     const result=await api('/focus/'+action,input);if(disposed)return;data=result;lastReceived=now();pending=null;retry.hidden=true;
@@ -115,7 +115,7 @@
   async function refresh(){if(disposed||busy)return;try{const result=await api('/focus');if(disposed||busy||result.revision<(data?.revision||0))return;data=result;lastReceived=now();render();return true;}catch(error){if(!disposed)message.textContent='專注狀態未同步：'+error.message;return false;}}
   const retry=button(host,'重試未確認操作',()=>pending&&mutate(pending.action));retry.hidden=true;button(host,'重新核對專注狀態',refresh);const tickTimer=every(tick,1000),pollTimer=every(refresh,5000);void refresh();
   async function prepareTask(context){
-   if(disposed||busy||pending)throw Error('請先完成目前未確認的專注操作。');
+   if(disposed||busy||actionBusy||pending)throw Error('請先完成目前未確認的專注操作。');
    if(!context||!/^TASK-[a-zA-Z0-9-]+$/.test(context.taskId)||typeof context.title!=='string'||typeof context.goal!=='string'||context.goal.length>1000)throw Error('任務關聯或目標格式不正確。');
    if(!await refresh())throw Error('請先核對專注狀態，再準備任務計時。');
    if(active())throw Error('已有進行中的專注；請先結束或取消，不會替換原任務。');
