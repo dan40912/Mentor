@@ -283,7 +283,7 @@ export class Coach {
         const item=this.item(t,workItemId);
         if(item.owner!=='ai'||!['TODO','BLOCKED'].includes(item.status))throw new TaskError(409,'ITEM_NOT_RUNNABLE',`「${item.title}」目前不能重新執行。`);
         if((t.planning.runs||[]).some(run=>run.workItemId===item.id&&['queued','running'].includes(run.status)))throw new TaskError(409,'RUN_ALREADY_QUEUED',`「${item.title}」已在排程或執行中。`);
-        const provider=assignments[item.id]||null;
+        const provider=assignments[item.id]||item.agent||null;
         const agent=this.agentFor('D',provider,t);
         const readyNow=ready(t.planning.workItems,item,unlockOf(t));
         const run={id:randomUUID(),workItemId:item.id,role:item.title,purpose:item.detail||item.title,provider:agent.provider,modelId:agent.modelId,effort:agent.effort,agent:agentLabel(agent),stage:'D',status:'queued',startedAt:null,endedAt:null,step:readyNow?'排隊中':`等待前置項目：${(item.dependsOn||[]).filter(dep=>!unlockOf(t).includes(t.planning.workItems.find(w=>w.id===dep)?.status)).join('、')}`,outputDir:path.join(t.allowedRoots[0],item.id),turnId:null,error:null};
@@ -543,7 +543,7 @@ export class Coach {
       x.planning.phase = 'execute';
       x.next = '依工作項目順序執行；每項完成後讓 AI 檢查，再由你確認。';
       return { status: planningStatus(x) };
-    }, 'approve-auto', {})).then(async r => { await this.audit(id, 'GATE_AUTO_APPROVED', { stage: 'C', note: '完全自動模式，計畫自動通過' }); return { done: Promise.resolve(r), task: r.task }; });
+    }, 'approve-auto', {})).then(async r => { await this.audit(id, 'GATE_AUTO_APPROVED', { stage: 'C', note: '完全自動模式，計畫自動通過' }); const runnable=r.task.planning.workItems.filter(item=>item.owner==='ai'&&item.status==='TODO');if(r.task.planning.autopilot&&runnable.length>=2){const queued=await this.queueRuns(id,r.task.revision,`auto-runs-${id}-${r.task.revision}`,{itemIds:runnable.map(item=>item.id)});return{done:Promise.resolve(queued),task:queued.task};}return { done: Promise.resolve(r), task: r.task }; });
   }
 
   async setAutopilot(id, revision, key, { full = false, on = true, provider = null } = {}) {
@@ -1076,7 +1076,14 @@ export class Coach {
       t.planning.phase = 'execute';
       t.next = '依工作項目順序執行；每項完成後讓 AI 檢查，再由你確認。';
       return { status: planningStatus(t), after: () => this.audit(id, 'GATE_APPROVED', { stage: 'C', outlineVersion: t.planning.outline.version, proposalId: preview.id }) };
-    }, 'approve', { proposalId });
+    }, 'approve', { proposalId }).then(async result => {
+      const task=result.task, runnable=task.planning.workItems.filter(item=>item.owner==='ai'&&item.status==='TODO');
+      if(task.planning.autopilot&&runnable.length>=2){
+        const key=`auto-runs-${task.id}-${task.revision}`;
+        return this.queueRuns(task.id,task.revision,key,{itemIds:runnable.map(item=>item.id)});
+      }
+      return result;
+    });
   }
 
   item(t, itemId) {

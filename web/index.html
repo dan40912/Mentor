@@ -924,6 +924,8 @@ function runNeedsAttention(task,run){return ['waiting_human','failed','unknown']
 function elapsedRun(run){if(!run.startedAt)return'';const seconds=Math.max(0,Math.floor((Date.now()-Date.parse(run.startedAt))/1000));return seconds<60?`已經過 ${seconds} 秒`:`已經過 ${Math.floor(seconds/60)} 分鐘`;}
 function recordRunNotices(available){for(const task of available)for(const run of taskRuns(task)){const key=`${task.id}:${run.id}:${run.status}`,identity=`${task.id}:${run.id}`,previous=knownRunStatuses.get(identity);if(previous&&previous!==run.status&&runNeedsAttention(task,run)&&!runNotices.has(key)){let saved=false;try{saved=sessionStorage.getItem(`mentor-run-notice:${key}`)==='1';}catch{}if(!saved){runNotices.add(key);pendingRunNotices.push({task,run,key});}}knownRunStatuses.set(identity,run.status);}}
 function runProviders(){return(state?.providers||[]).filter(provider=>provider.runnable&&(provider.modes||[]).includes('write'));}
+function parallelReadyItems(task){const items=task.planning?.workItems||[];return items.filter(item=>item.owner==='ai'&&item.status==='TODO'&&!(item.dependsOn||[]).length);}
+async function startParallelRuns(task,button){const all=(task.planning?.workItems||[]).filter(item=>item.owner==='ai'&&['TODO','BLOCKED'].includes(item.status));if(parallelReadyItems(task).length<2)return tell('目前沒有兩項可同時開始的工作。');button.disabled=true;try{await request(`/api/tasks/${encodeURIComponent(task.id)}/runs`,{revision:task.revision,itemIds:all.map(item=>item.id)},{'Idempotency-Key':crypto.randomUUID()});await loadTasks();tell(`已排入 ${all.length} 項 AI 工作；相依項目會等前置項目確認後開始。`);}catch(error){tell(`沒有開始製作：${error.message}`);}finally{button.disabled=false;}}
 async function runAction(task,run,action,extra={}){const key=crypto.randomUUID(),url=`/api/tasks/${encodeURIComponent(task.id)}/runs/${encodeURIComponent(run.id)}/${action}`;const result=await request(url,{revision:task.revision,...extra},{'Idempotency-Key':key});await loadTasks();return result;}
 function renderRunCard(task,run){
  const item=runItem(task,run),card=element('article',undefined,'run-card'),statusLabel=run.status==='done'&&item?.status==='DONE'?'已確認':runStatusText[run.status]||'狀態待確認',status=element('span',statusLabel,`run-state ${run.status==='queued'?'queued':run.status==='running'?'running':run.status==='unknown'?'unknown':run.status==='failed'?'failed':'waiting'}`);
@@ -959,9 +961,9 @@ function renderRunCommand(task){
 function renderAgentRuns(cards,available){
  const filter=$('#runs-attention-only')?.checked||false;
  for(const notice of pendingRunNotices){const row=element('div',undefined,'run-notice');row.append(element('strong',`${notice.task.title}：${runStatusText[notice.run.status]||'工作完成'}`),element('p',notice.run.role||'有一項工作需要你查看。','small'));const go=element('button','前往處理','btn subtle');go.type='button';go.onclick=()=>openTask(notice.task.id);row.append(go);cards.append(row);try{sessionStorage.setItem(`mentor-run-notice:${notice.key}`,'1');}catch{}}pendingRunNotices.length=0;
- const groups=available.map(task=>({task,runs:taskRuns(task).filter(run=>!filter||runNeedsAttention(task,run))})).filter(group=>group.runs.length);
+ const groups=available.map(task=>({task,runs:taskRuns(task).filter(run=>!filter||runNeedsAttention(task,run))})).filter(group=>group.runs.length||(!filter&&task.planning?.phase==='execute'&&parallelReadyItems(task).length>=2));
  if(!groups.length){cards.append(element('p',filter?'目前沒有需要你處理的工作。':'交辦工作後，這裡會逐項顯示 AI 在做什麼。','small muted'));return;}
- for(const {task,runs} of groups){const group=element('section',undefined,'run-group'),title=element('h3',task.title||task.id,'small');group.append(title);for(const run of runs)group.append(renderRunCard(task,run));group.append(renderRunCommand(task));cards.append(group);}
+ for(const {task,runs} of groups){const group=element('section',undefined,'run-group'),title=element('h3',task.title||task.id,'small');group.append(title);if(task.planning?.phase==='execute'&&parallelReadyItems(task).length>=2){const start=element('button',`開始製作（${parallelReadyItems(task).length} 項可同時進行）`,'btn primary');start.type='button';start.onclick=()=>startParallelRuns(task,start);group.append(start);}for(const run of runs)group.append(renderRunCard(task,run));if(runs.length)group.append(renderRunCommand(task));cards.append(group);}
 }
 function renderWorkspacePanels(){
  const needs=$('#project-needs'),active=$('#project-active'),recent=$('#project-recent'),cards=$('#work-panel-items');if(!needs||!active||!recent||!cards)return;
@@ -1382,6 +1384,7 @@ function renderPlanning(t,detail){
  }
  if(p.workItems?.length){
   const board=section(`要做的事（共 ${p.workItems.length} 項）`);board.dataset.anchor='item';
+  if(p.phase==='execute'&&parallelReadyItems(t).length>=2){const start=focusKey(element('button',`開始製作（${parallelReadyItems(t).length} 項可同時進行）`,'btn primary'),'parallel-start');start.type='button';start.onclick=()=>startParallelRuns(t,start);board.append(start);}
   for(const w of p.workItems){
    const [label,cls]=itemStatus[w.status]||[w.status,'gray'];const card=element('article',undefined,'work-item');card.dataset.item=w.id;
    const head=element('div',undefined,'work-head');head.append(element('span',label,`badge ${cls}`),element('strong',`${itemTitle(w.id,w.title)}`),element('span',w.owner==='human'?'你':w.executor?`由 ${w.executor} 完成`:`D ${agentOf('D')}`,'small muted'));card.append(head);

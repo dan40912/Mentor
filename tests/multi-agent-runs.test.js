@@ -8,6 +8,7 @@ import { TaskStore } from '../src/tasks.js';
 import { Coach } from '../src/coach.js';
 import { defaultStageSettings } from '../src/models.js';
 import { Memory } from '../src/memory.js';
+import { runAgent } from '../src/agents.js';
 import { requestApp } from './fixtures/request.js';
 
 const fake=path.join(path.dirname(fileURLToPath(import.meta.url)),'fixtures','fake-cli.mjs');
@@ -154,4 +155,36 @@ test('runs API requires session, CSRF and an idempotency key, and GET returns co
   await until(async()=>{const task=await app.coach.latest(id);return task.planning.runs.filter(run=>run.workItemId).length===2&&task.planning.runs.filter(run=>run.workItemId).every(run=>run.status==='done')&&!app.coach.pending.size&&!app.coach.runDrivers.size?task:null;});
   const listed=await app.fetch(`/api/tasks/${id}/runs`,{headers:{cookie}}),runs=await listed.json();
   assert.equal(listed.status,200);assert.deepEqual(runs.runs.filter(run=>run.workItemId).map(run=>run.status),['done','done']);
+});
+
+test('R3 API journey creates a proposal, approves a three-item plan, starts two agents, then unlocks the dependent agent',async t=>{
+  const root=await mkdtemp(path.join(tmpdir(),'mentor-r3-http-'));t.after(()=>rm(root,{recursive:true,force:true}));
+  const envNames=['AWC_CODEX_BIN','AWC_CLAUDE_BIN','AWC_COPILOT_BIN','FAKE_MODE','FAKE_RUN_LOG'];
+  const previous=Object.fromEntries(envNames.map(name=>[name,process.env[name]]));
+  t.after(()=>{for(const name of envNames){if(previous[name]===undefined)delete process.env[name];else process.env[name]=previous[name];}});
+  process.env.AWC_CODEX_BIN=process.env.AWC_CLAUDE_BIN=process.env.AWC_COPILOT_BIN=fake;
+  process.env.FAKE_MODE='parallel:1800';process.env.FAKE_RUN_LOG=path.join(root,'fake-runs.jsonl');
+  await writeFile(path.join(root,'.diagnosis.json'),JSON.stringify({codex:{ok:true},claude:{ok:true},copilot:{ok:false}}));
+  const app=await requestApp(root,runAgent),page=await app.fetch('/'),cookie=page.headers.get('set-cookie').split(';')[0],session=await(await app.fetch('/api/session',{headers:{cookie}})).json();
+  let keyIndex=0;const post=async(url,data)=>app.fetch(url,{method:'POST',headers:{cookie,'x-csrf-token':session.csrfToken,'content-type':'application/json','idempotency-key':`r3-journey-${++keyIndex}`,'origin':app.address},body:JSON.stringify(data)});
+  const conversation=await post('/api/workspace-chat',{question:'R3_END_TO_END_FIXTURE：可以幫我做一份虛構資料的十頁簡報嗎？'});assert.equal(conversation.status,200);const proposalResult=await conversation.json();assert.equal(proposalResult.intent,'new_work');assert.equal(proposalResult.taskProposal.steps.length,3);
+  const created=await post('/api/tasks',{request:proposalResult.taskProposal.goal,profile:'quick',proposal:proposalResult.taskProposal});
+  assert.equal(created.status,202);let task=(await created.json()).task;await app.settle();
+  const outline=await post(`/api/tasks/${task.id}/outline`,{revision:(await app.coach.latest(task.id)).revision});assert.equal(outline.status,202);await app.settle();
+  task=await app.coach.latest(task.id);assert.equal(task.planning.workItems.length,3);assert.deepEqual(task.planning.workItems.map(item=>item.agent),['claude','codex','claude']);
+  const approved=await post(`/api/tasks/${task.id}/approve`,{revision:task.revision});assert.equal(approved.status,200);
+  task=await app.coach.latest(task.id);assert.equal(task.planning.phase,'execute');
+  const started=await post(`/api/tasks/${task.id}/runs`,{revision:task.revision,itemIds:['W1','W2','W3']});assert.equal(started.status,202);
+  const cookieGet={headers:{cookie}};
+  const running=await until(async()=>{const response=await app.fetch(`/api/tasks/${task.id}/runs`,cookieGet),data=await response.json();const first=data.runs.filter(run=>['W1','W2'].includes(run.workItemId));return first.length===2&&first.every(run=>run.status==='running')?data.runs:null;});
+  assert.equal(running.length,3);
+  assert.equal(running.find(run=>run.workItemId==='W3').status,'queued');assert.match(running.find(run=>run.workItemId==='W3').step,/等待前置項目/);
+  await until(async()=>{const data=await(await app.fetch(`/api/tasks/${task.id}/runs`,cookieGet)).json();const first=data.runs.filter(run=>['W1','W2'].includes(run.workItemId));return first.length===2&&first.every(run=>run.status==='done')?data:null;});
+  for(const itemId of ['W1','W2']){task=await app.coach.latest(task.id);const reviewed=await post(`/api/tasks/${task.id}/review`,{itemId});assert.equal(reviewed.status,202);await app.settle();task=await app.coach.latest(task.id);const confirmed=await post(`/api/tasks/${task.id}/confirm`,{revision:task.revision,itemId,accept:true});assert.equal(confirmed.status,200);}
+  const downstream=await until(async()=>{const data=await(await app.fetch(`/api/tasks/${task.id}/runs`,cookieGet)).json();return data.runs.find(run=>run.workItemId==='W3'&&run.status==='running')||null;});
+  assert.equal(downstream.status,'running');
+  await until(async()=>{const data=await(await app.fetch(`/api/tasks/${task.id}/runs`,cookieGet)).json();return data.runs.find(run=>run.workItemId==='W3'&&run.status==='done')||null;});
+  await app.settle();
+  const finalRuns=(await(await app.fetch(`/api/tasks/${task.id}/runs`,cookieGet)).json()).runs;
+  assert.equal(finalRuns.filter(run=>run.workItemId==='W3').at(-1).status,'done');
 });

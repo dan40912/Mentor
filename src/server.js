@@ -336,7 +336,8 @@ export async function createRequestHandler({ root = appDir, port = 4317, runAgen
         }
         if (id && action === 'runs') {
           const { task } = await tasks.get(id);
-          return send(200, { runs:runSummaries(task) });
+          const runs=runSummaries(task);
+          return send(200, { runs:task.planning?.workItems?.length?runs.filter(run=>run.workItemId):runs });
         }
         if (id && action === 'events') return send(200, { events: await coach.events(id) });
         if (id && action === 'conversation') return send(200, await conversations.read((await tasks.get(id)).task));
