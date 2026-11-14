@@ -23,3 +23,10 @@ test('unsupported grammar and unclosed contexts block coverage rather than silen
  for(const content of ['[name][ref]\n[ref]: A.md','[shortcut]','[title](A.md "label")','---\nrelated: "[[A]]"\n---','---\ncssclasses: ["[[A]]"]\n---','---\nrelated: [A]\n---','<a href="A.md">link</a>','[deep [label]](A.md)','> ```md\n> [[A]]\n> ```','    [[A]]','`unterminated [[A]]','```md\n[[A]]','<!-- [[A]]','%% [[A]]','$x$ [[A]]','[open](obsidian://open?file=A)','```dataview\nLIST FROM "A"\n```'])assert.ok(scanReferences(content).blockers.length,content);
  assert.equal(scanReferences('no links').blockers.length,0);
 });
+
+test('native Obsidian can omit web links while internal references still require exact coverage',()=>{
+ const content='[[A]] [文件](https://example.com/docs)';
+ const {references}=scanReferences(content);
+ assert.equal(noteCoverage({content,references:[references[0]]}).verified,true);
+ assert.equal(noteCoverage({content,references:[]}).verified,false);
+});

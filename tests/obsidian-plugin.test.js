@@ -27,8 +27,9 @@ function fixture(){
   class Plugin {async loadData(){return {address:'http://127.0.0.1:4350',sources:{}};}async saveData(data){saved=structuredClone(data);}registerView(){}addRibbonIcon(){}addCommand(){}addSettingTab(){} }
   class ItemView{} class MarkdownView{}
   const view={file:{path:'測試.md',basename:'測試'},editor:{getSelection:()=>''}};
-  const app={workspace:{getActiveViewOfType:()=>view,getLeavesOfType:()=>[]},vault:{read:async()=>read}};
+  const app={workspace:{getActiveViewOfType:()=>view,getLeavesOfType:()=>[]},vault:{adapter:{getFullPath:location=>location},read:async()=>read}};
   const context={module:{exports:{}},URL,window:{},document:{},require:name=>{
+    if(name==='node:module')return {createRequire:()=>context.require};
     if(name==='node:crypto')return crypto;
     if(name==='./organization')return organizationModule.exports;
     if(name==='./relocation')return relocationModule.exports;
@@ -37,7 +38,7 @@ function fixture(){
     throw Error(name);
   }};
   vm.runInNewContext(source,context);
-  const plugin=new context.module.exports();plugin.app=app;
+  const plugin=new context.module.exports();plugin.app=app;plugin.manifest={dir:'/fixture/plugin'};
   return {plugin,notices,requests,get modal(){return lastModal;},get saved(){return saved;},set read(value){read=value;}};
 }
 
@@ -60,7 +61,7 @@ test('source preview does not start work, stale note is rejected and retry reuse
   const f=fixture();await f.plugin.onload();f.plugin.token='memory-only';f.plugin.open=async()=>{};
   await f.plugin.prepare();
   assert.equal(f.requests.length,0,'opening preview does not call the AI');
-  const create=all(f.modal.contentEl).find(e=>e.text==='建立這份任務，讓 AI 先擬方案');
+  const create=all(f.modal.contentEl).find(e=>e.text==='建立任務並開始釐清');
   f.read='外部修改';await create.onclick();
   assert.equal(f.requests.length,0);assert.match(f.notices.at(-1),/已改變/);
   f.read='原始筆記';let keys=[];

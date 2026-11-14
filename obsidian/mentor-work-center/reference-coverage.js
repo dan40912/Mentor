@@ -47,10 +47,12 @@ function scanReferences(content){
   return {references,blockers:[]};
  }catch(error){return {references,blockers:[error.message]};}
 }
+// Obsidian metadata omits external web links. They do not resolve inside the Vault.
+const isWebLink = ref => /^(?:https?:\/\/|\/\/)/i.test(ref.link);
 function noteCoverage(note){
  const scanned=scanReferences(note.content);if(scanned.blockers.length)return {...scanned,verified:false};
  if(!Array.isArray(note.references))return {...scanned,verified:false,blockers:['尚無可核對的連結索引。']};
- const expected=[...scanned.references].sort((a,b)=>a.start-b.start),actual=[...note.references].sort((a,b)=>a.start-b.start);
+ const expected=scanned.references.filter(ref=>!isWebLink(ref)).sort((a,b)=>a.start-b.start),actual=note.references.filter(ref=>!isWebLink(ref)).sort((a,b)=>a.start-b.start);
  if(expected.length!==actual.length)return {...scanned,verified:false,blockers:['目前原文的連結數與索引不同，可能有遺漏或過期參照。']};
  for(let i=0;i<expected.length;i++)for(const key of ['start','end','original','link'])if(expected[i][key]!==actual[i][key])return {...scanned,verified:false,blockers:['連結索引位置或內容與獨立掃描不一致，請等待重新索引。']};
  return {...scanned,verified:true};

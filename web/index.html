@@ -603,8 +603,62 @@ dialog.sheet [data-anchor],dialog.sheet [data-item]{scroll-margin-top:0}
 .attach-remove:hover{background:var(--bg-warning-subtle);color:var(--content-primary)}
 .attach-saved h3{font-size:14px;margin:0 0 4px}
 .attach-saved{margin:var(--space-m) 0}
-.work-preview{width:min(860px,94vw);max-height:88vh;padding:28px;overflow:auto;border:1px solid var(--border);border-radius:18px}.work-preview .card{margin-top:18px}.work-round{border-inline-start:3px solid #648370}.work-preview .contract{white-space:pre-wrap;overflow-wrap:anywhere}
+.work-preview{width:min(860px,94vw);max-height:88vh;padding:28px;overflow:auto;border:1px solid var(--border);border-radius:18px}.work-preview .card{margin-top:18px}.work-round{border-inline-start:3px solid #648370}.work-preview p,.work-preview h2,.work-preview h3{overflow-wrap:anywhere}.work-preview .btn{max-width:100%;white-space:normal}.work-preview .contract{white-space:pre-wrap;overflow-wrap:anywhere}
 .more-tools{margin-top:16px;border-top:1px solid var(--line);padding-top:14px}.more-tools>summary{padding:10px 12px;color:var(--muted);font-size:13px;cursor:pointer}.more-tools button{width:100%;margin:4px 0}.home-work{display:grid;gap:12px}.home-work-card{padding:16px 20px}.home-work-card .btn{text-align:left;white-space:normal;overflow-wrap:anywhere}.home-work-card p{margin:8px 0 0}.learning-detail,.assignment-detail,.task-facts{margin:18px 0}.learning-detail>summary,.assignment-detail>summary,.task-facts>summary{padding:12px 0;cursor:pointer;color:var(--muted)}
+
+
+.work-round > .badge{max-width:100%;white-space:normal;overflow-wrap:anywhere}
+.personal-existing{white-space:pre-wrap;overflow-wrap:anywhere}#mentor-faq{margin:20px 0}#mentor-faq summary{cursor:pointer;padding:8px 0}
+.knowledge-content{display:block;width:100%;margin:12px 0;padding:10px;border:1px solid var(--line);border-radius:var(--radius-container);resize:vertical;background:var(--bg-subtle);color:var(--ink);font:inherit}
+.personal-launch{position:fixed;z-index:16;inset:auto max(20px,env(safe-area-inset-right)) max(20px,env(safe-area-inset-bottom)) auto;width:56px;height:56px;padding:0;display:grid;place-items:center;border-radius:50%}
+.personal-chat{position:fixed;z-index:15;inset:auto max(20px,env(safe-area-inset-right)) calc(88px + env(safe-area-inset-bottom)) auto;width:min(410px,calc(100vw - 40px));height:min(590px,calc(100dvh - 108px - env(safe-area-inset-bottom)));display:grid;grid-template-rows:auto minmax(0,1fr) auto;overflow:hidden;border:1px solid var(--border-default);border-radius:22px;background:var(--personal-surface);backdrop-filter:blur(24px);box-shadow:var(--glass-shadow-lg);visibility:hidden;opacity:0;transform:translateY(10px) scale(.98);transform-origin:bottom right;transition:transform 180ms ease,opacity 180ms ease,visibility 0s 180ms}
+.personal-chat.is-open{visibility:visible;opacity:1;transform:none;transition-delay:0s}
+.personal-heading{display:flex;align-items:center;gap:var(--space-m);padding:14px 16px;border-bottom:1px solid var(--line)}
+.personal-heading h2{margin:0}.personal-heading .close{margin-inline-start:auto}
+.personal-heading .brand-mark{width:36px;height:36px}.personal-heading .brand-mark img{width:28px;height:28px}
+.personal-scroll{min-height:0;overflow:auto;overscroll-behavior:contain;padding:16px}
+.personal-messages{display:grid;gap:10px}
+.personal-chat .bubble{white-space:pre-wrap;overflow-wrap:anywhere;padding:10px 12px;margin:0;max-width:94%;width:fit-content;background:var(--bg-subtle);border-radius:16px 16px 16px 5px}
+.personal-chat .bubble.me{justify-self:end;background:var(--brand-wash);border-radius:16px 16px 5px 16px}
+.personal-chat .bubble .btn{display:block;margin-top:8px}
+.personal-chat .field{margin-bottom:var(--space-s)}
+.personal-chat textarea{min-height:0;line-height:1.5}
+.personal-compose{padding:10px 12px max(12px,env(safe-area-inset-bottom));border-top:1px solid var(--line)}
+.personal-compose form{display:grid;grid-template-columns:minmax(0,1fr) 44px;align-items:end;gap:8px}
+.personal-compose .field{margin:0}
+#pc-context-row{justify-content:space-between;padding:0 0 6px;overflow-wrap:anywhere}
+#pc-context-row .btn{height:auto;padding:4px 10px}
+.personal-compose .btn{height:44px;display:grid;place-items:center;padding:0}
+.personal-shortcuts{padding-top:12px}
+.personal-shortcuts .btn{font-size:12px;padding:6px 10px}
+.personal-chat details>summary{cursor:pointer;padding:10px 0;color:var(--content-highlight)}
+.personal-chat details{border-block-start:1px solid var(--line);margin-top:var(--space-m)}
+.personal-notes{display:grid;gap:4px;max-height:9rem;overflow:auto}
+.personal-notes button{text-align:left;white-space:normal;overflow-wrap:anywhere}
+.personal-notes [aria-current=true]{background:var(--highlight-wash)}
+#pc-editor{font-family:ui-monospace,"SF Mono",Consolas,monospace}
+#pc-title,#pc-origin,#pc-status{overflow-wrap:anywhere}
+html{--personal-surface:#fffffff5;--personal-solid:#fff}
+#pc-saveDialog{width:min(30rem,calc(100vw - 24px))}
+.personal-error{color:#9f2434}
+@media(prefers-color-scheme:dark){html{--personal-surface:#202026f5;--personal-solid:#202026}.personal-error{color:#ff9da5}}
+@media(max-width:700px){
+ .sidebar nav{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));overflow:visible}
+ .sidebar nav button{justify-content:center;padding-inline:6px;min-height:44px;white-space:normal;text-align:center}
+ .sidebar .more-tools{grid-column:1/-1;margin-top:4px;padding-top:0}
+ .sidebar .more-tools summary{padding:8px 4px;min-height:38px}
+ .sidebar .more-tools-panel{position:absolute;inset:auto 12px auto;z-index:2;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px;padding:8px;background:var(--bg-subtle);border:1px solid var(--line);border-radius:var(--radius-card);box-shadow:var(--glass-shadow-lg)}
+ .board-column-empty .board-items{display:none}
+ .board-column-empty .board-heading{margin-bottom:0}
+ main{padding-bottom:90px}
+}
+@media(max-width:600px){.personal-launch{right:12px;bottom:max(12px,env(safe-area-inset-bottom))}.personal-chat{right:8px;bottom:calc(76px + env(safe-area-inset-bottom));width:calc(100vw - 16px);height:min(590px,calc(100dvh - 88px - env(safe-area-inset-bottom)))}}
+@media(max-width:700px){
+ .personal-chat.is-keyboard-open{bottom:calc(var(--chat-keyboard-offset) + 8px);height:min(590px,calc(var(--chat-visible-height) - 16px))}
+ .personal-chat.is-keyboard-open .personal-compose{padding-bottom:12px}
+}
+@media(prefers-reduced-motion:reduce){.personal-chat{transition:none;transform:none}}
+@media(prefers-reduced-transparency:reduce),(prefers-contrast:more){.personal-chat{background:var(--personal-solid);backdrop-filter:none;border-color:var(--border-strong)}}
 </style>
 </head>
 <body>
@@ -616,14 +670,14 @@ dialog.sheet [data-anchor],dialog.sheet [data-item]{scroll-margin-top:0}
   <button data-view="overview" aria-current="page"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 13h6v7H4zM14 4h6v7h-6zM4 4h6v5H4zM14 15h6v5h-6z"/></svg>現在</button>
   <button data-view="tasks"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M5 4h14v16H5zM8 8h8M8 12h8M8 16h5"/></svg>任務</button>
   <button data-view="knowledge"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4.5A1.5 1.5 0 0 1 6.5 3H19v16H6.5A1.5 1.5 0 0 0 5 20.5v-16Z"/><path d="M5 19.5A1.5 1.5 0 0 1 6.5 18H19M9 7h6"/></svg>成果與知識</button>
-  <details class="more-tools"><summary>更多工具</summary>
+  <details class="more-tools"><summary>更多工具</summary><div class="more-tools-panel">
   <button data-view="conversations"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 4h16v12H9l-5 4V4Z"/><path d="M8 8h8M8 12h5"/></svg>對話紀錄</button>
   <button data-view="handoff"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h12l-3-3M17 17H5l3 3"/></svg>交接中心</button>
   <button data-view="journeys"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M6 4v16M6 6h12M6 12h8M6 18h12"/><circle cx="6" cy="6" r="2"/><circle cx="6" cy="12" r="2"/><circle cx="6" cy="18" r="2"/></svg>專案歷程</button>
   <button data-view="workspaces"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 3 8l9 5 9-5-9-5Z"/><path d="m3 13 9 5 9-5"/></svg>工作區與 Session</button>
   <button data-view="trash"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg>回收桶</button>
   <button data-view="settings"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 6h9M18 6h1M5 12h3M12 12h7M5 18h11M20 18h-1"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>角色與設定</button>
-  </details>
+  </div></details>
  </nav>
  <div class="sidebar-foot"><p><span class="dot"></span>資料留在本機</p>Markdown × Obsidian<br>不需資料庫 · Obsidian 插件選用</div>
 </aside>
@@ -653,12 +707,16 @@ dialog.sheet [data-anchor],dialog.sheet [data-item]{scroll-margin-top:0}
  <section data-page="workspaces" hidden>
   <div class="page-heading"><div><div class="eyebrow">來源</div><h1>工作區與 Session</h1><p>任務是從哪些 AI 對話整理來的。同一個資料夾，不一定是同一個任務。</p></div></div>
   <div class="section-heading" style="margin-top:0"><h2>已整理的來源</h2><span class="badge gray">唯讀觀察，不代表控制權</span></div><div id="sessions" class="sessions"></div>
-  <article class="card soon"><div><span class="badge gray">尚未開放</span><h2>自動掃描 Codex 與 Claude Code 的 session</h2><p class="small muted">之後會讀取這台電腦的 session 紀錄，依資料夾列出可匯入的對話，再由你確認歸到哪個任務。現在請用「新任務」開始，或把既有對話整理成任務檔。</p></div></article>
  </section>
  <section data-page="handoff" hidden>
   <div class="page-heading"><div><div class="eyebrow">交接</div><h1>把工作交清楚。</h1><p>先建立交接，再核對接續；保存文件不代表 AI 已啟動。</p></div></div>
   
-  <form id="handoff" class="card"><h2>交接草稿</h2><div class="grid">
+  <section class="card"><h2>從既有任務準備交接</h2>
+   <label class="field"><span>選擇任務</span><select id="handoff-task"></select></label>
+   <div class="buttons"><button class="btn" type="button" id="handoff-preview">預覽任務接手包</button></div>
+   <p class="small muted" id="handoff-task-status" role="status"></p>
+  </section>
+  <form id="handoff" class="card"><h2>手動撰寫交接</h2><div class="grid">
    <label class="field"><span>接手的 AI</span><select name="provider"></select></label><label class="field"><span>模型與推理強度</span><select name="modelKey"></select><small>選單存在不代表帳號已驗證支援。</small></label>
    <label class="field"><span>工作目標</span><textarea name="goal" required maxlength="6000" placeholder="希望完成什麼？"></textarea></label><label class="field"><span>允許修改範圍</span><textarea name="scope" required maxlength="6000" placeholder="可以改哪些檔案？哪些操作不可做？"></textarea></label>
    <label class="field"><span>驗收條件</span><textarea name="acceptance" required maxlength="6000" placeholder="可執行檢查與需要人工判斷的條件"></textarea></label><label class="field"><span>唯一下一步</span><textarea name="next" required maxlength="6000" placeholder="接手者先核對什麼，再做哪一步？"></textarea></label>
@@ -669,8 +727,22 @@ dialog.sheet [data-anchor],dialog.sheet [data-item]{scroll-margin-top:0}
   </article>
  </section>
  <section data-page="knowledge" hidden>
-  <div class="page-heading"><div><div class="eyebrow">知識</div><h1>做出的成果，留下的理解。</h1><p>每次你糾正 AI，都可以變成下一次的規則。全部存成 Markdown，Obsidian 直接讀得到。</p></div></div>
+  <div class="page-heading"><div><div class="eyebrow">知識</div><h1>做出的成果，留下的理解。</h1><p>找回任務成果、已保存的 Markdown 筆記，以及你選擇留下的工作規則。</p></div></div>
   <section aria-label="已登記成果"><div class="section-heading"><h2>最近成果</h2><span class="small muted">已登記不等於已驗收</span></div><div id="outcomes" class="home-work"></div></section>
+  <section aria-label="已保存知識"><div class="section-heading"><h2>已保存知識</h2></div>
+   <label class="field"><span>搜尋已保存知識</span><input type="search" id="knowledge-search" disabled placeholder="輸入標題、內容或任務 ID"></label>
+   <p class="small muted" id="knowledge-search-status" role="status"></p>
+   <div id="saved-knowledge" class="home-work"><p class="small muted">正在讀取筆記…</p></div>
+  </section>
+  <section class="card" id="mentor-faq"><h2>聊天工作流程 FAQ</h2>
+   <details><summary>怎麼查進度和卡點？</summary><p>問「目前哪幾件在等我？」或指定任務名稱。用「選用」把任務設成對話對象，底部會顯示目前任務。可以接著問「這件進度呢？」或點「清除」切換話題。</p></details>
+   <details><summary>怎樣才會建立新任務？</summary><p>輸入「交辦：」或「建立任務：」加上目標。查詢、準備交接和草稿都從既有資料開始。</p></details>
+   <details><summary>如何交接給另一個 AI？</summary><p>問「幫我準備這件的交接給 Claude」，檢查版本和執行狀態，再下載交接 Markdown。</p></details>
+   <details><summary>如何把任務經驗存進書庫？</summary><p>說「把這件的驗收條件存起來」，先編輯草稿。確認後會出現在「成果與知識 → 已保存知識」，也可另存到 Vault。</p></details>
+   <details><summary>如何核准計畫或驗收？</summary><p>問「這件哪些還沒驗？」查看檢查與工作項目。透過原本的計畫預覽及驗收流程完成核准。</p></details>
+   <details><summary>怎麼換負責的 AI？</summary><p>問「這件現在是誰負責？可以換成誰？」檢查目前指派；從任務頁調整個別任務，或到角色與設定調整階段預設值。</p></details>
+   <details><summary>如何整理 Obsidian？</summary><p>說「整理 Vault」，選擇已授權的 Vault 與資料夾，預覽索引再保存。標籤、搬移與復原可在 Obsidian 工作中心操作。</p></details>
+  </section>
   <article class="card rules-card"><div class="section-heading" style="margin-top:0"><h2>規則與學習</h2><span class="small muted">任務開始時讀一次，中途不變</span></div><div id="rules" class="rules-grid"></div></article>
   <div class="split lower"><article class="card"><h2>交接紀錄</h2><div id="memory-recent"><p class="muted">尚無交接檔。</p></div><button class="btn" data-go="handoff">建立交接</button></article>
   <article class="card"><h2>保存位置</h2><p class="path" id="memory-path">正在讀取…</p><p class="small muted">任務、事件紀錄、規則與交接都在這個資料夾。把它放在 Vault 裡，就能用 Obsidian 閱讀和連結。後端不改寫你的其他筆記。</p><details><summary>備份與還原</summary><p class="small muted">停止服務後，備份整個工作記憶資料夾與 .settings.json；放回原位置後重新啟動。</p></details></article></div>
@@ -702,7 +774,7 @@ dialog.sheet [data-anchor],dialog.sheet [data-item]{scroll-margin-top:0}
 </div>
 <dialog id="task-dialog" class="sheet" aria-labelledby="task-title"><div class="dialog-inner"><div class="dialog-heading"><div class="sheet-title"><span id="task-holder"></span><h2 id="task-title" tabindex="-1">任務詳情</h2></div><div class="sheet-track" id="task-track"></div><div class="sheet-actions"><button class="btn subtle small-btn" type="button" data-expand="task-dialog" aria-label="展開任務頁" aria-pressed="false"><svg class="expand-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/></svg><svg class="collapse-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8h5V3m13 5h-5V3M8 21v-5H3m13 5v-5h5"/></svg> <span data-expand-label>展開</span></button><div class="task-share-tools"><button id="task-share-toggle" class="btn small-btn" type="button" aria-expanded="false" aria-controls="task-share-panel">分享給 AI</button><div id="task-share-panel" class="handoff-box" hidden></div></div><span id="task-menu-slot"></span><button class="close" aria-label="關閉任務詳情" data-close="task-dialog"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div></div><div id="task-detail"></div></div></dialog>
 <dialog id="preview-dialog" aria-labelledby="preview-title"><div class="dialog-inner"><div class="dialog-heading"><h2 id="preview-title">預覽成果</h2><div class="buttons"><button class="btn subtle small-btn" type="button" data-expand="preview-dialog" aria-label="展開成果預覽" aria-pressed="false"><svg class="expand-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/></svg><svg class="collapse-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8h5V3m13 5h-5V3M8 21v-5H3m13 5v-5h5"/></svg> <span data-expand-label>展開</span></button><button class="close" type="button" aria-label="關閉成果預覽" data-close="preview-dialog">×</button></div></div><p id="preview-status" role="status"></p><div id="preview-modes" role="group" aria-label="預覽模式" hidden><button class="btn subtle small-btn" type="button" data-preview-mode="desktop" aria-pressed="true">桌面</button><button class="btn subtle small-btn" type="button" data-preview-mode="mobile" aria-pressed="false">手機（390px）</button><button class="btn subtle small-btn" type="button" id="preview-source" aria-pressed="false" hidden>原始碼</button></div><div id="preview-layout"><div id="preview-content"></div><aside id="review-changes" aria-label="改了什麼" hidden></aside></div></div></dialog>
-<dialog id="draft-dialog" aria-labelledby="draft-title"><div class="dialog-inner"><div class="dialog-heading"><h2 id="draft-title">新任務</h2><button class="close" aria-label="關閉新任務" data-close="draft-dialog">×</button></div><p class="muted">用一兩句話說你想完成什麼。AI 會先整理成任務卡，再反問你，直到講清楚才擬計畫。</p><form id="draft-form"><input type="hidden" name="project"><p id="draft-project" class="notice" hidden></p><label class="field"><span>你想完成什麼？</span><textarea name="request" required minlength="4" maxlength="6000" placeholder="例如：下週要向主管報告新功能規劃，需要一份 HTML 簡報"></textarea></label><section id="draft-attachments" aria-label="加入附件（選填）"></section><fieldset class="profiles" id="profile-picker"><legend>選擇工作流程</legend></fieldset><fieldset class="auto-choice"><legend class="visually-hidden">執行方式</legend><label class="check-line"><input type="checkbox" name="autopilot" checked><span><strong>建立後交給 AI 一路做到完</strong><small>AI 會自己跑到需要你的地方才停下來：回答問題、確認成果、你負責的項目、額度或錯誤。隨時可以按「停止這次執行」。</small></span></label><label class="check-line"><input type="checkbox" name="full"><span><strong>完全自動</strong><small>計畫不用你核准，每一項 AI 自己檢查過就做下一項。全部做完，你再一次看。計畫錯了後面會白跑，建議只用在小任務。</small></span></label></fieldset><details><summary>進階：產出資料夾</summary><label class="field" style="margin-top:12px"><span>產出資料夾（絕對路徑，可空白）</span><input name="outputDir" autocomplete="off" placeholder="空白時放在 outputs/任務 ID"><small>執行與修改的 AI 只能在這個資料夾裡寫檔。</small></label></details><label class="field" style="margin-top:16px"><span>這個任務用的 AI</span><select name="agent" id="new-task-agent"></select><small>預設沿用「角色與設定」。選一個模型，這個任務的每個階段都用它；之後可在任務頁更換。</small></label><div class="buttons" style="margin-top:16px"><button class="btn primary" type="submit">交給 AI 教練</button><span class="small muted" id="new-task-agents"></span></div></form></div></dialog>
+<dialog id="draft-dialog" aria-labelledby="draft-title"><div class="dialog-inner"><div class="dialog-heading"><h2 id="draft-title">新任務</h2><button class="close" aria-label="關閉新任務" data-close="draft-dialog">×</button></div><p class="muted">用一兩句話說你想完成什麼。AI 會先整理成任務卡，再反問你，直到講清楚才擬計畫。</p><form id="draft-form"><input type="hidden" name="project"><p id="draft-project" class="notice" hidden></p><label class="field"><span>你想完成什麼？</span><textarea name="request" required minlength="4" maxlength="6000" placeholder="例如：下週要向主管報告新功能規劃，需要一份 HTML 簡報"></textarea></label><section id="draft-attachments" aria-label="加入附件（選填）"></section><fieldset class="profiles" id="profile-picker"><legend>選擇工作流程</legend></fieldset><fieldset class="auto-choice"><legend class="visually-hidden">執行方式</legend><label class="check-line"><input type="checkbox" name="autopilot" checked><span><strong>建立後交給 AI 一路做到完</strong><small>AI 會自己跑到需要你的地方才停下來：回答問題、確認成果、你負責的項目、額度或錯誤。隨時可以按「停止這次執行」。</small></span></label><label class="check-line"><input type="checkbox" name="full"><span><strong>完全自動</strong><small>計畫不用你核准，每一項 AI 自己檢查過就做下一項。全部做完，你再一次看。計畫錯了後面會白跑，建議只用在小任務。</small></span></label></fieldset><details><summary>進階：產出資料夾</summary><label class="field" style="margin-top:12px"><span>產出資料夾（絕對路徑，可空白）</span><input name="outputDir" autocomplete="off" placeholder="空白時放在 outputs/任務 ID"><small>執行與修改的 AI 只能在這個資料夾裡寫檔。</small></label></details><label class="field" style="margin-top:16px"><span>這個任務用的 AI</span><select name="agent" id="new-task-agent"></select><small>預設沿用「角色與設定」。選一個模型，這個任務的每個階段都用它；之後可在任務頁更換。</small></label><p class="small muted" id="draft-next" aria-live="polite"></p><div class="buttons"><button class="btn primary" type="submit" aria-describedby="draft-next">建立任務並開始釐清</button><span class="small muted" id="new-task-agents"></span></div></form></div></dialog>
 <div id="message" role="status" aria-live="polite"></div>
 <script src="/assets/item-names.js"></script>
 <script src="/assets/project.js"></script>
@@ -727,7 +799,7 @@ function element(tag,text,className){const node=document.createElement(tag);if(t
 function providerMark(id,text){const box=element('span',undefined,'provider-mark');const image=element('img');image.src={codex:'/assets/openai.svg',claude:'/assets/claude.svg',copilot:'/assets/copilot.svg'}[id]||'/assets/mentor.svg';image.alt='';image.className='provider-logo';image.onerror=()=>image.hidden=true;box.append(image,element('span',text||state?.providers.find(p=>p.id===id)?.name||id,'provider-text'));return box;}
 function taskAgent(t){const p=t.planning;if(!p){const source=t.current?.sources?.[0]?.provider;const provider=/copilot/i.test(source||'')?'copilot':/claude/i.test(source||'')?'claude':/codex/i.test(source||'')?'codex':null;return {provider,id:'',label:source?`來源：${source}`:'執行者尚未指定',hint:'交接來源，尚未啟動執行'};}const id=p?.running?.stage||({grill:'B',outline:'C',execute:/驗收|讓 AI 檢查/.test(t.nextAction?.label)?'E':'D',done:'E'}[p?.phase]||'D');let saved=state?.settings.stages[id];if(saved?.provider==='same-as-D')saved=state.settings.stages.D;const last=p?.messages?.filter(m=>m.role==='ai').at(-1);const label=p?.running?.agent||((holderOf(t)==='done'||holderOf(t)==='you')&&last?.agent)||agentOfTask(t,id);const provider=p?.running?.provider||(/copilot/i.test(label)?'copilot':/claude/i.test(label)?'claude':/codex/i.test(label)?'codex':saved?.provider);return {provider,id,label:`${id} · ${label}`,hint:p?.running?'本次執行':holderOf(t)==='done'||holderOf(t)==='you'?'最近回報／目前指派':'下一步指派'};}
 function tell(text){const msg=$('#message'),host=document.querySelector('dialog[open]')||document.body;if(msg.parentElement!==host)host.append(msg);msg.textContent=text;clearTimeout(toastTimer);toastTimer=setTimeout(()=>{$('#message').textContent='';},12000);}
-function go(view){document.querySelectorAll('[data-page]').forEach(p=>p.hidden=p.dataset.page!==view);document.querySelectorAll('[data-view]').forEach(b=>{if(b.dataset.view===view)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');});$('#breadcrumb').textContent=names[view];const activeTool=document.querySelector(`.more-tools [data-view="${view}"]`);if(activeTool)activeTool.closest('details').open=true;history.replaceState(null,'','#'+view);window.scrollTo(0,0);$('#content').focus({preventScroll:true});if(view==='journeys')renderJourney();if(view==='conversations')renderConversations();if(view==='trash')renderTrash();}
+function go(view){document.querySelectorAll('[data-page]').forEach(p=>p.hidden=p.dataset.page!==view);document.querySelectorAll('[data-view]').forEach(b=>{if(b.dataset.view===view)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');});$('#breadcrumb').textContent=names[view];const activeTool=document.querySelector(`.more-tools [data-view="${view}"]`);if(activeTool)activeTool.closest('details').open=!matchMedia('(max-width:700px)').matches;else if(matchMedia('(max-width:700px)').matches)document.querySelector('.more-tools').open=false;history.replaceState(null,'','#'+view);window.scrollTo(0,0);$('#content').focus({preventScroll:true});if(view==='knowledge')void loadSavedKnowledge();if(view==='handoff')renderHandoffTaskPicker();if(view==='journeys')renderJourney();if(view==='conversations')renderConversations();if(view==='trash')renderTrash();}
 function options(select,items){select.replaceChildren(...items.map(([value,label])=>{const option=element('option',label);option.value=value;return option;}));}
 function selectors(provider,model,saved){
  options(provider,state.providers.map(p=>[p.id,p.name]));provider.value=saved?.provider||'codex';
@@ -816,7 +888,7 @@ function renderOverview(){
  const filter=$('#filter').value,filtered=all.filter(t=>filter==='all'||holderOf(t)===filter);$('#task-count').textContent=`${filtered.length} 件`;const list=$('#tasks');list.replaceChildren();
  const columns=[['you','待你處理',['you']],['ready','準備開始',['ai-ready','wait']],['ai','AI 處理中',['ai']],['done','已完成',['done']]];
  for(const [key,title,holders] of columns){const column=element('section',undefined,'board-column');column.setAttribute('aria-label',title);const group=filtered.filter(t=>holders.includes(holderOf(t))).sort((a,b)=>(b.updatedAt||'').localeCompare(a.updatedAt||''));const head=element('h3',undefined,'board-heading');head.append(element('span',title),element('span',String(group.length),'board-count'));column.append(head);const cards=element('div',undefined,'board-items');
-  if(!group.length)cards.append(element('p',key==='ai'?'目前沒有 AI 在執行':'目前沒有任務','board-empty'));
+  if(!group.length){column.classList.add('board-column-empty');cards.append(element('p',key==='ai'?'目前沒有 AI 在執行':'目前沒有任務','board-empty'));}
   for(const t of expanded?group:group.slice(0,3)){const h=holderOf(t),card=element('article',undefined,`board-card lane ${h}`);card.dataset.id=t.id;const heading=element('h3'),open=element('button',t.title||t.file,'board-open lane-open');open.onclick=()=>openTask(t.id);heading.append(open);card.append(heading,element('p',t.project||'未分類','meta'));const badge=element('span',h==='wait'?'等前置項目':t.error?'任務檔待修復':t.planning?.running?.stopping?(t.planning.running.stopping.unconfirmed?'尚未確認停止':'正在停止'):t.planning?.stopped?'已停止':t.status==='INTERRUPTED'?'執行中斷':holderText[h],`badge ${h==='you'?'amber':h==='ai'?'blue':'gray'}`);card.append(badge);
    if(!t.error){const a=taskAgent(t);const who=providerMark(a.provider,a.label);who.title=a.hint;card.append(who);const d=state?.diagnosis?.[a.provider];if(h==='ai-ready'&&d&&!d.ok&&a.label.includes(d.model))card.append(element('p',`暫時無法啟動：${d.message}`,'small muted'));}const park=t.planning?.autopilot?.waitingFor;const next=element('p',t.error||(park?`自動停住，等你：${stopLabel(park.label)}`:t.nextAction.label),'board-next');card.append(next);
    const running=t.planning?.running;if(running){const time=element('p',undefined,'small muted');time.append('本次已執行 ');const elapsed=element('span','計算中');elapsed.dataset.since=running.startedAt;time.append(elapsed);card.append(time,element('p',`最後狀態更新：${when(t.updatedAt)}`,'small muted'));}
@@ -1326,12 +1398,12 @@ function workDialog(title){
 }
 async function previewPlan(t){
  const {plan}=await request(`/api/tasks/${t.id}/plan`);if(!plan)throw new Error('目前沒有待核准的方案。');
- const d=workDialog('確認這份方案，再開始工作');
+ const d=workDialog('預覽並核准計畫');
  d.append(definition([['原始要求',plan.request],['AI 的理解',plan.interpretation],['產出範圍',plan.outputRoot],['套用效果',plan.effect],['復原方式',plan.recovery],['方案版本',`revision ${plan.revision} · ${plan.id.slice(0,12)}`]]));
  for(const [heading,values] of [['可以修改',plan.scope?.allowed],['禁止操作',plan.scope?.forbidden],['鎖定條件',plan.scope?.locked?.map(v=>v.text)],['任務限制',plan.constraints],['尚待核對',plan.unknowns]]){d.append(element('h3',heading),element('p',(values||[]).join('；')||'未記錄','small'));}
  for(const item of plan.items)d.append(element('h3',`${item.id} ${item.title} · ${item.owner==='human'?'由你處理':'由 AI 處理'}`),element('p',item.detail||'未記錄'),element('p',`驗收：${(item.acceptance||[]).join('；')}`,'small muted'));
- const error=element('p','','notice'),ok=element('button',`核准這 ${plan.items.length} 項工作`,'btn primary'),edit=element('button','先修改方案','btn');edit.onclick=()=>{d.close();focusInstruct();};
- ok.onclick=async()=>{ok.disabled=true;try{await coachAct({...t,revision:plan.revision},'approve',{proposalId:plan.id});d.close();tell('已核准你看過的方案。成果仍需人工驗收。');}catch(e){error.textContent=e.message;ok.disabled=false;}};
+ const error=element('p','','notice'),ok=element('button',`核准這 ${plan.items.length} 項工作`,'btn primary'),edit=element('button','先修改方案','btn');error.hidden=true;error.setAttribute('role','alert');edit.onclick=()=>{d.close();focusInstruct();};
+ ok.onclick=async()=>{ok.disabled=true;try{await coachAct({...t,revision:plan.revision},'approve',{proposalId:plan.id});d.close();tell('已核准你看過的方案。成果仍需人工驗收。');}catch(e){error.textContent=e.message;error.hidden=false;ok.disabled=false;}};
  d.append(error,ok,edit);
 }
 async function showRoundCards(t){
@@ -1348,6 +1420,24 @@ async function showRoundCards(t){
  }
  const brief=element('button','準備精簡接手包','btn primary');brief.onclick=busy(brief,async()=>showCompactHandoff(t));d.append(brief);
 }
+function renderHandoffTaskPicker(){
+ const picker=$('#handoff-task'), previous=picker.value;
+ const candidates=tasks.filter(task=>!task.error&&!task.trashed);
+ options(picker,[['',candidates.length?'請選擇任務':'目前沒有可交接的任務'],...candidates.map(task=>[task.id,`${task.title} · ${task.project || '未分類'} · ${task.id}`])]);
+ if(candidates.some(task=>task.id===previous))picker.value=previous;
+ $('#handoff-preview').disabled=!picker.value;
+ $('#handoff-task-status').textContent='';
+}
+$('#handoff-task').onchange=()=>{
+ $('#handoff-preview').disabled=!$('#handoff-task').value;
+ $('#handoff-task-status').textContent='';
+};
+$('#handoff-preview').onclick=busy($('#handoff-preview'),async()=>{
+ const task=tasks.find(item=>item.id===$('#handoff-task').value);
+ if(!task)return;
+ try{await showCompactHandoff(task);}
+ catch(error){$('#handoff-task-status').textContent='無法預覽交接：'+error.message;}
+});
 async function showCompactHandoff(t){
  const r=await request(`/api/tasks/${t.id}/handoff-summary`),d=workDialog('接手摘要 · 完整資料按需閱讀');
  d.append(element('p',r.note,'small muted'),element('pre',r.content,'contract'));
@@ -1358,7 +1448,7 @@ async function showCompactHandoff(t){
 function renderSessions(){
  const container=$('#sessions');container.replaceChildren();
  if(!$('#demo').checked){
-  if(!importedSessions.length){const card=element('div',undefined,'card empty');card.append(element('h3','尚未載入 session'),element('p','目前只有人工整理過的來源。自動掃描尚未開放。'));container.append(card);return;}
+  if(!importedSessions.length){const card=element('div',undefined,'card empty');card.append(element('h3','還沒有已整理的來源'),element('p','這裡會顯示已整理的 AI 對話來源。目前可從任務查看已保存的問答。'));const open=element('button','查看任務對話','btn');open.onclick=()=>go('conversations');card.append(open);container.append(card);return;}
   for(const session of importedSessions){const card=element('article',undefined,'card');card.append(element('span','真實來源 · 唯讀觀察','badge blue'),element('h3',session.title),element('p',session.summary,'muted'),element('p',`${session.provider} · ${session.sourceId}`,'path'),element('p',`來源最後回報：${new Date(session.sourceUpdatedAt).toLocaleString('zh-TW')}。不代表原執行已停止。`,'small muted'));const buttons=element('div',undefined,'buttons');if(session.taskId){const open=element('button','開啟任務','btn primary');open.onclick=()=>openTask(session.taskId);buttons.append(open);}if(session.handoffFile){const old=element('button','查看舊交接','btn');old.onclick=()=>openSavedHandoff(session.handoffFile);buttons.append(old);}card.append(buttons);container.append(card);}return;
  }
  const card=element('div',undefined,'card');card.append(element('p','以下是示範預覽。勾選與歸組不會寫入後端。','notice'));
@@ -1366,8 +1456,19 @@ function renderSessions(){
  const b=element('button','確認歸組 · 示範','btn');b.onclick=()=>tell('這是示範資料；匯入與拆分 API 尚未串接，未建立真實關聯。');card.append(b);container.append(card);
 }
 function renderSettings(){
- const guide=$('#provider-guide');guide.replaceChildren();for(const [id,title,text] of [['codex','程式與除錯','依你的偏好使用 GPT‑6 Sol medium 完成規劃、實作與測試。Astra high 已從清單移除。'],['claude','規劃與交叉檢查','Opus 可用於敘事、資料整理與驗收；目前額度不足，恢復後可與 Codex 分工。'],['copilot','全階段可用','Copilot 是工具提供者，預設 Opus 5.5 High。C–F 只給檔案工具，無法限制在產出資料夾。']]){const card=element('article');card.append(providerMark(id),element('h3',title),element('p',text));guide.append(card);}
- $('#plan-status').textContent=state.diagnosis?.codex?.ok===false&&state.diagnosis.codex.model==='gpt-6-sol'?'最近實測：本機 Codex CLI 不支援 GPT‑6 Sol。已保留你指定的 medium 設定，執行前請確認帳號可用性。':'';const plans=$('#plan-options');plans.replaceChildren();for(const plan of state.recommendationPlans||[]){const b=element('button',plan.name,'btn');b.type='button';b.onclick=()=>{const missing=Object.entries(plan.choices).filter(([id,[provider,key]])=>provider!=='same-as-D'&&!state.providers.find(p=>p.id===provider)?.models.some(m=>m.key===key));if(missing.length)return tell(`推薦模型未出現在這台電腦的清單：${missing.map(([id])=>id).join('、')}。先檢查可用性或手動選擇。`);for(const [id,[provider,key]] of Object.entries(plan.choices)){const form=$('#settings');form.elements[`${id}-provider`].value=provider;form.elements[`${id}-provider`].dispatchEvent(new Event('change'));form.elements[`${id}-model`].value=key;}$('#plan-status').textContent=`已套用到表單，尚未保存。${plan.description}`;tell('推薦方案已填入，確認後按「保存指派」。');};plans.append(b);}
+ const guide=$('#provider-guide');
+ guide.replaceChildren();
+ const modeLabels={chat:'需求對話',read:'讀取資料',write:'執行與修改'};
+ for(const provider of state.providers.filter(entry=>entry.runnable)){
+  const card=element('article');
+  const result=state.diagnosis?.[provider.id];
+  const supported=(provider.modes||[]).map(mode=>modeLabels[mode]||mode).join('、');
+  card.append(providerMark(provider.id),element('h3',provider.name),element('p',supported||'請在階段設定查看可用角色。'),
+   element('p',result ? (result.ok?'上次 CLI 檢查通過':'上次 CLI 檢查未通過') : '尚未檢查 CLI','small muted'));
+  guide.append(card);
+ }
+ $('#plan-status').textContent='';
+ const plans=$('#plan-options');plans.replaceChildren();for(const plan of state.recommendationPlans||[]){const b=element('button',plan.name,'btn');b.type='button';b.onclick=()=>{const missing=Object.entries(plan.choices).filter(([id,[provider,key]])=>provider!=='same-as-D'&&!state.providers.find(p=>p.id===provider)?.models.some(m=>m.key===key));if(missing.length)return tell(`推薦模型未出現在這台電腦的清單：${missing.map(([id])=>id).join('、')}。先檢查可用性或手動選擇。`);for(const [id,[provider,key]] of Object.entries(plan.choices)){const form=$('#settings');form.elements[`${id}-provider`].value=provider;form.elements[`${id}-provider`].dispatchEvent(new Event('change'));form.elements[`${id}-model`].value=key;}$('#plan-status').textContent=`已套用到表單，尚未保存。${plan.description}`;tell('推薦方案已填入，確認後按「保存指派」。');};plans.append(b);}
  const grid=$('#roles');grid.replaceChildren();
  for(const stage of state.stages){const saved=state.settings.stages?.[stage.id]||{};const card=element('article',undefined,'role-card');const h=element('h3');h.append(element('span',`${stage.id}　${stage.name}`),element('span',{chat:'只對話',read:'唯讀',write:'寫產出資料夾'}[stage.mode],'badge gray'));card.append(h,element('p',stage.description));const recommended=state.recommendationPlans?.[0]?.choices[stage.id];if(recommended)card.append(element('p',`建議：${recommended[2]}`,'recommendation-note'));
   const provider=element('select'),model=element('select');provider.name=`${stage.id}-provider`;model.name=`${stage.id}-model`;
@@ -1391,6 +1492,74 @@ async function renderRules(){const box=$('#rules');if(!box)return;box.replaceChi
  const block=(title,text,project)=>{const art=element('div',undefined,'rule-file');art.append(element('h4',title));let heading='詮釋';const lines=text.split('\n').filter(l=>/^## |^- /.test(l));if(!lines.length){art.append(element('p','還沒有規則。完成任務時在「學習迴圈」勾選，就會寫進來。','small muted'));return art;}
   const ul=element('ul');for(const line of lines){if(line.startsWith('## ')){heading=line.slice(3);ul.append(element('li',heading,'rule-heading'));continue;}const li=element('li',line.slice(2));if(project){const h=heading,text_=line.slice(2).replace(/（[^）]*）$/,'');const up=element('button','升級到團隊','btn subtle');up.onclick=busy(up,async()=>{const r=await request('/api/memory/promote',{project,heading:h,text:text_});tell(r.added?'已升級為團隊規則，下一個任務開始生效。':'團隊規則已經有這一條。');renderRules();});li.append(up);}ul.append(li);}art.append(ul);return art;};
  box.append(block('團隊規則 · 所有任務',data.team||'',null));for(const [name,text] of Object.entries(data.projects))box.append(block(`專案 · ${name}`,text,name));}
+let savedKnowledge = [];
+let knowledgeLoad = 0;
+function renderSavedKnowledge(){
+  const box = $('#saved-knowledge');
+  const terms = $('#knowledge-search').value.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean);
+  const matches = savedKnowledge.filter(note => {
+    const text = (note.title + '\n' + note.body).toLocaleLowerCase();
+    return terms.every(term => text.includes(term));
+  });
+  $('#knowledge-search-status').textContent = terms.length ? `找到 ${matches.length} 篇` : '';
+  box.replaceChildren(...matches.map(note => {
+   const card = element('details',undefined,'card home-work-card');
+   card.append(element('summary',note.title),element('p',when(note.savedAt),'small muted'));
+   const content = element('textarea');
+   content.className = 'knowledge-content';
+   content.setAttribute('aria-label',note.title);
+   content.rows = 8;
+   content.readOnly = true;
+   content.value = note.body;
+   const exportButton = element('button','下載 .md','btn');
+   exportButton.onclick = () => download(note.title.replace(/[<>:"/\\|?*]/g,'-') + '.md',note.body);
+   const actions = element('div',undefined,'buttons');
+   const taskId = note.body.split(/\r?\n/).find((line,index,lines) => /^vault\/TASK-[\w-]+\.md(?:\s|$)/.test(line) && (lines[index-1] === '## 來源' || (lines[index-1] === '' && lines[index-2] === '## 來源')))
+     ?.match(/^vault\/(TASK-[\w-]+)\.md/)[1];
+   if (taskId){
+    const sourceButton = element('button','開啟來源任務','btn');
+    const feedback = element('p','','small muted');
+    feedback.setAttribute('role','status');
+    sourceButton.onclick = busy(sourceButton,async()=>{
+     feedback.textContent = '';
+     try{
+      const latest = (await request('/api/tasks')).tasks;
+      const task = latest.find(item=>item.id===taskId&&!item.trashed&&!item.error);
+      if(!task) {feedback.textContent='目前無法開啟 '+taskId+'。可到回收桶確認任務是否已移除。';return;}
+      tasks=latest;
+      openTask(task.id);
+      $('#task-dialog').addEventListener('close',()=>queueMicrotask(()=>sourceButton.focus({preventScroll:true})),{once:true});
+     }catch(error){feedback.textContent='來源任務讀取失敗：'+error.message;}
+    });
+    actions.append(sourceButton);
+    card.append(feedback);
+   }
+   actions.append(exportButton);
+   card.append(content,actions);
+   return card;
+  }));
+  if (savedKnowledge.length && !matches.length) box.append(element('p','找不到符合的筆記。試著縮短關鍵字。','small muted'));
+  if (!savedKnowledge.length) box.append(element('p','在聊天確認保存後，筆記會出現在這裡。','small muted'));
+}
+$('#knowledge-search').addEventListener('input',renderSavedKnowledge);
+async function loadSavedKnowledge(){
+ const version = ++knowledgeLoad;
+ const box = $('#saved-knowledge');
+ try{
+  const {notes} = await request('/api/knowledge');
+  if (version !== knowledgeLoad) return;
+  savedKnowledge = notes.map(note => ({
+   title: note.content.match(/^# +(.+)$/m)?.[1]?.trim() || 'Markdown 筆記',
+   body: note.content,
+   path: 'vault/knowledge/' + note.id,
+   savedAt: note.savedAt
+  }));
+  $('#knowledge-search').disabled=false;
+  renderSavedKnowledge();
+ }catch(error){
+  if (version === knowledgeLoad) box.replaceChildren(element('p','筆記讀取失敗：' + error.message,'small muted'));
+ }
+}
 function renderMemory(){renderRules();
  const container=$('#memory-recent');container.replaceChildren();
  if(!savedHandoffs.length){container.append(element('p','尚無可載入的交接檔。','muted'));return;}
@@ -1401,9 +1570,16 @@ function renderHandoff(input,result){
 }
 function selectTab(ai){$('#tab-human').setAttribute('aria-selected',String(!ai));$('#tab-ai').setAttribute('aria-selected',String(ai));$('#tab-human').tabIndex=ai?-1:0;$('#tab-ai').tabIndex=ai?0:-1;$('#human-view').hidden=ai;$('#ai-view').hidden=!ai;}
 async function init(){
- try{[state,health]=await Promise.all([request('/api/settings'),request('/api/health')]);const [sessionsResult,handoffsResult]=await Promise.all([request('/api/sessions'),request('/api/handoffs')]);importedSessions=sessionsResult.sessions;savedHandoffs=handoffsResult.handoffs;tasks=(await request('/api/tasks')).tasks;renderOverview();ensurePolling();renderSettings();renderSessions();renderMemory();if(names[location.hash.slice(1)])go(location.hash.slice(1));selectors($('#handoff').elements.provider,$('#handoff').elements.modelKey);$('#memory-path').textContent=health.memory;$('#connection').replaceChildren(element('span','','dot'),'本機服務已連接');$('#settings button[type=submit]').disabled=false;$('#handoff button[type=submit]').disabled=false;}
+ try{[state,health]=await Promise.all([request('/api/settings'),request('/api/health')]);const [sessionsResult,handoffsResult]=await Promise.all([request('/api/sessions'),request('/api/handoffs')]);importedSessions=sessionsResult.sessions;savedHandoffs=handoffsResult.handoffs;tasks=(await request('/api/tasks')).tasks;renderOverview();ensurePolling();renderSettings();renderSessions();renderMemory();void loadSavedKnowledge();if(names[location.hash.slice(1)])go(location.hash.slice(1));selectors($('#handoff').elements.provider,$('#handoff').elements.modelKey);$('#memory-path').textContent=health.memory;$('#connection').replaceChildren(element('span','','dot'),'本機服務已連接');$('#settings button[type=submit]').disabled=false;$('#handoff button[type=submit]').disabled=false;}
  catch(error){window.loadFailed=true;renderOverview();$('#connection').textContent='本機服務未連接';tell(`載入失敗：${error.message}`);}
 }
+const moreTools = document.querySelector('.more-tools');
+document.addEventListener('click',event => {
+ if (matchMedia('(max-width:700px)').matches && moreTools.open && !moreTools.contains(event.target)) moreTools.open=false;
+});
+moreTools.addEventListener('keydown',event => {
+ if (event.key==='Escape' && moreTools.open){moreTools.open=false;moreTools.querySelector('summary').focus();}
+});
 document.querySelectorAll('[data-view]').forEach(button=>button.onclick=()=>go(button.dataset.view));document.querySelectorAll('[data-go]').forEach(button=>button.onclick=()=>go(button.dataset.go));document.querySelectorAll('[data-new-task]').forEach(button=>button.onclick=()=>$('#new-task').click());function afterSheetClose(){document.body.append($('#message'));const id=$('#task-dialog').dataset.task;[document.querySelector(`.lane[data-id="${id}"] .lane-open`),...document.querySelectorAll('.lane-open'),$('#filter'),document.querySelector('[data-page]:not([hidden]) button'),$('#new-task')].find(node=>node&&!node.closest('[hidden]'))?.focus();}
 function closeSheet(){const d=$('#task-dialog');if(!d.open||d.classList.contains('closing'))return;if(matchMedia('(prefers-reduced-motion: reduce)').matches){d.close();afterSheetClose();return;}d.classList.add('closing');let done=false;const finish=()=>{if(done)return;done=true;d.classList.remove('closing');d.close();afterSheetClose();};d.addEventListener('animationend',finish,{once:true});setTimeout(finish,400);}
 $('#task-dialog').addEventListener('cancel',e=>{e.preventDefault();const menu=$('#task-menu-slot details[open]');if(menu){menu.open=false;menu.querySelector('summary').focus();return;}const confirmBox=$('#task-detail .trash-confirm');if(confirmBox){confirmBox.remove();$('#task-menu-slot summary')?.focus();return;}closeSheet();});$('#task-dialog').addEventListener('close',afterSheetClose);$('#draft-dialog').addEventListener('close',()=>document.body.append($('#message')));$('#task-dialog').addEventListener('click',e=>{if(e.target===e.currentTarget)closeSheet();});
@@ -1424,6 +1600,20 @@ $('#obsidian-connect').onclick=busy($('#obsidian-connect'),async()=>{
  const {clients}=await request('/api/obsidian/connections');
  for(const client of clients){const row=element('div',undefined,'buttons'),revoke=element('button','撤銷這個連線','btn');row.append(element('p',`${client.id} · 到期 ${when(new Date(client.expiresAt).toISOString())}`,'small'));revoke.onclick=busy(revoke,async()=>{await request('/api/obsidian/revoke',{id:client.id});row.replaceChildren(element('p','已撤銷；下一次請求將被拒絕。'));});row.append(revoke);d.append(row);}
 });
+const draftForm = $('#draft-form');
+function updateDraftNext(){
+ const {autopilot,full} = draftForm.elements;
+ full.disabled = !autopilot.checked;
+ if (full.disabled) full.checked = false;
+ $('#draft-next').textContent = !autopilot.checked
+  ? '送出後，AI 先整理任務卡和追問。後續由你逐步推進。'
+  : full.checked
+   ? '送出後，AI 先釐清需求，然後自動核准計畫並執行。成果仍由你驗收。'
+   : '送出後，AI 先釐清需求。你核准計畫後，AI 接著執行。';
+}
+draftForm.addEventListener('change',updateDraftNext);
+draftForm.addEventListener('reset',() => queueMicrotask(updateDraftNext));
+updateDraftNext();
 $('#draft-form').onsubmit=event=>{event.preventDefault();if(!state)return tell('請先恢復後端連線。');const form=event.currentTarget,button=form.querySelector('button[type=submit]');const values=Object.fromEntries(new FormData(form));busy(button,async()=>{draftAttachments.lock(true);try{values.attachmentIds=await draftAttachments.ids();const result=await request('/api/tasks',values);draftAttachments.clear();tasks=(await request('/api/tasks')).tasks;renderOverview();ensurePolling();$('#draft-dialog').close();form.reset();openTask(result.task.id);tell(`${agentOfTask(result.task,'A')} 正在整理任務卡，接著會開始反問你。`);}finally{draftAttachments.lock(false);}})();};
 $('#settings').onsubmit=event=>{event.preventDefault();if(!state)return tell('請先恢復後端連線。');const form=event.currentTarget;submit(form,async()=>{const stages={};for(const stage of state.stages)stages[stage.id]={provider:form.elements[`${stage.id}-provider`].value,modelKey:form.elements[`${stage.id}-model`].value};const result=await request('/api/settings',{revision:state.settings.revision,stages});state.settings=result.settings;renderSettings();$('#plan-status').textContent='指派已保存，下一次執行生效。';tell('指派已保存。下一次執行就會用新的 AI。');});};
 $('#handoff').onsubmit=event=>{event.preventDefault();if(!state)return tell('請先恢復後端連線。');const form=event.currentTarget;submit(form,async()=>{const input=Object.fromEntries(new FormData(form)),result=await request('/api/handoffs',input);renderHandoff(input,result);tell('交接 Markdown 已保存，尚未啟動執行。');});};
@@ -1433,6 +1623,740 @@ $('#tab-human').onclick=()=>selectTab(false);$('#tab-ai').onclick=()=>selectTab(
 document.querySelector('[role=tablist]').onkeydown=event=>{if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;event.preventDefault();const ai=event.key==='End'||(event.key!=='Home'&&$('#tab-ai').getAttribute('aria-selected')!=='true');selectTab(ai);$(ai?'#tab-ai':'#tab-human').focus();};
 try{const saved=JSON.parse(localStorage.getItem('awc-drafts-v1')||'[]');if(!Array.isArray(saved)||saved.some(t=>typeof t.id!=='string'||!t.id.startsWith('TASK-')||t.status!=='DRAFT'||['goal','project','scope','acceptance'].some(k=>typeof t[k]!=='string')))throw new Error('草稿格式不支援，原始資料未覆寫。');drafts=saved;}catch(error){tell(`草稿讀取失敗：${error.message}`);}
 renderOverview();init();
+</script>
+
+<button class="btn primary personal-launch" id="personal-chat-toggle" type="button" aria-label="開啟 Mentor 聊天" aria-expanded="false" aria-controls="pc-chat">
+ <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.5 11.5a8.5 8.5 0 0 1-8.5 8.5 9 9 0 0 1-3.7-.8L4 20l.9-4a8.5 8.5 0 1 1 15.6-4.5Z"/><path d="M8 11.5h.1m3.9 0h.1m3.9 0h.1"/></svg>
+</button>
+<aside id="pc-chat" class="personal-chat" inert aria-labelledby="personal-chat-heading">
+ <header class="personal-heading"><span class="brand-mark"><img src="/assets/mentor.svg" alt="" width="28" height="28"></span><div><h2 id="personal-chat-heading">Mentor</h2><small class="muted">AI 回覆使用角色 B 的 CLI 與任務、Git 摘要</small></div><button class="close" id="personal-chat-close" type="button" aria-label="收合聊天">×</button></header>
+ <div class="personal-scroll" id="pc-scroll">
+  <div id="pc-messages" class="personal-messages" role="log" aria-label="聊天紀錄" aria-relevant="additions text" tabindex="0"></div>
+  <div class="buttons personal-shortcuts" id="pc-shortcuts"><button class="btn" type="button" id="pc-work">查工作</button><button class="btn" type="button" id="pc-handoff">準備交接</button><button class="btn" type="button" id="pc-task">交辦任務</button><button class="btn" type="button" id="pc-keep">保存筆記</button><button class="btn" type="button" id="pc-tools">工作台功能</button></div>
+  <details id="pc-sources" hidden><summary>知識來源</summary>
+   <label class="field"><span>查詢範圍</span><select id="pc-scope"><option value="mentor">Mentor 專案</option><option value="vault">目前 Obsidian Vault</option></select></label>
+   <label class="field"><span>目前 Vault</span><select id="pc-vault"></select></label>
+   <div class="buttons"><button class="btn" id="pc-connect" type="button">加入 Vault</button><button class="btn subtle" id="pc-refresh" type="button">重新讀取</button></div>
+   <p id="pc-vaultStatus" class="small muted" role="status"></p>
+   <div id="pc-mentorList" class="personal-notes"></div><div id="pc-vaultList" class="personal-notes"></div>
+  </details>
+  <details id="pc-organize" hidden><summary>整理 Obsidian Vault</summary>
+   <label class="field"><span>資料夾相對路徑</span><input id="pc-index-folder" placeholder="留空索引根目錄"></label>
+   <button class="btn" id="pc-index" type="button">預覽 Markdown 索引</button>
+   <p class="small muted">使用「知識來源」目前選取的 Vault。標籤、搬移及復原請使用 Obsidian 工作中心的對應命令。</p>
+  </details>
+  <details id="personal-draft" hidden><summary>Markdown 草稿</summary>
+   <p id="pc-origin" class="small muted"></p><h3 id="pc-title"></h3>
+   <label class="field"><span class="visually-hidden">Markdown 編輯器</span><textarea id="pc-editor" rows="7" spellcheck="false"></textarea></label>
+   <div class="buttons"><button class="btn primary" id="pc-save-knowledge" type="button">確認保存到成果與知識</button><button class="btn" id="pc-save" type="button">另存到 Vault</button><button class="btn" id="pc-download" type="button">下載 .md</button></div>
+   <p id="pc-status" class="small muted" role="status"></p><div id="pc-related"></div>
+  </details>
+ </div>
+ <div class="personal-compose"><div class="buttons small" id="pc-context-row" hidden><span id="pc-context"></span><button class="btn subtle" type="button" id="pc-clear-context">清除</button></div><form id="pc-chatForm">
+  <label class="field"><span class="visually-hidden">訊息</span><textarea id="pc-prompt" rows="2" maxlength="6000" required placeholder="例如：工作區最近改了什麼？"></textarea></label>
+  <button class="btn primary" id="pc-send" aria-label="送出訊息" type="submit"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5m-6 6 6-6 6 6"/></svg></button>
+ </form></div>
+</aside>
+<dialog id="pc-saveDialog" aria-labelledby="pc-saveHeading"><div class="dialog-inner"><form id="pc-saveForm">
+ <h2 id="pc-saveHeading">確認儲存 Markdown</h2>
+ <label class="field"><span>目標 Vault</span><select id="pc-target" required></select></label>
+ <div class="buttons"><button type="button" class="btn subtle" id="pc-add-target">加入其他 Vault</button></div>
+ <label class="field"><span>Vault 內資料夾</span><input id="pc-folder" placeholder="留空表示 Vault 根目錄"></label>
+ <label class="field"><span>檔名</span><input id="pc-filename" required></label>
+ <p id="pc-saveError" class="personal-error" role="alert"></p>
+ <div class="buttons"><button class="btn" id="pc-cancel" type="button">取消</button><button class="btn primary" id="pc-commit" type="submit">確認寫入</button></div>
+</form></div></dialog>
+<script id="pc-seed" type="application/json">[{"title":"設計 AI Agent","body":"---\ntype: application\ntitle: PM 實戰：設計 AI Agent\ntags: [PM, agent, 規格]\nstatus: 🌿成長\nlevel: 基礎\nupdated: 2026-11-13\npublish: true\nseries: PM 實戰\naliases: [Agent 設計, AI 代理設計, Agent 規格]\nsection_keywords:\n  30 秒重點: [Agent 設計, 工作流, 自主性]\n  退款案例: [退款試算, 客服 Agent, 人工接手]\n  一頁設計表: [Agent 規格, Tool Contract, 成功指標]\n  上線前怎麼驗收: [驗收條件, Scenario Catalog, 工具逾時]\n---\n\n# PM 實戰：設計 AI Agent\n\n## 30 秒重點\n\n先定義使用者要完成的任務，再決定哪些步驟交給模型判斷。固定步驟可以用工作流，只有需要依情境選擇下一步時，才增加 Agent 的自主性。\n\n## 退款案例\n\n教學示例：使用者問某筆訂單能退多少。模型理解問題與追問缺漏，後端查訂單歸屬及退款資格並試算。第一版只做查詢及試算，真正退款走既有核准流程。\n\n## 一頁設計表\n\n複製下表，將範例欄換成你的產品。由 PM 主持確認，工程補工具契約，QA 用每一列設計情境。\n\n| 欄位 | 退款案例範例 |\n|---|---|\n| 讀者與任務 | 已登入的客戶要確認一筆訂單的可退金額。 |\n| 完成定義 | 顯示該筆訂單的有效試算金額、幣別與限制。 |\n| 模型的決策 | 辨識查詢意圖、追問訂單資訊、解釋後端結果。 |\n| 工具契約 | 後端驗證登入身分與訂單歸屬，回傳試算金額、幣別、版本或錯誤類型。 |\n| 停止及轉人工 | 無法確定訂單時追問。試算失敗時停止出價，提供重試或轉人工。 |\n| 成效指標 | 追蹤合格查詢完成率、轉人工率及權威數值一致率。 |\n\n## 上線前怎麼驗收\n\n- 正常訂單：顯示後端同一版本的金額與幣別。\n- 他人訂單：查詢被拒，回覆不揭露訂單資訊。\n- 工具逾時：顯示暫時無法確認，提供重試或轉人工。\n- 要求執行退款：引導至既有核准流程，查詢工具沒有寫入權限。\n\n設計框架可回看 AI 產品 Spec 與 Scenario Catalog、Agent 代理 與 Guardrails 護欄。\n","path":"knowledge/design-ai-agent.md"},{"title":"提示詞注入與數字完整性","body":"---\ntype: application\ntitle: PM 實戰：提示詞注入與數字完整性\ntags: [PM, 提示詞注入, 資料完整性]\nstatus: 🌿成長\nlevel: 基礎\nupdated: 2026-11-13\npublish: true\nseries: PM 實戰\naliases: [Prompt Injection, 提示注入, 數字被改, 金額被改, 金額錯誤]\nsources: [\"https://genai.owasp.org/llmrisk/llm01-prompt-injection/\"]\nsection_keywords:\n  30 秒重點: [提示詞注入, Prompt Injection, 信任邊界]\n  退款案例: [間接注入, 直接注入, 退款金額, 數字被改]\n  照著做：把規則落到系統: [最小權限, Least Privilege, 後端核准, 金額驗證]\n  5 分鐘分享與 QA 驗收: [QA 驗收, 幣別, 版本, 測試案例]\n  來源與延伸: [OWASP, Guardrails, 安全設計]\n---\n\n# PM 實戰：提示詞注入與數字完整性\n\n## 30 秒重點\n\n模型讀取客服對話與文件時，可能將其中的文字當成指令。PM 可以把資料來源、工具權限和執行核准寫進產品規格。金額等關鍵欄位由權威系統提供，程式負責顯示、核對與執行。\n\n## 退款案例\n\n教學示例：客戶詢問可退多少，退款服務回傳 **TWD 1,250**。直接注入來自對話，間接注入可來自 Agent 讀取的文件。這兩種輸入都可能影響模型行為。即使模型只因理解錯誤而產生 TWD 12,500，顯示層也應以服務欄位為準。\n\n## 照著做：把規則落到系統\n\n1. **產品與資安定邊界。** 外部內容只供參考。查詢、試算、執行使用獨立權限。後端逐次檢查訂單歸屬，執行退款前驗證核准。\n2. **工程定義權威欄位。** 用退款服務提供金額、幣別、訂單 ID 和試算版本。頁面用這些欄位渲染。正文若需要金額，也由程式插入同一值。\n3. **工程與 QA 定義失敗處理。** 格式檢查只能確認欄位形狀。執行前核對權威資料與核准版本。金額變更、來源衝突或試算過期時停止，重新試算並視情況重新核准。\n\n## 5 分鐘分享與 QA 驗收\n\n前一分鐘講退款案例。接著兩分鐘在白板畫出「外部內容 → 模型 → 後端驗權 → 退款服務」。最後兩分鐘用下表請大家判斷每個情境應在哪一層被攔下。\n\n| 情境 | 預期結果 |\n|---|---|\n| 文件內容試圖影響查詢範圍 | 只回傳登入身分可讀的資料，未發生未授權操作。 |\n| 模型草稿寫 TWD 12,500，服務回傳 TWD 1,250 | 正式金額顯示 TWD 1,250，錯誤草稿在送出前阻擋或修正。 |\n| 送出前幣別或試算版本變更 | 停止執行，重新試算並核對核准內容。 |\n| 原始帳務欄位收到未授權寫入 | 帳務服務拒絕寫入並記錄結果。 |\n\n## 來源與延伸\n\n直接與間接注入、最小權限與高風險動作核准來自 [OWASP LLM01:2025 Prompt Injection](https://genai.owasp.org/llmrisk/llm01-prompt-injection/)，擷取於 2026-11-13。退款案例、金額與核對流程為教學設計。\n\n延伸閱讀：Guardrails 護欄、Evaluation 評估、AI 產品 Spec 與 Scenario Catalog。\n","path":"knowledge/prompt-injection-numeric-integrity.md"}]</script>
+<script>
+(() => {
+'use strict';
+const by = id => document.getElementById(id);
+const mentor = JSON.parse(by('pc-seed').textContent);
+const vaults = [];
+let activeVault = null;
+let notes = [];
+let scanVersion = 0;
+let current;
+const opener = by('personal-chat-toggle');
+const panel = by('pc-chat');
+let baseline = '';
+let saving = false;
+const editor = by('pc-editor');
+function status(message){by('pc-status').textContent = message;}
+function openNote(note, force = false){
+  if (!force && editor.value !== baseline && !confirm('目前有未儲存的編輯。切換筆記並捨棄這些編輯？')) return false;
+  current = note;
+  baseline = note.body;
+  editor.value = baseline;
+  by('pc-title').textContent = note.title;
+  by('pc-origin').textContent = note.vault ? note.vault.label + ' / ' + note.path : note.path || 'Mentor / 草稿';
+  status('');
+  by('pc-related').replaceChildren();
+  by('personal-draft').hidden = false;
+  by('personal-draft').open = true;
+  renderLists();
+  return true;
+}
+function renderList(id, items){
+  by(id).replaceChildren(...items.map(note => {
+    const button = document.createElement('button');
+    button.textContent = note.title;
+    button.className = 'btn subtle';
+    button.title = note.path;
+    button.setAttribute('aria-current', String(note === current || Boolean(note.vault && current?.vault === note.vault && current.path === note.path)));
+    button.onclick = () => openNote(note);
+    return button;
+  }));
+}
+function renderLists(){renderList('pc-mentorList',mentor);renderList('pc-vaultList',notes);}
+function vaultOptions(select, selected){
+  select.replaceChildren(...(vaults.length ? vaults.map((v,i) => new Option(v.label, String(i))) : [new Option('尚未選擇 Vault','')]));
+  if (selected) select.value = String(vaults.indexOf(selected));
+}
+async function scan(vault){
+  const version = ++scanVersion;
+  activeVault = vault;
+  notes = [];
+  renderLists();
+  vaultOptions(by('pc-vault'),vault);
+  by('pc-vaultStatus').textContent = '正在讀取 Markdown…';
+  const found = [];
+  async function walk(directory, prefix = ''){
+    for await (const entry of directory.values()){
+      if (version !== scanVersion) return;
+      if (entry.name.startsWith('.')) continue;
+      const path = prefix + entry.name;
+      if (entry.kind === 'directory') await walk(entry,path + '/');
+      else if (/\.md$/i.test(entry.name)){
+        const file = await entry.getFile();
+        const body = await file.text();
+        found.push({title:entry.name.replace(/\.md$/i,''),path,body,vault,modified:file.lastModified});
+      }
+    }
+  }
+  try{
+    await walk(vault.handle);
+    if (version !== scanVersion) return;
+    notes = found.sort((a,b) => a.path.localeCompare(b.path,'zh-Hant'));
+    by('pc-vaultStatus').textContent = '已讀取 ' + notes.length + ' 份 Markdown';
+    renderLists();
+  }catch(error){
+    if (version === scanVersion) by('pc-vaultStatus').textContent = '讀取失敗：' + error.message;
+  }
+}
+async function connect(){
+  if (!window.showDirectoryPicker){
+    by('pc-vaultStatus').textContent = '此瀏覽器無法選擇資料夾。請用桌面版 Edge 或 Chrome 開啟。';
+    return null;
+  }
+  try{
+    const handle = await window.showDirectoryPicker({mode:'readwrite',id:'mentor-vault'});
+    for (const vault of vaults){
+      if (await handle.isSameEntry(vault.handle)){await scan(vault);return vault;}
+    }
+    const matches = vaults.filter(v => v.handle.name === handle.name).length;
+    const vault = {handle,label:handle.name + (matches ? ' (' + (matches+1) + ')' : '')};
+    vaults.push(vault);
+    await scan(vault);
+    return vault;
+  }catch(error){
+    if (error.name !== 'AbortError') by('pc-vaultStatus').textContent = '無法開啟 Vault：' + error.message;
+    return null;
+  }
+}
+by('pc-connect').onclick = connect;
+by('pc-vault').onchange = () => {const vault = vaults[Number(by('pc-vault').value)]; if(vault) scan(vault);};
+by('pc-refresh').onclick = () => {if(activeVault) scan(activeVault);};
+const chatViewport = window.visualViewport;
+function fitChatViewport(){
+  if (!chatViewport || panel.inert || !matchMedia('(max-width:700px)').matches || chatViewport.scale !== 1){
+    panel.classList.remove('is-keyboard-open');
+    return;
+  }
+  const offset = Math.max(0,window.innerHeight - chatViewport.height - chatViewport.offsetTop);
+  panel.style.setProperty('--chat-keyboard-offset',offset + 'px');
+  panel.style.setProperty('--chat-visible-height',chatViewport.height + 'px');
+  panel.classList.toggle('is-keyboard-open',offset > 80);
+}
+chatViewport?.addEventListener('resize',fitChatViewport);
+chatViewport?.addEventListener('scroll',fitChatViewport);
+window.addEventListener('resize',fitChatViewport);
+let composingMessage = false;
+by('pc-prompt').addEventListener('compositionstart',() => {composingMessage = true;});
+by('pc-prompt').addEventListener('compositionend',() => {composingMessage = false;});
+by('pc-prompt').addEventListener('blur',() => {composingMessage = false;});
+function setChat(open, restoreFocus = true){
+  panel.inert = !open;
+  panel.classList.toggle('is-open',open);
+  fitChatViewport();
+  opener.setAttribute('aria-expanded',String(open));
+  opener.setAttribute('aria-label',open ? '收合 Mentor 聊天' : '開啟 Mentor 聊天');
+  if (open && matchMedia('(pointer:fine)').matches) by('pc-prompt').focus({preventScroll:true});
+  else if (open) by('personal-chat-close').focus({preventScroll:true});
+  else if (restoreFocus) opener.focus({preventScroll:true});
+}
+opener.onclick = () => setChat(panel.inert);
+by('personal-chat-close').onclick = () => setChat(false);
+panel.addEventListener('keydown',event => {
+  if (event.key === 'Escape' && !event.isComposing && !composingMessage && event.keyCode !== 229 && !document.querySelector('dialog[open]')) setChat(false);
+});
+function cleanName(name){
+  return name.trim().replace(/[<>:"/\\|?*\u0000-\u001f]/g,'-').replace(/[. ]+$/,'') || 'Mentor 草稿';
+}
+function heading(){return editor.value.match(/^#\s+(.+)$/m)?.[1] || current.title;}
+function filename(){return cleanName(heading()) + '.md';}
+by('pc-download').onclick = () => {
+  const url = URL.createObjectURL(new Blob([editor.value],{type:'text/markdown;charset=utf-8'}));
+  const link = document.createElement('a');
+  link.href = url;link.download = filename();link.click();
+  setTimeout(() => URL.revokeObjectURL(url),1000);
+  status('已送出下載。你可以把檔案移到要使用的 Vault。');
+};
+by('pc-save-knowledge').onclick = async () => {
+  const content = editor.value;
+  if (!content.trim()) {status('請先輸入要保存的內容。');return;}
+  const button = by('pc-save-knowledge');
+  button.disabled = true;
+  status('正在保存…');
+  try{
+    await request('/api/knowledge',{content});
+    if (editor.value === content && !current.vault) baseline = content;
+    status('已保存到「成果與知識」。');
+    const reply = message('已保存到「成果與知識」。');
+    action(reply,'打開成果與知識',() => {setChat(false,false);go('knowledge');});
+    await loadSavedKnowledge();
+  }catch(error){status('保存失敗：' + error.message);}
+  finally{button.disabled = false;}
+};
+const dialog = by('pc-saveDialog');
+function fillDestination(){
+  const selected = vaults[Number(by('pc-target').value)];
+  const path = current.vault && selected === current.vault ? current.path.split('/') : [];
+  by('pc-filename').value = path.pop() || filename();
+  by('pc-folder').value = path.join('/');
+  by('pc-saveError').textContent = '';
+}
+by('pc-target').onchange = fillDestination;
+by('pc-save').onclick = async () => {
+  if (!vaults.length) {
+    if (!await connect()) {
+      status(by('pc-vaultStatus').textContent || '尚未加入 Vault，可以先下載 Markdown。');
+      return;
+    }
+  }
+  vaultOptions(by('pc-target'),current.vault || activeVault);
+  fillDestination();
+  dialog.showModal();
+};
+by('pc-add-target').onclick = async () => {
+  const vault = await connect();
+  if (!vault) {
+    by('pc-saveError').textContent = by('pc-vaultStatus').textContent;
+    return;
+  }
+  vaultOptions(by('pc-target'),vault);
+  fillDestination();
+};
+by('pc-cancel').onclick = () => dialog.close();
+dialog.addEventListener('cancel',event => {if(saving) event.preventDefault();});
+function validPart(part){
+  return part && !part.startsWith('.') && cleanName(part) === part && !/^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(part);
+}
+by('pc-saveForm').onsubmit = async event => {
+  event.preventDefault();
+  if (saving) return;
+  const vault = vaults[Number(by('pc-target').value)];
+  let name = by('pc-filename').value.trim();
+  if (!/\.md$/i.test(name)) name += '.md';
+  const folder = by('pc-folder').value.trim().replace(/\\/g,'/');
+  const parts = folder ? folder.split('/') : [];
+  const path = [...parts,name].join('/');
+  if (!vault || !validPart(name) || parts.some(part => !validPart(part))){
+    by('pc-saveError').textContent = '請選擇 Vault，並輸入有效的相對資料夾與檔名。';
+    return;
+  }
+  saving = true;
+  by('pc-add-target').disabled = by('pc-commit').disabled = by('pc-cancel').disabled = true;
+  const body = editor.value;
+  let stream;
+  try{
+    let directory = vault.handle;
+    for (const part of parts) directory = await directory.getDirectoryHandle(part,{create:true});
+    let file;
+    try{file = await directory.getFileHandle(name);}catch(error){if(error.name !== 'NotFoundError') throw error;}
+    if (file){
+      if (current.vault !== vault || current.path !== path) throw new Error('已存在同名檔案，請改名或先開啟該筆記。');
+      const existing = await file.getFile();
+      if (await existing.text() !== baseline) throw new Error('檔案已在外部更新。請備份草稿並重新讀取筆記。');
+    } else if (current.vault === vault && current.path === path){
+      throw new Error('原檔已移動或刪除。請確認位置後另存。');
+    } else file = await directory.getFileHandle(name,{create:true});
+    stream = await file.createWritable();
+    await stream.write(body);
+    await stream.close();
+    stream = null;
+    dialog.close();
+    openNote({title:name.replace(/\.md$/i,''),body,path,vault},true);
+    status('已儲存到 ' + vault.label + ' / ' + path);
+    if (activeVault === vault) await scan(vault);
+  }catch(error){
+    if (stream) await stream.abort().catch(() => {});
+    by('pc-saveError').textContent = error.message;
+  }finally{
+    saving = false;
+    by('pc-add-target').disabled = by('pc-commit').disabled = by('pc-cancel').disabled = false;
+  }
+};
+function message(text, own = false){
+  const node = document.createElement('p');
+  node.className = 'bubble' + (own ? ' me' : '');
+  node.textContent = text;
+  by('pc-messages').append(node);
+  const scroll = by('pc-scroll');
+  if (by('personal-draft').hidden || !by('personal-draft').open) scroll.scrollTop = scroll.scrollHeight;
+  return node;
+}
+function lookup(question){
+  const words = Array.from(new Set(question.toLowerCase().match(/[a-z0-9]{2,}|[\u3400-\u9fff]+/g)?.flatMap(word =>
+    /^[\u3400-\u9fff]/.test(word) ? Array.from(word.slice(0,-1),(char,i) => char + word[i+1]) : [word]) || []));
+  const source = by('pc-scope').value === 'mentor' ? [...savedKnowledge,...mentor] : notes;
+  const hits = source.flatMap(note => note.body.split(/(?=^#{1,6} )/m).map(section => {
+    const content = section.toLowerCase();
+    const score = words.reduce((n,word) => n + Number(content.includes(word)),0);
+    return {note,section,score};
+  })).filter(hit => hit.score > 0).sort((a,b) => b.score - a.score).slice(0,2);
+  if (by('pc-scope').value === 'vault' && !activeVault) return '請先在「知識來源」加入 Vault。';
+  if (!hits.length) return '在目前範圍找不到相關段落。可以試著輸入筆記標題或專案術語。';
+  return hits.map(({note,section}) => section.trim().slice(0,420) + (section.trim().length > 420 ? '…' : '') +
+    '\n來源 ' + (note.vault ? note.vault.label + ' / ' : '') + note.path).join('\n\n');
+}
+let lastAnswer = '';
+const workspaceTurns = [];
+let workspaceRequestPending = false;
+async function askWorkspace(question){
+  if(workspaceRequestPending) return;
+  workspaceRequestPending = true;
+  send.disabled = true;
+  const reply = message('正在查看工作區並整理回答…');
+  reply.setAttribute('aria-busy','true');
+  try{
+    const history = workspaceTurns.slice(-6).map(turn => ({role:turn.role,text:turn.text.slice(0,700)}));
+    const result = await request('/api/workspace-chat',{question,history,taskId:selectedTaskId});
+    reply.textContent = result.answer;
+    lastAnswer = result.answer;
+    workspaceTurns.push({role:'user',text:question},{role:'assistant',text:result.answer});
+    if(workspaceTurns.length > 6) workspaceTurns.splice(0,workspaceTurns.length-6);
+    if(result.taskProposal && !/^(?:不要|不用|不必|只是|先別)|[？?]$/.test(question)){
+      reply.append(element('p','建議任務：' + result.taskProposal,'small'));
+      action(reply,'確認建立任務',async event => {
+        const button=event.currentTarget;
+        if(pendingTask || workspaceRequestPending) return;
+        button.disabled=true;
+        if(!await assignTask(result.taskProposal)) button.disabled=false;
+      });
+    }
+    action(reply,'保存這則回覆',() => saveDraft(result.answer));
+  }catch(error){
+    reply.textContent='工作區助理暫時無法回答：' + error.message;
+    action(reply,'重試',event => {
+      if(workspaceRequestPending || pendingTask)return;
+      event.currentTarget.disabled=true;
+      void askWorkspace(question);
+    });
+    action(reply,'檢查 AI 設定',() => {setChat(false,false);go('settings');});
+  }finally{
+    reply.removeAttribute('aria-busy');
+    workspaceRequestPending=false;
+    send.disabled=Boolean(pendingTask);
+  }
+}
+
+let pendingTask;
+const promptInput = by('pc-prompt');
+const send = by('pc-send');
+const routes = [...document.querySelectorAll('nav button[data-view]')]
+  .map(button => [button.textContent.trim(),button.dataset.view]);
+function action(node,label,run){
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'btn';
+  button.textContent = label;
+  button.onclick = run;
+  node.append(button);
+}
+function showSources(){
+  const sources = by('pc-sources');
+  sources.hidden = false;
+  sources.open = true;
+  sources.querySelector('summary').focus();
+}
+function showTools(){
+  const reply = message('可以從聊天交辦任務，也可以開啟工作台功能。');
+  for (const [label,view] of routes) action(reply,label,() => {setChat(false,false);go(view);});
+  action(reply,'知識來源',showSources);
+  action(reply,'FAQ',openFaq);
+}
+function compose(prefix){
+  promptInput.value = prefix;
+  promptInput.focus();
+  promptInput.setSelectionRange(prefix.length,prefix.length);
+}
+by('pc-task').onclick = () => compose('交辦：');
+by('pc-keep').onclick = () => lastAnswer ? saveDraft('') : compose('保存：');
+by('pc-tools').onclick = showTools;
+function saveDraft(content){
+  const source = content || lastAnswer;
+  if (!source) {
+    message('請貼上要留存的內容，或先問問題再說「保存這段」。');
+    return;
+  }
+  const title = source.split(/\r?\n/).find(line => line.trim())?.replace(/^#+\s*/,'').trim().slice(0,70) || 'Mentor 筆記';
+  const body = /^#\s/m.test(source) ? source : '# ' + title + '\n\n' + source + '\n';
+  if (!openNote({title,body})) return false;
+  baseline = '';
+  message('草稿已準備好。可以修改內容，再確認保存到「成果與知識」。');
+  editor.focus();
+  return true;
+}
+async function assignTask(task){
+  if (pendingTask) return;
+  if (!state){
+    message('本機服務尚未連線。恢復連線後可重新送出。');
+    promptInput.value = '交辦：' + task;
+    return false;
+  }
+  pendingTask = task;
+  send.disabled = true;
+  const reply = message('正在建立任務…');
+  try{
+    const result = await request('/api/tasks',{request:task,autopilot:false});
+    tasks = [result.task,...tasks.filter(item => item.id !== result.task.id)];
+    renderOverview();
+    ensurePolling();
+    reply.textContent = '已建立任務。可以打開任務查看 AI 整理的任務卡與後續進度。';
+    action(reply,'查看任務',() => {setChat(false,false);openTask(result.task.id);});
+    return true;
+  }catch(error){
+    reply.textContent = '建立任務失敗：' + error.message;
+    if (!promptInput.value) promptInput.value = '交辦：' + task;
+  }finally{
+    pendingTask = null;
+    send.disabled = false;
+  }
+}
+let selectedTaskId;
+function openFaq(){
+  setChat(false,false);
+  go('knowledge');
+  by('mentor-faq').scrollIntoView({block:'start'});
+  by('mentor-faq').querySelector('summary').focus({preventScroll:true});
+}
+function selectChatTask(task){
+  selectedTaskId = task.id;
+  by('pc-context').textContent = '目前任務：' + task.title;
+  by('pc-context-row').hidden = false;
+}
+by('pc-clear-context').onclick = () => {
+  selectedTaskId = null;
+  by('pc-context-row').hidden = true;
+};
+function openTaskFromChat(task, target){
+  tasks = [task,...tasks.filter(item => item.id !== task.id)];
+  setChat(false,false);
+  openTask(task.id);
+  if (target) requestAnimationFrame(() => document.querySelector(target)?.scrollIntoView({block:'start'}));
+}
+by('pc-work').onclick = () => answerTasks('目前有哪些任務？');
+by('pc-handoff').onclick = () => taskWorkflow('handoff','準備交接');
+function showOrganizer(){
+  showSources();
+  const organizer = by('pc-organize');
+  organizer.hidden = false;
+  organizer.open = true;
+  organizer.querySelector('summary').focus();
+}
+by('pc-index').onclick = () => {
+  if (!activeVault) {message('請先加入並選擇一個 Vault。');return;}
+  const folder = by('pc-index-folder').value.trim().replace(/\\/g,'/').replace(/\/$/,'');
+  const matches = notes.filter(note => folder ? note.path.startsWith(folder + '/') : !note.path.includes('/'));
+  if (!matches.length) {message('這個資料夾沒有已讀取的 Markdown。請核對路徑或重新讀取。');return;}
+  if (matches.length > 40) {message('這個資料夾超過 40 篇。請指定更小的資料夾。');return;}
+  const links = matches.map(note => {
+    const label = note.title.replace(/[\[\]\\]/g,'\\$&');
+    return `- ${label} · \`${note.path.replace(/\`/g,'\\`')}\``;
+  });
+  saveDraft(`# ${activeVault.label} 筆記索引\n\n資料夾：${folder || '根目錄'}\n\n${links.join('\n')}`);
+};
+async function taskWorkflow(kind, question, chosenId){
+  const contextId = selectedTaskId;
+  const listedIds = recentTaskIds;
+  const reply = message('正在讀取任務資料…');
+  try{
+    const {tasks: latest} = await request('/api/tasks');
+    const available = latest.filter(task => !task.error && !task.trashed);
+    const named = available.filter(task => [task.id,task.title].some(name => name && question.toLowerCase().includes(name.toLowerCase())));
+    const ordinal = question.match(/第\s*([1-8一二三四五六七八])\s*(?:個|件|項|筆|條)/);
+    const index = ordinal && (Number(ordinal[1]) || '一二三四五六七八'.indexOf(ordinal[1]) + 1);
+    const id = chosenId || (index ? listedIds[index - 1] : null);
+    const hasReference = Boolean(index || /TASK-[\w-]+/i.test(question));
+    const candidates = id ? available.filter(task => task.id === id)
+      : named.length ? named : hasReference ? []
+      : /這件|這個任務|這份|該任務|^(?:進度|下一步|卡住|卡在哪|為什麼卡|還差|準備交接)/.test(question) ? available.filter(task => task.id === contextId) : [];
+    if (candidates.length !== 1){
+      const choices = candidates.length ? candidates : hasReference ? [] : available;
+      reply.textContent = choices.length ? '請選擇這次要使用的任務。' : '找不到指定任務。請核對任務名稱、序號或 ID。';
+      for (const item of choices.slice(0,8)) action(reply,item.title,() => taskWorkflow(kind,question,item.id));
+      if (choices.length > 8) action(reply,'查看全部任務',() => {setChat(false,false);go('tasks');});
+      return;
+    }
+    const task = candidates[0];
+    selectChatTask(task);
+    if (kind === 'handoff'){
+      const receiver = /claude/i.test(question) ? 'claude' : /copilot/i.test(question) ? 'copilot' : /codex/i.test(question) ? 'codex' : 'unassigned';
+      const result = await request(`/api/tasks/${task.id}/handoff-summary?for=${receiver}`);
+      reply.textContent = `${task.title} · 接手摘要 · 版本 ${result.revision}\n接手者：${receiver === 'unassigned' ? '未指定' : receiver}` +
+        (task.planning?.running ? '\n任務仍在執行，請先核對停止狀態再交給另一個 AI。' : '');
+      action(reply,'預覽交接 Markdown',event => {
+        event.currentTarget.disabled = true;
+        const details = element('details');
+        details.open = true;
+        details.append(element('summary','交接全文'),element('div',result.content));
+        reply.append(details);
+        action(reply,'下載交接 .md',() => download(`${task.id}-handoff-r${result.revision}.md`,result.content));
+      });
+      return;
+    }
+    if (kind === 'agents'){
+      const config = await request('/api/settings');
+      const running = task.planning?.running;
+      const names = config.providers.filter(provider => provider.runnable).map(provider => provider.name);
+      const stages = config.stages.map(stage => {
+        const id = stage.id;
+        const assigned = task.planning?.agents?.[id] || (id === 'F' && task.planning?.agents?.D) || config.settings.stages[id];
+        const resolved = assigned?.provider === 'same-as-D' ? config.settings.stages.D : assigned;
+        const provider = config.providers.find(entry => entry.id === resolved?.provider);
+        const model = resolved?.modelId;
+        return `${id} · ${provider?.name || resolved?.provider || '未設定'}${model ? ' / ' + model : ''}`;
+      });
+      const diagnostics = config.diagnosis || {};
+      const checked = Object.entries(diagnostics).map(([provider,result]) => {
+        const name = config.providers.find(entry => entry.id === provider)?.name || provider;
+        return name + '：' + (result.ok ? '最近檢查可用' : '最近檢查未通過');
+      });
+      reply.textContent = [task.title,running ? `執行中：${running.stage} · ${running.agent || running.provider || '未記錄'}` : '目前沒有執行中的回合。',stages.join('\n'),`可選 CLI：${names.join('、') || '無'}。`,checked.join('\n') || '尚無 CLI 診斷紀錄。'].join('\n\n');
+      action(reply,'開啟任務的 AI 指派',() => openTaskFromChat(task,'#task-detail [aria-label="這個任務用的 AI"]'));
+      action(reply,'角色與設定',() => {setChat(false,false);go('settings');});
+      return;
+    }
+    const [{cards},{plan}] = await Promise.all([
+      request(`/api/tasks/${task.id}/work-cards`),
+      request(`/api/tasks/${task.id}/plan`)
+    ]);
+    const checks = (task.checks || []).map(check => `- ${check.result}｜${check.label}${check.note ? '｜' + check.note : ''}`);
+    const items = (task.planning?.workItems || []).map(item => `- ${item.title}｜${item.status}${item.acceptance?.length ? '｜' + item.acceptance.join('；') : ''}`);
+    const decisions = (task.decisions || []).map(decision => {
+      const choice = decision.options?.find(option => option.id === decision.choice)?.label || decision.choice;
+      return `- ${decision.question}｜${decision.status}${choice ? '｜' + choice : ''}`;
+    });
+    const artifacts = [...new Set([task.current?.artifact,...(task.planning?.workItems || []).flatMap(item => item.outputs || [])].map(item => typeof item === 'string' ? item : item?.file || item?.path).filter(Boolean))];
+    const source = `vault/${task.id}.md · r${task.revision}`;
+    if (kind === 'knowledge'){
+      reply.textContent = `整理自「${task.title}」r${task.revision}。請挑出要保留的決策、成果與驗收證據。`;
+      const draft = [`# ${task.title}｜驗收與決策`,'## 來源',source,'## 任務目標',task.goal || '未記錄','## 決策',decisions.join('\n') || '未記錄','## 驗收與工作項目',[...checks,...items].join('\n') || '未記錄','## 已登記成果',artifacts.map(file => '- ' + file).join('\n') || '未記錄'].join('\n\n');
+      if (!saveDraft(draft)) return;
+      await loadSavedKnowledge();
+      if (editor.value !== draft) return;
+      const related = by('pc-related');
+      for (const note of savedKnowledge.filter(note => note.body.includes(`vault/${task.id}.md`) || note.title.startsWith(task.title)).slice(0,5)){
+        const comparison = element('details');
+        comparison.append(element('summary','已存相關筆記 · ' + note.title),element('pre',note.body,'personal-existing'));
+        action(comparison,'預覽合併草稿',() => {
+          const existing = editor.value;
+          const merged = note.body + '\n\n---\n\n' + existing.replace(/^# /,'## ');
+          const preview = element('pre',merged,'personal-existing');
+          comparison.append(preview);
+          action(comparison,'採用合併草稿',() => {
+            if (editor.value !== existing) {status('草稿有新的修改，請重新預覽合併。');return;}
+            editor.value = merged;
+            status('確認後將保存一篇合併筆記。原筆記可在「已保存知識」查閱。');
+            editor.focus();
+          });
+        });
+        related.append(comparison);
+      }
+      return;
+    }
+    const latestCard = cards.at(-1);
+    const answer = [
+      `${task.title} · r${task.revision}`,`下一步：${task.nextAction?.label || task.next || '未記錄'}`,
+      plan ? `待核准計畫 r${plan.revision}：${plan.items.length} 個工作項目` : '目前沒有待核准的計畫。',
+      '決策\n' + (decisions.join('\n') || '未記錄'),
+      '驗收\n' + ([...checks,...items].join('\n') || '未記錄檢查或工作項目。'),
+      latestCard ? `最近一輪：${latestCard.label} · ${latestCard.outcome}（來源：${latestCard.source}）` : '',
+      '來源：' + source
+    ].filter(Boolean).join('\n\n');
+    reply.textContent = answer;
+    lastAnswer = answer;
+    action(reply,'保存這則回覆',() => saveDraft(answer));
+    if (plan) action(reply,'開啟計畫預覽',() => {openTaskFromChat(task);previewPlan(task).catch(error => tell(error.message));});
+    action(reply,'查看原任務與驗收',() => openTaskFromChat(task,'#task-detail [data-anchor="check"]'));
+  }catch(error){reply.textContent = '讀取工作流程失敗：' + error.message;}
+}
+let recentTaskIds = [];
+async function answerTasks(question, position, listedIds = recentTaskIds){
+  const reply = message('正在讀取任務…');
+  reply.setAttribute('aria-busy','true');
+  try{
+    const {tasks: latest} = await request('/api/tasks');
+    let available = latest.filter(task => !task.trashed);
+    if (position) {
+      available = available.filter(task => task.id === listedIds[position - 1]);
+      if (!available.length) {
+        reply.textContent = '找不到這個序號的任務。可以再問「目前有哪些任務？」';
+        return;
+      }
+    } else {
+      const named = available.filter(task =>
+        [task.id,task.title].some(name => name && question.toLowerCase().includes(name.toLowerCase())));
+      if (named.length) available = named;
+      else if (/TASK-[\w-]+/i.test(question)) available = [];
+      else if (/已完成|已結案|完成了/.test(question)) available = available.filter(task => holderOf(task) === 'done');
+      else if (/未完成|待處理|進行中|卡住|阻塞|待我|等我|在我手上|AI.{0,4}(執行|在跑)/i.test(question)) {
+        const holder = /AI.{0,4}(執行|在跑)/i.test(question) ? 'ai' : /待我|等我|在我手上/.test(question) ? 'you' : '';
+        available = available.filter(task => holder ? holderOf(task) === holder : /卡住|阻塞/.test(question) ? task.status === 'BLOCKED' : holderOf(task) !== 'done');
+      }
+    }
+    if (!available.length) {
+      reply.textContent = '目前沒有符合條件的任務。';
+      return;
+    }
+    const shown = available.slice(0,8);
+    const lines = shown.map((task,index) => {
+      const row = asRow(task);
+      return `${position || index + 1}. ${row.goal}｜${row.step}${row.checks ? ' · ' + row.checks : ''}`;
+    });
+    const isCount = /幾(個|件|項|筆)|多少(個|件|項|筆)?|任務數量/.test(question) && !/哪幾|哪些|列出|列表|清單/.test(question);
+    if (!position && !isCount) recentTaskIds = shown.map(task => task.id);
+    const summary = `找到 ${available.length} 件任務${available.length > shown.length && !isCount ? '，先列出 ' + shown.length + ' 件' : ''}。`;
+    const answer = isCount ? summary : summary + '\n\n' + lines.join('\n');
+    reply.textContent = answer;
+    if (!isCount) {
+      for (const [index,task] of shown.entries()) action(reply,`查看 ${position || index + 1}. ${asRow(task).goal}`,() => {
+        tasks = latest;
+        setChat(false,false);
+        openTask(task.id);
+      });
+    }
+    if (!isCount) for (const [index,task] of shown.entries()) action(reply,`選用 ${position || index + 1} 作為對話任務`,() => {
+      selectChatTask(task);
+      message('已選用「' + asRow(task).goal + '」。可以接著查進度、驗收或準備交接。');
+    });
+    lastAnswer = answer;
+    action(reply,'開啟任務列表',() => {setChat(false,false);go('tasks');});
+  }catch(error){
+    reply.textContent = '無法讀取任務：' + error.message;
+    action(reply,'重試查詢',event => {
+      event.currentTarget.disabled = true;
+      void answerTasks(question,position,listedIds);
+    });
+  }finally{
+    reply.removeAttribute('aria-busy');
+  }
+}
+promptInput.addEventListener('keydown',event => {
+  if (event.key === 'Enter' && !event.shiftKey && !event.isComposing && !composingMessage && event.keyCode !== 229 && !pendingTask && !workspaceRequestPending){
+    event.preventDefault();
+    by('pc-chatForm').requestSubmit();
+  }
+});
+by('pc-chatForm').onsubmit = event => {
+  event.preventDefault();
+  const text = promptInput.value.trim();
+  if (!text || pendingTask || workspaceRequestPending) return;
+  message(text,true);
+  promptInput.value = '';
+  if (/^(?:謝謝|感謝|多謝|thanks|thank you)[！!。\s]*$/i.test(text)){
+    message('不客氣！');
+    return;
+  }
+  if (/^(?:faq|常見問題|使用說明)[？?。]*$/i.test(text)){openFaq();return;}
+  const saveIntent = /^(?:(?:請|幫我|請幫我)\s*)?(收進\s*mentor|保存|儲存|存成筆記|記下)/i;
+  if (saveIntent.test(text) && !/^(?:(?:請幫我|幫我|請)\s*)?(?:保存|儲存)\s*(?:這件|這個任務|TASK-)/i.test(text)){
+    const content = text.replace(saveIntent,'').replace(/^[\s：:，,。]+/,'').trim();
+    saveDraft(/^(?:這段|這個|上面(?:的內容)?|上一則(?:回覆)?|這則(?:回覆)?|這段內容|內容)[。！!]*$/.test(content) ? '' : content);
+    return;
+  }
+  if (/^(?:你能做什麼|你可以做什麼|有哪些功能|工作台功能)[？?。]*$/.test(text)){
+    showTools();
+    return;
+  }
+  if (/^(開啟|打開)?(?:知識來源|切換 Vault|切換書庫|加入 Vault)$/i.test(text)){
+    showSources();
+    return;
+  }
+  const route = routes.find(([label]) => text === label || text === '開啟' + label || text === '打開' + label);
+  if (route){
+    setChat(false,false);
+    go(route[1]);
+    return;
+  }
+  const creation = text.match(/^(?:(?:請幫我|幫我|請)\s*)?(?:交辦(?:\s*Mentor|任務)?|(?:建立|新增)(?:一個)?(?:新)?任務)\s*[:：]\s*([\s\S]*)$/i);
+  if (creation){
+    const task = creation[1].trim();
+    if (task.length < 4) message('請補充任務目標，例如「交辦：整理產品上線驗收清單」。');
+    else void assignTask(task);
+    return;
+  }
+  if (/(?:整理|索引|分類|搬移|復原).{0,18}(?:vault|obsidian|書庫)|(?:vault|obsidian|書庫).{0,18}(?:整理|索引|分類|搬移|復原)/i.test(text) && !/^(?:交辦|建立任務)[：:]/.test(text)){
+    showOrganizer();
+    return;
+  }
+  if (/(?:工作區|專案|最近|剛才).{0,20}(?:改動|變更|更新|修改|改了)|(?:改動|變更|更新|修改).{0,12}(?:工作區|最近)/.test(text) && !/任務|交接/.test(text)){
+    void askWorkspace(text);
+    return;
+  }
+  const workflow = /(?:準備|產生|整理|預覽|下載).{0,28}交接|交接.{0,12}給/.test(text) ? 'handoff'
+    : /(?:存起來|保存|存成筆記|收進).*(?:這件|任務|驗收|成果|決策)|(?:這件|任務|驗收|成果|決策).*(?:存起來|存成筆記|收進|保存)/.test(text) ? 'knowledge'
+    : /誰負責|換成誰|換.{0,10}(?:模型|AI)|AI.{0,8}分工|分工.{0,8}AI/i.test(text) ? 'agents'
+    : /哪些還沒驗|哪些.{0,5}驗收|核准什麼|(?:這件|這份|任務|計畫|TASK-).{0,28}(?:驗收|核准)|卡點|(?:這件|這個任務|該任務).{0,12}(?:進度|狀態|下一步|卡在哪)|^(?:進度|下一步|卡在哪|為什麼卡|還差什麼).{0,8}$/.test(text) ? 'review' : '';
+  if (workflow && !(workflow === 'review' && /哪幾件|有哪些|哪件|目前哪|多少|幾件/.test(text))){
+    void taskWorkflow(workflow,text);
+    return;
+  }
+  if (/^(?:(?:哈囉|嗨|你好|您好|早安|午安|晚安|hello|hi)[\s、，,！!。]*)+$/i.test(text)){
+    message('你好！你可以問「目前有哪些任務？」或「之前記了哪些驗收做法？」。');
+    return;
+  }
+  if (/(?:怎麼|如何|要怎樣|教我).*(?:交辦|建(?:立)?(?:一個)?任務|新增任務)/.test(text)){
+    message('用「交辦：」加上目標就能建立任務，例如「交辦：整理產品上線驗收清單」。');
+    return;
+  }
+  const ordinal = text.match(/第\s*([1-8一二三四五六七八])\s*(?:個|件|項|筆|條)/);
+  const position = ordinal && (Number(ordinal[1]) || '一二三四五六七八'.indexOf(ordinal[1]) + 1);
+  if (/^(?:目前|現在)?(?:哪幾件|哪些|哪件|有幾件|有幾個|幾件|幾個|有多少).{0,8}(?:等我|卡住|在跑|完成|待處理)/.test(text) || (position && recentTaskIds.length) || tasks.some(task => task.title && text.includes(task.title)) || /TASK-[\w-]+/i.test(text) ||
+      /(?:哪些|幾個|幾件|多少|目前|現有|查詢|查看|列出|清單|列表|進度|狀態|完成|待處理|卡住|在跑).{0,22}任務|任務.{0,18}(?:清單|列表|進度|狀態|有哪些|是什麼|數量|完成了嗎)/.test(text)) {
+    void answerTasks(text,position);
+    return;
+  }
+  const answer = lookup(text);
+  if (answer.includes('\n來源 ')){
+    lastAnswer = answer;
+    const reply = message(answer);
+    action(reply,'保存這則回覆',() => saveDraft(answer));
+    return;
+  }
+  void askWorkspace(text);
+};
+window.addEventListener('beforeunload',event => {
+  if (editor.value !== baseline){event.preventDefault();event.returnValue = '';}
+});
+vaultOptions(by('pc-vault'),null);
+openNote(mentor[0] || {title:'新草稿',body:''},true);
+by('personal-draft').open = false;
+by('personal-draft').hidden = true;
+message('你好！可以問我工作區最近改了什麼、查任務，或請我準備要交辦的工作。');
+
+})();
 </script>
 </body>
 </html>

@@ -18,6 +18,7 @@ import { Coach } from './coach.js';
 import { gitHead, itemDiff, itemChanges } from './git-diff.js';
 import { artifactPath, validateArtifactName } from './artifact-path.js';
 import { diagnose } from './agents.js';
+import { workspaceChat } from './workspace-chat.js';
 import { TaskStore, TaskError, buildBrief, sha256 } from './tasks.js';
 import { summarize, MOMENTS } from './feedback.js';
 import { writeHandoff, previewHandoff } from './handoffs.js';
@@ -133,11 +134,13 @@ async function body(req) {
 export async function createRequestHandler({ root = appDir, port = 4317, runAgent, previewProbeOptions, executeFile } = {}) {
   root = path.resolve(root);
   const memory = path.join(root, 'vault');
+  const library = path.join(memory, 'knowledge');
   const token = randomBytes(32).toString('hex');
   const obsidian = new ObsidianBridge();
   const taskCreations = new Map();
   let settings = { revision: 1, stages: defaultStageSettings() };
   const diagnosis = {};
+  let workspaceChatBusy = false;
   let queue = Promise.resolve();
   await mkdir(memory, { recursive: true });
   const canonicalRoot = await realpath(root);
@@ -247,6 +250,22 @@ export async function createRequestHandler({ root = appDir, port = 4317, runAgen
         const all = (await tasks.list()).filter(t => !t.error && !t.trashed);
         return send(200, { summary: summarize(all), moments: MOMENTS });
       }
+      if (req.method === 'GET' && req.url === '/api/knowledge') {
+        if (!req.headers.cookie?.split('; ').includes(`awc=${token}`)) return send(403, { code: 'SESSION_REQUIRED' });
+        let entries;
+        try { entries = await readdir(library, { withFileTypes: true }); }
+        catch (error) { if (error.code === 'ENOENT') return send(200, { notes: [] }); throw error; }
+        if (await realpath(library) !== path.join(await realpath(memory), 'knowledge')) throw new TaskError(403, 'KNOWLEDGE_PATH', '知識庫位置不受支援。');
+        const notes = [];
+        for (const entry of entries) {
+          if (!entry.isFile() || !/^[a-f0-9]{64}\.md$/.test(entry.name)) continue;
+          const file = path.join(library, entry.name);
+          const info = await stat(file);
+          if (info.size > 35000) continue;
+          notes.push({ id: entry.name, content: await readFile(file, 'utf8'), savedAt: info.mtime.toISOString() });
+        }
+        return send(200, { notes: notes.sort((a, b) => b.savedAt.localeCompare(a.savedAt)) });
+      }
       if (req.method === 'GET' && req.url === '/api/memory') {
         if (!req.headers.cookie?.split('; ').includes(`awc=${token}`)) return send(403, { code: 'SESSION_REQUIRED' });
         return send(200, await memoryStore.list());
@@ -337,6 +356,24 @@ export async function createRequestHandler({ root = appDir, port = 4317, runAgen
         return send(201, { attachment: await coach.attachments.stage(params.get('name'), req, params.has('batch') ? params.get('batch') : undefined, params.has('index') ? Number(params.get('index')) : undefined) });
       }
       const input = await body(req);
+      if (req.url === '/api/workspace-chat') {
+        if (workspaceChatBusy) throw new TaskError(429, 'CHAT_BUSY', '上一則訊息還在處理，請稍後再送出。');
+        workspaceChatBusy = true;
+        try{
+          return send(200, await workspaceChat({ input, root, taskStore: tasks, agent: settings.stages.B, runner: runAgent }));
+        }finally{workspaceChatBusy = false;}
+      }
+      if (req.url === '/api/knowledge') {
+        const { content } = input;
+        if (typeof content !== 'string' || !content.trim() || Buffer.byteLength(content) > 35000) {
+          throw new TaskError(400, 'KNOWLEDGE_CONTENT', '請提供非空白且小於 35 KB 的 Markdown。');
+        }
+        await mkdir(library, { recursive: true });
+        if (await realpath(library) !== path.join(await realpath(memory), 'knowledge')) throw new TaskError(403, 'KNOWLEDGE_PATH', '知識庫位置不受支援。');
+        const id = sha256(content) + '.md';
+        await atomicWrite(path.join(library, id), content);
+        return send(201, { id });
+      }
       if (req.url === '/api/obsidian/pairing') return send(200, obsidian.prepare());
       if (req.url === '/api/obsidian/revoke') { obsidian.revoke(input.id); return send(200, { revoked: true }); }
       if (bridgeClient && taskRoute && !taskRoute[1]) {

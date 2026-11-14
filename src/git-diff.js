@@ -20,6 +20,21 @@ export async function gitHead(cwd) {
   catch { return null; }
 }
 
+export async function workspaceActivity(cwd) {
+  if (!await isGitRoot(cwd)) return null;
+  try {
+    const [log, status] = await Promise.all([
+      git(cwd, ['log', '-5', '--format=%h %as %s']).catch(() => ({ stdout: '' })),
+      git(cwd, ['status', '--short', '--untracked-files=normal'])
+    ]);
+    const lines = output => output.stdout.trimEnd().split(/\r?\n/).filter(Boolean);
+    return {
+      commits: lines(log).slice(0, 5).map(line => line.slice(0, 240)),
+      changes: lines(status).slice(0, 25).map(line => line.slice(0, 240))
+    };
+  } catch { return null; }
+}
+
 export async function itemDiff(task, itemId, { summaryOnly = false } = {}) {
   const item = task.planning?.workItems?.find(item => item.id === itemId);
   if (!item) throw new TaskError(404, 'DIFF_ITEM_MISSING', '找不到這個工作項目。');
