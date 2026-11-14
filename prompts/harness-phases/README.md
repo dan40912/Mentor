@@ -23,6 +23,10 @@
 | 6 | [phase-6-output-preview.md](phase-6-output-preview.md) | 簡報逐頁預覽、出處、判斷決策卡、下載 | 4 |
 | 7 | [phase-7-onboarding.md](phase-7-onboarding.md) | 首次上手引導、白話錯誤、真實冒煙測試 | 6 |
 
+## 一次做完全部階段
+
+維護者不在時，改貼 [run-all.md](run-all.md)：實作 AI 以堆疊分支依序做完 0～7，每階段自我驗收並開 Draft PR，遇到硬性阻擋才停下，最後只輸出一次「總交付回報」。
+
 ## 給驗收者（Claude）的流程
 
 收到交付回報後：
