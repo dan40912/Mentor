@@ -27,6 +27,13 @@ test('generated note reflects confirmed facts only and does not call an AI provi
   assert.match(rendered, /數字附來源/);
 });
 
+test('progress uses plain words and review fallback only appears without confirmed questions',()=>{
+  const base=task({planning:{phase:'execute',workItems:[{title:'虛構工作',owner:'ai',status:'REVIEWED',acceptance:[]}],diary:[],learningTurns:[{status:'completed'}]}});
+  const empty=renderProjectNote([base]).body;assert.match(empty,/待你確認/);assert.doesNotMatch(empty,/REVIEWED|TODO|DONE/);assert.match(empty,/尚無使用者確認的回顧問題/);
+  const confirmed=renderProjectNote([{...base,planning:{...base.planning,learningTurns:[{status:'completed',confirmedQuestion:['要先確認哪個條件？']}]}}]).body;
+  assert.match(confirmed,/要先確認哪個條件/);assert.doesNotMatch(confirmed,/尚無使用者確認的回顧問題/);
+});
+
 test('project notes preserve manual text and retain edits made inside generated block as conflict', async t => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'mentor-project-note-'));
   t.after(() => rm(root, { recursive: true, force: true }));

@@ -17,6 +17,7 @@ export function projectNoteSlug(title, taskId = '') {
 
 const safe = value => String(value || '').replace(/[\r\n|]/g, ' ').trim() || '未記錄';
 const date = value => value ? String(value).slice(0, 10) : '未記錄';
+const itemStatusText = status => ({TODO:'尚未開始',BLOCKED:'需要處理',AWAITING_REVIEW:'待 AI 檢查',REVIEWED:'待你確認',REVIEW_FAIL:'未通過',DONE:'已確認'})[status] || '狀態待確認';
 const statusName = task => ({ RUNNING: '製作中', READY: '製作中', BLOCKED: '待處理', AWAITING_ACCEPTANCE: '待驗收', COMPLETED: '已完成', PAUSED: '已暫停' }[task.planning ? (task.planning.phase === 'done' ? 'COMPLETED' : task.planning.running || task.planning.runs?.some(r => r.status === 'running') ? 'RUNNING' : task.planning.workItems?.some(i => i.status === 'REVIEWED') ? 'AWAITING_ACCEPTANCE' : task.planning.stopped ? 'BLOCKED' : 'READY') : task.status] || '製作中');
 
 export function renderProjectNote(tasks, { updatedAt = new Date().toISOString() } = {}) {
@@ -28,7 +29,7 @@ export function renderProjectNote(tasks, { updatedAt = new Date().toISOString() 
     `> ${tasks.every(t => statusName(t) === '已完成') ? safe(first.current?.summary || first.goal) : '尚未完成'}`, '',
     '## 目標', ...tasks.map(t => `- **${t.title || t.id}**：${safe(t.goal || t.planning?.request)}`), '',
     '## 進度', '| 部分 | 負責 AI | 狀態 | 成果 |', '| --- | --- | --- | --- |',
-    ...tasks.flatMap(t => (t.planning?.workItems || []).map(item => `| ${safe(item.title)} | ${safe(item.owner === 'human' ? '你' : item.agent || '尚未指派')} | ${safe(item.status)} | ${safe((item.outputs || []).map(o => o.file).join(', '))} |`)),
+    ...tasks.flatMap(t => (t.planning?.workItems || []).map(item => `| ${safe(item.title)} | ${safe(item.owner === 'human' ? '你' : item.agent || '尚未指派')} | ${itemStatusText(item.status)} | ${safe((item.outputs || []).map(o => o.file).join(', '))} |`)),
     ...(tasks.some(t => !t.planning?.workItems?.length) ? tasks.filter(t => !t.planning?.workItems?.length).map(t => `| ${safe(t.title)} | ${safe(t.planning?.runs?.map(r => r.provider).filter(Boolean).join(', ') || '尚未指派')} | ${statusName(t)} | ${safe(t.current?.summary)} |`) : []), '',
     '## 我們怎麼做', ...tasks.map(t => `- ${t.id}：${safe(t.planning?.outline?.summary || t.planning?.request || t.current?.summary)}`), '',
     '## 關鍵決策', '| 決策 | 選擇 | 理由 | 誰決定 | 日期 |', '| --- | --- | --- | --- | --- |',
@@ -38,10 +39,9 @@ export function renderProjectNote(tasks, { updatedAt = new Date().toISOString() 
       ...(t.checks || []).map(c => `- ${c.kind === 'human' ? '使用者驗收' : '自動檢查'}：${safe(c.label)}（${c.result === 'PASS' ? '自動檢查通過' : c.result === 'FAIL' ? '未通過' : '尚未驗證'}）`),
       ...(t.planning?.workItems || []).flatMap(i => (i.acceptance || []).map(a => `- ${safe(i.title)}：${i.status === 'DONE' ? '已由你確認' : i.status === 'REVIEWED' ? '自動檢查通過，尚待你確認' : '尚未驗證'} — ${safe(a)}`))
     ]), ...(tasks.some(t => !t.checks?.length && !t.planning?.workItems?.some(i => i.acceptance?.length)) ? ['- 沒有保存驗收證據；尚未驗證。'] : []), '',
-    '## 我學到的', ...tasks.flatMap(t => (t.planning?.diary || []).filter(d => d.status === 'kept').map(d => `- ${safe(d.text)}`)),
+    '## 我學到的', ...tasks.flatMap(t => [...(t.planning?.diary || []).filter(d => d.status === 'kept').map(d => d.text), ...(t.planning?.learningTurns || []).flatMap(turn=>Array.isArray(turn.confirmedLesson)?turn.confirmedLesson:turn.confirmedLesson?[turn.confirmedLesson]:[])].map(text=>`- ${safe(text)}`)),
     ...(tasks.some(t => t.planning?.diary?.some(d => d.status === 'kept')) ? [] : ['- 尚無使用者確認的學習內容。']), '',
-    '## 回顧問題', ...tasks.flatMap(t => (t.planning?.learningTurns || []).map(turn => turn.confirmedQuestion).filter(Boolean).map(q => `- ${safe(q)}`)),
-    '- 尚無使用者確認的回顧問題。', '',
+    '## 回顧問題', ...(tasks.flatMap(t => (t.planning?.learningTurns || []).flatMap(turn=>Array.isArray(turn.confirmedQuestion)?turn.confirmedQuestion:turn.confirmedQuestion?[turn.confirmedQuestion]:[])).length ? tasks.flatMap(t => (t.planning?.learningTurns || []).flatMap(turn=>Array.isArray(turn.confirmedQuestion)?turn.confirmedQuestion:turn.confirmedQuestion?[turn.confirmedQuestion]:[])).map(q=>`- ${safe(q)}`) : ['- 尚無使用者確認的回顧問題。']), '',
     '## 過程紀錄', ...tasks.flatMap(t => [
       `- ${date(t.createdAt)} 建立任務 ${t.id}。`,
       ...(t.planning?.learningTurns || []).filter(turn => turn.status === 'completed').map(turn => `- ${date(turn.endedAt || turn.startedAt)} ${safe(turn.agent || turn.stage)} 完成一輪；${safe(turn.outcome || turn.learning?.change)}`),
@@ -70,6 +70,11 @@ function replaceSystemBlock(existing, generated) {
 
 export class ProjectNotes {
   constructor(root) { this.dir = path.join(root, 'vault', 'notes'); }
+  async read(task, allTasks = [task]) {
+    const project=task.project||task.title||'未分類專案',related=allTasks.filter(t=>!t.error&&(t.project||t.title||'未分類專案')===project),note=renderProjectNote(related),filename=projectNoteSlug(project);
+    try { const content=await readFile(path.join(this.dir,filename),'utf8');return{filename,path:`vault/notes/${filename}`,content,conflict:false}; }
+    catch(error){if(error.code!=='ENOENT')throw error;return{filename,path:`vault/notes/${filename}`,content:note.body,conflict:false};}
+  }
   async sync(task, allTasks = [task]) {
     const project = task.project || task.title || '未分類專案';
     const related = allTasks.filter(t => !t.error && (t.project || t.title || '未分類專案') === project);

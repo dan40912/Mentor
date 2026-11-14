@@ -416,13 +416,13 @@ export class Coach {
     }
   }
 
-  async keepLearnings(id, revision, key, { keep = [], add, scope = 'project' }) {
+  async keepLearnings(id, revision, key, { keep = [], add, scope = 'project', candidateIds = null }) {
     if (!Array.isArray(keep)) throw new TaskError(400, 'KEEP_INVALID', '保留清單格式不正確。');
     const written = [];
     const result = await this.store.mutate(id, revision, key, async t => {
       const p = t.planning;
       if (!p) throw new TaskError(400, 'NOT_PLANNING', '這個任務沒有學習日記。');
-      const candidates = (p.diary || []).filter(d => d.status === 'candidate');
+      const candidates = (p.diary || []).filter(d => d.status === 'candidate' && (!Array.isArray(candidateIds)||candidateIds.includes(d.id)));
       for (const entry of candidates) entry.status = keep.includes(entry.id) ? 'kept' : 'dismissed';
       if (add?.text?.trim()) {
         if (!HEADINGS[add.heading] && add.heading !== 'openQuestions') throw new TaskError(400, 'HEADING_INVALID', '請選擇詮釋、偏離、取捨或未決問題。');
@@ -442,6 +442,34 @@ export class Coach {
     }, 'learn', { keep, add, scope });
     await this.audit(id, 'LEARNING_KEPT', { kept: keep, added: add?.text || '', scope, written: written.map(w => w.text) });
     return { ...result, written };
+  }
+
+  async reviewCandidates(id, revision, key) {
+    const task=await this.latest(id);
+    if(task.planning?.phase!=='done')throw new TaskError(409,'TASK_NOT_DONE','完成所有工作並確認後，才能整理學習與回顧問題。');
+    const agent=this.agentFor('B',null,task);
+    const evidence=(task.planning.learningTurns||[]).filter(turn=>turn.status==='completed').slice(-12).map(turn=>({id:turn.id,stage:turn.stage,change:turn.learning?.change||'',reason:turn.learning?.reason||'',lesson:turn.learning?.lesson||'',question:turn.learning?.question||''}));
+    const prompt=`請根據以下已完成任務紀錄，整理最多 8 個可供使用者挑選的候選項目。只用紀錄中的虛構或已保存資訊，不新增事實。回傳 JSON：{"candidates":[{"turnId":"已提供的 id","kind":"lesson|question","text":"具體內容"}]}。lesson 是可重用的學習，question 是回顧問題。只引用提供的 turnId。\n\n${JSON.stringify({goal:task.planning.card?.goal,decisions:(task.decisions||[]).filter(d=>d.status==='DECIDED').map(d=>({question:d.question,choice:d.options?.find(o=>o.id===d.choice)?.label,note:d.note})),evidence})}`;
+    const result=await this.runAgent({...agent,mode:'chat',prompt,timeoutMs:90000});
+    const parsed=extractJson(result.text),validTurns=new Set(evidence.map(turn=>turn.id));
+    const candidates=(Array.isArray(parsed?.candidates)?parsed.candidates:[]).slice(0,8).filter(candidate=>validTurns.has(candidate.turnId)&&['lesson','question'].includes(candidate.kind)&&typeof candidate.text==='string'&&candidate.text.trim()).map(candidate=>({id:randomUUID().slice(0,12),turnId:candidate.turnId,kind:candidate.kind,text:candidate.text.trim().slice(0,500)}));
+    if(!candidates.length)throw new TaskError(502,'REVIEW_CANDIDATES_INVALID','AI 沒有整理出可供確認的學習項目，請重試。');
+    return this.store.mutate(id,revision,key,t=>{t.planning.reviewCandidates=candidates;return{status:planningStatus(t)};},'review-candidates',{count:candidates.length});
+  }
+
+  async confirmReviewCandidates(id,revision,key,{keep=[],always=[]}={}){
+    if(!Array.isArray(keep)||!Array.isArray(always)||always.some(id=>!keep.includes(id)))throw new TaskError(400,'REVIEW_SELECTION_INVALID','請確認勾選項目格式。');
+    const selectedIds=[],ruleDiaryIds=[];
+    const result=await this.store.mutate(id,revision,key,t=>{
+      if(t.planning?.phase!=='done')throw new TaskError(409,'TASK_NOT_DONE','只有完成的任務能保存回顧內容。');
+      const candidates=t.planning.reviewCandidates||[],selected=candidates.filter(candidate=>keep.includes(candidate.id));
+      if(selected.length!==new Set(keep).size)throw new TaskError(400,'REVIEW_SELECTION_INVALID','候選項目已變更，請重新整理後再選。');
+      for(const candidate of selected){const turn=t.planning.learningTurns.find(entry=>entry.id===candidate.turnId);if(!turn)continue;const field=candidate.kind==='question'?'confirmedQuestion':'confirmedLesson';turn[field]=[...(Array.isArray(turn[field])?turn[field]:turn[field]?[turn[field]]:[]),candidate.text];selectedIds.push(candidate.id);if(always.includes(candidate.id)){const entry={id:randomUUID().slice(0,12),stage:turn.stage,heading:'interpretations',text:candidate.text,agent:'你確認的學習',status:'candidate',at:now()};(t.planning.diary||=[]).push(entry);ruleDiaryIds.push(entry.id);}}
+      t.planning.reviewCandidates=candidates.filter(candidate=>!selectedIds.includes(candidate.id));
+      return{status:planningStatus(t)};
+    },'review-candidates-confirm',{keep,always});
+    if(ruleDiaryIds.length){const current=await this.latest(id);await this.keepLearnings(id,current.revision,randomUUID(),{keep:ruleDiaryIds,candidateIds:ruleDiaryIds,scope:'project'});}
+    return result;
   }
 
   async reflect(id, revision, key, { turnId, answer }) {

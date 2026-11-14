@@ -194,6 +194,10 @@ export async function createRequestHandler({ root = appDir, port = 4317, runAgen
   const conversations = new Conversations(path.join(memory, 'conversations'));
   const projects = new Projects(path.join(memory, 'projects'));
   const coach = new Coach(tasks, () => settings, root, memoryStore, runAgent, executeFile);
+  tasks.onChanged = async task => {
+    const all = (await tasks.list()).filter(t => !t.trashed && t.id !== task.id).concat(task);
+    await projectNotes.sync(task, all);
+  };
   await coach.recover();
   const trash = new Trash(memory, tasks, coach);
   const handler = async (req, res) => {
@@ -307,7 +311,7 @@ export async function createRequestHandler({ root = appDir, port = 4317, runAgen
         if (id && action === 'project-note') {
           const task = (await tasks.list()).find(t => t.id === id && !t.error && !t.trashed);
           if (!task) throw new TaskError(404, 'TASK_NOT_FOUND', '找不到任務。');
-          const note = await projectNotes.sync(task, (await tasks.list()).filter(t => !t.trashed));
+          const note = await projectNotes.read(task, (await tasks.list()).filter(t => !t.trashed));
           return send(200, note);
         }
         if (id && action === 'slides') {
@@ -553,6 +557,8 @@ export async function createRequestHandler({ root = appDir, port = 4317, runAgen
         answer: (id, key) => coach.answer(id, input.revision, key, input),
         outline: id => coach.draftOutline(id, input.feedback),
         learn: (id, key) => coach.keepLearnings(id, input.revision, key, input),
+        'review-candidates': (id, key) => coach.reviewCandidates(id, input.revision, key),
+        'confirm-review': (id, key) => coach.confirmReviewCandidates(id, input.revision, key, input),
         reflect: (id, key) => coach.reflect(id, input.revision, key, input),
         approve: (id, key) => coach.approveOutline(id, input.revision, key, input.proposalId ?? null),
         execute: id => coach.execute(id, input.itemId),
@@ -646,10 +652,6 @@ export async function createApplication(home = root, port = 4317) {
 export async function startServer(port = Number(flag('port') || process.env.PORT || 4317)) {
   let server;
   const app = await createRequestHandler({ root: flag('home') || process.env.MENTOR_HOME || appDir, port: () => server.address().port });
-  app.coach.store.onChanged = async task => {
-    const all = (await app.coach.store.list()).filter(t => !t.trashed && t.id !== task.id).concat(task);
-    await new ProjectNotes(flag('home') || process.env.MENTOR_HOME || appDir).sync(task, all);
-  };
   server = http.createServer(app.handler);
   await new Promise((resolve, reject) => {
     server.once('error', reject);
