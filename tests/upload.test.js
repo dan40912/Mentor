@@ -34,6 +34,7 @@ for (const entry of ['change', 'drop']) test(`new task ${entry}: real UI submiss
   const prompts = [];
   const app = await fixture(t, async options => { prompts.push(options.prompt); return fakeAgent(options); });
   const host = new Node('div'), form = new Node('form'); form.querySelector = () => new Node('button'); form.reset = () => {};
+  form.elements = { autopilot: { checked: false }, full: { checked: false, disabled: false } };
   const initialInput = new Node('input');
   host.querySelector = selector => selector === 'input[type="file"]' ? initialInput : null;
   const detail = new Node('section'); let submitted; let busyRun;
