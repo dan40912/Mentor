@@ -946,16 +946,7 @@ function resolveRunTarget(task,text){const runs=taskRuns(task).filter(run=>['que
 function renderRunCommand(task){
  const details=element('details',undefined,'run-command'),summary=element('summary','在對話中指揮這些工作');details.append(summary,element('p','只會按你輸入的內容預覽指示；停止、改派或修改範圍都要再按一次確認。','small muted'));
  const form=element('form',undefined,'run-command'),area=element('textarea');area.maxLength=6000;area.placeholder='例如：先停一下資料整理；檢查改給 Claude；多加一頁競品比較';area.setAttribute('aria-label','輸入工作指示');const preview=element('div');preview.setAttribute('aria-live','polite');const submit=element('button','預覽指示','btn');submit.type='submit';form.append(area,submit,preview);
- form.onsubmit=async event=>{event.preventDefault();const text=area.value.trim();if(text.length<2)return tell('請先寫下要處理的工作。');submit.disabled=true;preview.replaceChildren();try{
-  const target=resolveRunTarget(task,text),wantsStop=/停止|先停|暫停/.test(text),provider=/Claude/i.test(text)?'claude':/Codex/i.test(text)?'codex':/Copilot/i.test(text)?'copilot':null;
-  if(wantsStop&&target?.status==='running'){
-   const box=element('div',undefined,'run-command-confirm');box.append(element('strong',`將停止「${target.role||target.workItemId}」。`),element('p','其他工作會繼續。','small'));const confirm=element('button','確認停止這項工作','btn');confirm.type='button';confirm.onclick=async()=>{confirm.disabled=true;try{await runAction(task,target,'stop');tell('已送出停止要求。');area.value='';}catch(error){tell(`停止未完成：${error.message}`);}finally{confirm.disabled=false;}};box.append(confirm);preview.append(box);return;
-  }
-  if(provider&&target&&['queued','failed','stopped','unknown'].includes(target.status)){
-   const action=target.status==='queued'?'reassign':'retry',name=providerNames[provider],box=element('div',undefined,'run-command-confirm');box.append(element('strong',`${action==='retry'?'改由':'改派給'}${name}處理「${target.role||target.workItemId}」。`),element('p','接手摘要會帶上目標、限制、已確認決策、已完成成果與下一步。','small'));const confirm=element('button','確認改派','btn primary');confirm.type='button';confirm.onclick=async()=>{confirm.disabled=true;try{await runAction(task,target,action,{provider});tell(`已交給${name}處理。`);area.value='';}catch(error){tell(`改派未完成：${error.message}`);}finally{confirm.disabled=false;}};box.append(confirm);preview.append(box);return;
-  }
-  const result=await request(`/api/tasks/${encodeURIComponent(task.id)}/instruct`,{revision:task.revision,text,scope:'current',dryRun:true},{'Idempotency-Key':crypto.randomUUID()});const plan=result.plan,box=element('div',undefined,'run-command-confirm');box.append(element('strong',plan.label||'修改預覽'),element('p',plan.impact||'將依這段補充重新安排工作。','small'));const confirm=element('button','確認並交辦','btn primary');confirm.type='button';confirm.onclick=async()=>{confirm.disabled=true;try{await request(`/api/tasks/${encodeURIComponent(task.id)}/instruct`,{revision:task.revision,text,scope:'current',confirmImpact:true,proposalId:plan.id},{'Idempotency-Key':crypto.randomUUID()});await loadTasks();tell('已按確認交辦補充指示。');area.value='';}catch(error){tell(`指示尚未送出：${error.message}`);}finally{confirm.disabled=false;}};box.append(confirm);preview.append(box);
- }catch(error){preview.append(element('p',`無法預覽：${error.message}`,'notice'));}finally{submit.disabled=false;}};
+ form.onsubmit=async event=>{event.preventDefault();const text=area.value.trim();if(text.length<2)return tell('請先寫下要處理的工作。');submit.disabled=true;preview.replaceChildren();try{const result=await request('/api/workspace-chat',{question:text,taskId:task.id});if(result.action)previewWorkspaceAction(preview,task,result.action);else preview.append(element('p',result.answer||'AI 沒有判斷出可執行的工作指示。請補充要處理哪一項。','small muted'));}catch(error){preview.append(element('p',`無法預覽：${error.message}`,'notice'));}finally{submit.disabled=false;}};
  details.append(form);return details;
 }
 function renderAgentRuns(cards,available){
@@ -2082,6 +2073,18 @@ function lookup(question){
 let lastAnswer = '';
 const workspaceTurns = [];
 let workspaceRequestPending = false;
+function previewWorkspaceAction(reply,task,action){
+ if(!task||!action)return;
+ const run=(task.planning?.runs||[]).find(item=>item.id===action.runId),box=element('section',undefined,'work-panel-card');
+ const labels={stop:`停止「${run?.role||'這項工作'}」`,reassign:`改派「${run?.role||'這項工作'}」給${providerNames[action.provider]||action.provider}`,change_scope:'調整這件工作的範圍'};
+ box.append(element('h3','工作指示預覽'),element('p',labels[action.action]||'工作指示'),element('p',action.action==='change_scope'?action.text:'確認後才會送出。','small muted'));
+ const confirm=element('button','確認','btn primary');confirm.type='button';confirm.onclick=async()=>{confirm.disabled=true;try{
+  if(action.action==='stop'){await runAction(task,run,'stop');tell('已送出停止要求。');}
+  else if(action.action==='reassign'){await runAction(task,run,'reassign',{provider:action.provider});tell('已改派這項工作。');}
+  else {const result=await request(`/api/tasks/${encodeURIComponent(task.id)}/instruct`,{revision:task.revision,text:action.text,scope:'current',dryRun:true},{'Idempotency-Key':crypto.randomUUID()});const plan=result.plan;box.append(element('p',plan.label||'修改計畫', 'notice'),element('p',plan.impact||'核對後再確認修改。','small'));const final=element('button','確認修改並交辦','btn primary');final.type='button';final.onclick=async()=>{final.disabled=true;try{await request(`/api/tasks/${encodeURIComponent(task.id)}/instruct`,{revision:task.revision,text:action.text,scope:'current',confirmImpact:true,proposalId:plan.id},{'Idempotency-Key':crypto.randomUUID()});await loadTasks();tell('已確認並交辦修改。');}catch(error){tell(`修改尚未送出：${error.message}`);}finally{final.disabled=false;}};box.append(final);confirm.remove();return;}
+  await loadTasks();
+ }catch(error){tell(`沒有執行指示：${error.message}`);}finally{confirm.disabled=false;}};box.append(confirm);reply.append(box);
+}
 void request('/api/workspace-chat').then(({turns})=>{
   workspaceTurns.push(...turns.slice(-16));
   for(const turn of workspaceTurns)message(turn.text,turn.role==='user');
@@ -2119,7 +2122,8 @@ async function askWorkspace(question){
     if(result.intent==='quick')action(reply,'存成專案',()=>saveDraft(result.answer));
     if(['instruct','material'].includes(result.intent)&&result.taskId){
       const target=tasks.find(task=>task.id===result.taskId);
-      if(target)action(reply,'前往這個任務',()=>openTaskFromChat(target));
+      if(target&&result.action)previewWorkspaceAction(reply,target,result.action);
+      else if(target)action(reply,'前往這個任務',()=>openTaskFromChat(target));
     }
     action(reply,'保存這則回覆',() => saveDraft(result.answer));
   }catch(error){

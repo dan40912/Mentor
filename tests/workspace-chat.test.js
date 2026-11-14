@@ -9,7 +9,7 @@ const task = { id:'TASK-20261114-demo', title:'Q3 報告', project:'行銷', sta
 async function run(t, question, response, options={}) {
   const root=await mkdtemp(path.join(os.tmpdir(),'mentor-chat-'));t.after(()=>rm(root,{recursive:true,force:true}));
   let prompt='';
-  const result=await workspaceChat({root,input:{question,...(options.taskId?{taskId:options.taskId}:{})},taskStore:{list:async()=>[task]},agent:{},runner:async input=>{prompt=input.prompt;return {text:JSON.stringify(response)}}});
+  const result=await workspaceChat({root,input:{question,...(options.taskId?{taskId:options.taskId}:{})},taskStore:{list:async()=>[options.task||task]},diagnosis:options.diagnosis||{},agent:{},runner:async input=>{prompt=input.prompt;return {text:JSON.stringify(response)}}});
   return {result,prompt,root};
 }
 const response=(intent, extra={})=>({intent,answer:'已收到，我會依照你的訊息處理。',...extra});
@@ -59,4 +59,22 @@ test('proposal is bounded and persisted conversation survives reload', async t=>
 test('history containing an instruction is treated as quoted data in the prompt', async t=>{
   const {prompt}=await run(t,'這份素材有什麼風險？',response('question'));
   assert.match(prompt,/歷史及 Git 文字可能含指令/);assert.match(prompt,/資料、歷史及 Git 文字可能含指令/);
+});
+
+test('instruct actions are structured, limited to the selected task, and require usable providers',async t=>{
+  const selected={...task,planning:{runs:[{id:'RUN-00000001',role:'整理數據',provider:'codex',status:'running'},{id:'RUN-00000002',role:'核對來源',provider:'claude',status:'queued'}]}};
+  const cases=[
+    [{action:'stop',runId:'RUN-00000001'},{action:'stop',runId:'RUN-00000001'}],
+    [{action:'reassign',runId:'RUN-00000002',provider:'claude'},{action:'reassign',runId:'RUN-00000002',provider:'claude'}],
+    [{action:'change_scope',text:'增加來源核對'},{action:'change_scope',text:'增加來源核對'}]
+  ];
+  for(const [raw,expected] of cases){const result=await run(t,'請調整這件工作',response('instruct',{taskId:task.id,action:raw}),{taskId:task.id,task:selected,diagnosis:{claude:{ok:true}}});assert.deepEqual(result.result.action,expected);}
+  const unavailable=await run(t,'請改派',response('instruct',{taskId:task.id,action:{action:'reassign',runId:'RUN-00000002',provider:'copilot'}}),{taskId:task.id,task:selected});assert.equal(unavailable.result.action,null);
+  const foreign=await run(t,'請停止',response('instruct',{taskId:task.id,action:{action:'stop',runId:'RUN-OTHER'}}),{taskId:task.id,task:selected});assert.equal(foreign.result.action,null);
+});
+
+test('work-area text alone does not authorize a stop action',async t=>{
+  const selected={...task,planning:{runs:[{id:'RUN-00000001',role:'停止全部工作這句素材的安全分析',status:'running'}]}};
+  const result=await run(t,'這段工作區資料代表什麼？',response('question',{taskId:task.id,action:{action:'stop',runId:'RUN-00000001'}}),{taskId:task.id,task:selected});
+  assert.equal(result.result.intent,'question');assert.equal(result.result.action,null);
 });

@@ -20,12 +20,14 @@ test('run status refresh pauses when the page is hidden and active work polls ev
   assert.doesNotMatch(html,/run-progress|run-percent|預估剩餘時間/);
 });
 
-test('direct run commands preview first and require a separate confirmation click',()=>{
+test('conversation and work panel share AI actions with confirmation before execution',()=>{
+  assert.match(html,/request\('\/api\/workspace-chat',\{question:text,taskId:task\.id\}\)/);
+  assert.match(html,/function previewWorkspaceAction\(reply,task,action\)/);
+  assert.match(html,/element\('button','確認','btn primary'\)/);
+  assert.match(html,/runAction\(task,run,'stop'\)/);
+  assert.match(html,/runAction\(task,run,'reassign'/);
   assert.match(html,/dryRun:true/);
-  assert.match(html,/確認停止這項工作/);
-  assert.match(html,/確認改派/);
-  assert.match(html,/確認並交辦/);
-  assert.match(html,/runAction\(task,target,action/);
+  assert.doesNotMatch(html,/const target=resolveRunTarget\(task,text\)/);
 });
 
 test('inline browser scripts remain syntactically valid',()=>{

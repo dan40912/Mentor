@@ -424,7 +424,7 @@ export async function createRequestHandler({ root = appDir, port = 4317, runAgen
         if (workspaceChatBusy) throw new TaskError(429, 'CHAT_BUSY', '上一則訊息還在處理，請稍後再送出。');
         workspaceChatBusy = true;
         try{
-          return send(200, await workspaceChat({ input, root, taskStore: tasks, agent: settings.stages.B, runner: runAgent }));
+          return send(200, await workspaceChat({ input, root, taskStore: tasks, agent: settings.stages.B, runner: runAgent, diagnosis }));
         }finally{workspaceChatBusy = false;}
       }
       if (req.url === '/api/onboarding/demo') {
