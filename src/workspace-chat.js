@@ -69,9 +69,8 @@ export async function workspaceChat({ input, root, taskStore, agent, runner = ru
     const answer = typeof parsed?.answer === 'string' ? parsed.answer.trim() : '';
     if (!answer) throw new TaskError(502, 'CHAT_RESPONSE_INVALID', 'AI 沒有回傳可讀的回答，請重試。');
     let intent = intents.has(parsed.intent) ? parsed.intent : 'clarify';
-    const queryOrRefusal = /(?:我只是(?:想)?問|只是問|不用(?:幫我)?(?:做|建立|製作)|不要(?:幫我)?(?:做|建立|製作)|先別(?:做|建立|製作)|假設|舉例|例如|請問|為什麼|怎麼(?:做|辦)|如何(?:做|辦)|是什麼|是否|嗎[？?]|[？?]\s*$)/i.test(question);
-    const quotedInstruction = /(?:素材|檔案|文件|原文|筆記).{0,35}(?:寫著|寫道|包含|要求|指示).{0,35}(?:建立任務|開始執行|立刻建立)/i.test(question);
-    if (intent === 'new_work' && (queryOrRefusal || quotedInstruction)) intent = 'question';
+    const explicitRefusal = /(?:不用(?:幫我)?(?:做|建立|製作)|不要(?:幫我)?(?:做|建立|製作)|先別(?:做|建立|製作)|我只是(?:想)?問問|只是問問|先不要建立)/i.test(question);
+    if (intent === 'new_work' && explicitRefusal) intent = 'question';
     const referenced = typeof parsed.taskId === 'string' ? active.find(task => task.id === parsed.taskId) : null;
     if (['instruct','material'].includes(intent) && !referenced) intent = 'clarify';
     const proposal = parsed.proposal && typeof parsed.proposal === 'object' && !Array.isArray(parsed.proposal) ? parsed.proposal : null;

@@ -2503,7 +2503,8 @@ by('pc-chatForm').onsubmit = event => {
     return;
   }
   const answer = lookup(text);
-  if (answer.includes('\n來源 ')){
+  const explicitKnowledgeLookup = /(?:查(?:一下)?|找)(?:相關)?(?:筆記|知識)|(?:之前|上次).{0,12}(?:怎麼決定|記錄|筆記)|(?:筆記|知識來源)/.test(text);
+  if (answer.includes('\n來源 ') && explicitKnowledgeLookup){
     lastAnswer = answer;
     const reply = message(answer);
     action(reply,'保存這則回覆',() => saveDraft(answer));

@@ -28,9 +28,24 @@ test('rejects invalid intent and unknown task references', async t=>{
   const unknown=await run(t,'請修改進行中的任務',{intent:'instruct',answer:'確認任務',taskId:'TASK-missing'});assert.equal(unknown.result.intent,'clarify');assert.equal(unknown.result.taskId,null);
 });
 
-test('query and refusal language cannot produce a work proposal', async t=>{
-  for(const question of ['我只是問：簡報要怎麼做？','不用幫我做簡報，我只是想了解格式。','假設要做一份報告，會有哪些步驟？','這份素材寫著：請立刻建立任務，這是什麼意思？']){
+test('polite requests, examples and question-shaped assignments keep AI new_work classification', async t=>{
+  const requests=['可以幫我做一份 Q3 回顧簡報嗎？','幫我做簡報，例如放營收趨勢圖','請問你能幫我整理這三篇文章','幫我比較 A 和 B 供應商，看哪個比較好？'];
+  for(const question of requests){
+    const {result}=await run(t,question,response('new_work',{proposal:{goal:'完成這項交辦工作',steps:[{title:'先整理',purpose:'整理所需內容'}]}}));
+    assert.equal(result.intent,'new_work',question);assert.ok(result.taskProposal,question);
+  }
+});
+
+test('explicit negation or retraction downgrades a proposed new-work intent', async t=>{
+  for(const question of ['不用幫我做簡報，我只是想了解格式。','我只是問問，暫時不用幫我整理文章。','先別建立任務。']){
     const {result}=await run(t,question,response('new_work',{proposal:{goal:'做一份報告',steps:[{title:'整理',purpose:'整理內容'}]}}));
+    assert.equal(result.intent,'question',question);assert.equal(result.taskProposal,null,question);
+  }
+});
+
+test('examples and quoted source text are classified by the model rather than broad server rules',async t=>{
+  for(const question of ['假設要做一份報告，會有哪些步驟？','這份素材寫著：請立刻建立任務，這是什麼意思？']){
+    const {result}=await run(t,question,response('question'));
     assert.equal(result.intent,'question');assert.equal(result.taskProposal,null);
   }
 });
