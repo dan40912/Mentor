@@ -3,6 +3,7 @@ import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { StringDecoder } from 'node:string_decoder';
 import { parseTestCommand } from './test-command.js';
+import { extractSlides, parseDecisionCard } from './output-preview.js';
 
 // 確定性感測器：AI 寫完產出後自動跑，結果只供參考，不擋流程。
 const sensor = (id, name, result, detail) => ({ id, name, result, detail });
@@ -66,7 +67,7 @@ export function outlineSensors(outline) {
   ];
 }
 
-export async function outputSensors(outDir, item, outline) {
+export async function outputSensors(outDir, item, outline, deliverable = '') {
   const results = [];
   const files = [];
   for (const output of item.outputs || []) {
@@ -80,6 +81,19 @@ export async function outputSensors(outDir, item, outline) {
   results.push(sensor('outputs-exist', '產出檔案存在且有內容', files.length && !empty.length ? 'PASS' : 'FAIL',
     !files.length ? 'AI 沒有回報任何在產出資料夾內的檔案' : empty.length ? `空檔案：${empty.map(f => f.file).join('、')}` : `${files.length} 個檔案：${files.map(f => f.file).join('、')}`));
   const html = files.filter(f => /\.html?$/i.test(f.file) && f.size < 30_000_000);
+  if(/簡報|投影片|presentation|slides/i.test(String(deliverable||''))){
+    const slideFiles=html.filter(file=>file.size<30_000_000);
+    const contents=await Promise.all(slideFiles.map(file=>readFile(file.full,'utf8')));
+    const slides=contents.flatMap(content=>extractSlides(content));
+    const valid=slideFiles.length===1&&slides.length>0&&slides.every(slide=>/<h[1-3]\b[^>]*>[\s\S]*?<\/h[1-3]\s*>/i.test(slide.html));
+    results.push(sensor('slide-format','簡報每頁都有標題',valid?'PASS':'FAIL',valid?`單一 HTML 含 ${slides.length} 頁，每頁都有標題。`:'簡報格式未通過：需要單一 HTML 檔，並為每頁提供 <section class="slide"> 與 h1～h3 標題。'));
+  }
+  if(/決策建議|決策卡|decision/i.test(String(deliverable||''))){
+    const content=(await Promise.all(files.filter(file=>file.size<30_000_000).map(file=>readFile(file.full,'utf8')))).join('\n');
+    const card=parseDecisionCard(content);
+    const valid=Boolean(card&&!card.error);
+    results.push(sensor('decision-format','決策建議資料可讀',valid?'PASS':'FAIL',valid?'決策建議格式正確，包含可讀的選項資料。':`決策建議格式未通過：${card?.error||'找不到可解析的 mentor-decision JSON 區塊。'}`));
+  }
   if (html.length && outline) {
     const text = (await Promise.all(html.map(f => readFile(f.full, 'utf8')))).join('\n');
     const visuals = (text.match(/<(img|svg|canvas|figure)\b/gi) || []).length;

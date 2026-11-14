@@ -155,10 +155,12 @@ ${transcript(task.planning.messages)}
 
   D: (task, item, done) => {
     const { diary, diaryField, rules } = context(task);
+    const deliverable=task.planning.proposal?.format||task.planning.card.deliverable||'';
+    const formatRules=/簡報|投影片|presentation|slides/i.test(deliverable)?'\n成果形式指定為簡報：只輸出一個 HTML 檔；每一頁必須各自放在 <section class="slide"> 區塊內，每個區塊都要有一個 <h1>、<h2> 或 <h3> 標題。不要把多頁合併成單一長頁。':/決策建議|決策卡|decision/i.test(deliverable)?'\n成果形式指定為決策建議：成果內必須包含 parseDecisionCard 可讀的 mentor-decision JSON 區塊，使用 ```mentor-decision\n{ "question":"...", "options":[{"label":"...","benefits":["..."],"costs":["..."],"evidence":["..."]}], "unknowns":[], "recommendation":"...", "recommendationReason":"..." }\n``` 格式。不要編造證據，未知寫入 unknowns。':'';
     return `你是 Mentor的「執行」角色。${VOICE}
 在目前資料夾內完成下面的工作項目，只做這一項，不要提前做其他工作項目。目前資料夾就是產出資料夾，裡面的檔案就是可用的資料。只能建立或修改目前資料夾內的檔案，不要碰其他位置，不要對外發布。
 成果要寫成檔案；只在回覆裡描述、沒有產出檔案，不算完成。
-資訊不足時不要猜，回報 NEEDS_INPUT 並寫出缺什麼。${rules}
+資訊不足時不要猜，回報 NEEDS_INPUT 並寫出缺什麼。${formatRules}${rules}
 
 測試由 Mentor server 在執行 AI 的沙箱外、產出資料夾內執行，以 Mentor 保存的測試結果為準。沙箱內因監聽被拒（例如 listen EPERM／EACCES）造成的測試失敗不算阻擋，不要因此回報 BLOCKED。
 可在最後 JSON 提供 testCommand（例如 "npm test"）；省略就沿用任務卡，空字串表示不執行。
@@ -1157,7 +1159,7 @@ export class Coach {
       } else item.blocked = null;
       item.executor = agent;
       item.review = null;
-      item.sensors = await outputSensors(outputRoot, item, t.planning.outline);
+      item.sensors = await outputSensors(outputRoot, item, t.planning.outline, t.planning.proposal?.format||t.planning.card.deliverable);
       if (testResult) item.sensors.push({ ...testResult, attempt: item.attempts, stage: stageId, at: now() });
       this.addDiary(t, stageId, extractJson(text)?.diary, agent);
     }, { workItemId: itemId, ...(runOptions.parallel?{runId:runOptions.runId,provider:runOptions.provider,outputDir:outDir,parallel:true,sources:sourceSummary,handoff:(initial.planning.runs||[]).find(run=>run.id===runOptions.runId)?.handoff}:{}), beforeApply: async (text, task) => {
