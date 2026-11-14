@@ -33,3 +33,8 @@ test('static interface copy avoids engineering terms from the glossary', () => {
   assert.doesNotMatch(visible,banned);
   assert.doesNotMatch(Object.values(terms).join(' '),banned);
 });
+
+test('server serves the language glossary to the chat page', async () => {
+  const server = await readFile(new URL('../src/server.js', import.meta.url), 'utf8');
+  assert.ok(server.includes('plain-words\\.js'));
+});

@@ -23,6 +23,13 @@ import { itemName, itemNames } from './item-names.js';
 import { validateFeedback, feedbackBrief } from './feedback.js';
 
 const now = () => new Date().toISOString();
+export function runSummaries(task) {
+  const stored = Array.isArray(task?.planning?.runs) ? task.planning.runs : [];
+  const runs = [...stored];
+  const legacy = task?.planning?.running;
+  if (legacy && !runs.some(run => run.turnId === legacy.turnId)) runs.push({ id:legacy.turnId, turnId:legacy.turnId, workItemId:legacy.workItemId||null, role:stageName(legacy.stage), purpose:legacy.workItemId||stageName(legacy.stage), provider:legacy.provider, modelId:legacy.modelId, effort:legacy.effort, status:'running', startedAt:legacy.startedAt, step:`正在${stageName(legacy.stage)}`, outputDir:null, error:null });
+  return runs.slice(-30).map(run => ({ id:run.id, workItemId:run.workItemId||null, role:run.role||'工作項目', purpose:run.purpose||'', provider:run.provider||null, modelId:run.modelId||null, effort:run.effort||null, status:run.status||'unknown', startedAt:run.startedAt||null, endedAt:run.endedAt||null, step:run.step||'', outputDir:run.outputDir||null, turnId:run.turnId||run.id, error:run.error||null }));
+}
 const stageName = id => stages.find(s => s.id === id).name;
 // 完全自動時，AI 驗收通過的項目先放行後續；你在最後一次確認全部成果。
 const unlockOf = t => t.planning?.autopilot?.full ? ['DONE', 'REVIEWED'] : ['DONE'];
@@ -316,16 +323,27 @@ export class Coach {
   // 服務重啟時，上次沒跑完的步驟結果未知：清掉 running，留下紀錄，不假裝成功或自動重跑。
   async recover() {
     for (const listed of await this.store.list()) {
-      if (!listed.planning?.running) continue;
-      const running = listed.planning.running;
+      const running = listed.planning?.running;
+      const unfinished = (listed.planning?.runs || []).filter(run => run.status === 'running');
+      if (!running && !unfinished.length) continue;
       await this.store.mutate(listed.id, listed.revision, null, t => {
         t.planning.running = null;
+        for (const run of t.planning.runs || []) if (run.status === 'running') { run.status = 'unknown'; run.endedAt = now(); run.error = '服務重啟，結果未知。'; }
+        if (!Array.isArray(t.planning.runs)) t.planning.runs = running ? [{ id:running.turnId, workItemId:running.workItemId || null, role:stageName(running.stage), purpose:running.workItemId || stageName(running.stage), provider:running.provider, modelId:running.modelId, effort:running.effort, status:'unknown', startedAt:running.startedAt, endedAt:now(), step:'服務重啟，結果未知', outputDir:null, turnId:running.turnId, error:'服務重啟，結果未知。' }] : [];
+        if (running) {
+          let legacyRun=t.planning.runs.find(run=>run.turnId===running.turnId);
+          if(!legacyRun){legacyRun={id:running.turnId,workItemId:running.workItemId||null,role:stageName(running.stage),purpose:running.workItemId||stageName(running.stage),provider:running.provider,modelId:running.modelId,effort:running.effort,startedAt:running.startedAt,outputDir:null,turnId:running.turnId};t.planning.runs.push(legacyRun);}
+          Object.assign(legacyRun,{status:'unknown',endedAt:now(),step:'服務重啟，結果未知',error:'服務重啟，結果未知。'});
+        }
         if (t.planning.autopilot) { t.planning.autopilot = null; }
         // 停止請求送出後服務就重啟：無法確認 CLI 是否結束，仍記為已停止，讓你核對後接續。
-        if (running.stopping && !running.discussion) t.planning.stopped = { stage: running.stage, itemId: running.workItemId || null, agent: running.agent, turnId: running.turnId, phase: t.planning.phase, startedAt: running.startedAt, at: now(), changed: [], afterRestart: true };
-        const turn = t.planning.learningTurns?.find(entry => entry.id === running.turnId);
-        if (turn) Object.assign(turn, { status: 'unknown', completedAt: now(), error: '服務重啟，結果未知。' });
-        t.planning.messages.push({ id: randomUUID(), role: 'system', stage: running.stage, text: `服務重啟時，${running.discussion?'問答':stageName(running.stage)}（${running.agent}）沒有完成，結果未知。${running.discussion?'這次問答未完成，可重新提問；原工作沒有接續。':'請檢查產出資料夾後重新執行。'}`, at: now() });
+        if (running?.stopping && !running.discussion) t.planning.stopped = { stage: running.stage, itemId: running.workItemId || null, agent: running.agent, turnId: running.turnId, phase: t.planning.phase, startedAt: running.startedAt, at: now(), changed: [], afterRestart: true };
+        for (const active of [running, ...unfinished].filter(Boolean)) {
+          const turn = t.planning.learningTurns?.find(entry => entry.id === active.turnId);
+          if (turn) Object.assign(turn, { status: 'unknown', completedAt: now(), error: '服務重啟，結果未知。' });
+          if (!running) t.planning.messages.push({ id: randomUUID(), role: 'system', stage: 'D', text: `服務重啟時，工作項目 ${active.workItemId || ''} 的結果未知，請檢查成果後再決定是否重跑。`, at: now() });
+        }
+        if (running) t.planning.messages.push({ id: randomUUID(), role: 'system', stage: running.stage, text: `服務重啟時，${running.discussion?'問答':stageName(running.stage)}（${running.agent}）沒有完成，結果未知。${running.discussion?'這次問答未完成，可重新提問；原工作沒有接續。':'請檢查產出資料夾後重新執行。'}`, at: now() });
         return { status: planningStatus(t) };
       });
     }
@@ -566,6 +584,9 @@ export class Coach {
       const startedAt = now();
       (t.planning.learningTurns ||= []).push({ id: turnId, stage: stageId, provider: agent.provider, modelId: agent.modelId, effort: agent.effort, agent: agentLabel(agent), startedAt, status: 'running', prompt, userInput, inputKind, workItemId: metadata.workItemId || null, beforeRevision: task.revision, context: turnContext(task), simulated: /fake-cli/i.test(path.basename(process.env[{codex:'AWC_CODEX_BIN',claude:'AWC_CLAUDE_BIN',copilot:'AWC_COPILOT_BIN'}[agent.provider]] || '')) });
       t.planning.running = { stage: stageId, provider: agent.provider, modelId: agent.modelId, effort: agent.effort, agent: agentLabel(agent), startedAt, turnId, workItemId: metadata.workItemId || null, mode, ...(metadata.discussion?{discussion:true}:{}) };
+      const workItem = metadata.workItemId ? this.item(t, metadata.workItemId) : null;
+      (t.planning.runs ||= []).push({ id:turnId, workItemId:metadata.workItemId||null, role:workItem?.title||stageName(stageId), purpose:workItem?.detail||workItem?.title||stageName(stageId), provider:agent.provider, modelId:agent.modelId, effort:agent.effort, status:'running', startedAt, endedAt:null, step:`正在${stageName(stageId)}`, outputDir:cwd, turnId, error:null });
+      if (t.planning.runs.length > 200) t.planning.runs = t.planning.runs.filter(run => run.status === 'running').concat(t.planning.runs.filter(run => run.status !== 'running').slice(-180));
       t.planning.stopped = null;
       return { status: 'RUNNING' };
     });
@@ -590,12 +611,16 @@ export class Coach {
         t.planning.running = null;
         const turn = t.planning.learningTurns.find(entry => entry.id === turnId);
         turn.completedAt = now();
+        const run = (t.planning.runs || []).find(entry => entry.turnId === turnId);
+        const finishRun = (status, step, error = null) => { if (run) Object.assign(run, { status, step, error, endedAt:now() }); };
         if (failure?.code === 'AGENT_CANCELLED' && metadata.discussion) {
+          finishRun('stopped','已停止');
           Object.assign(turn,{status:'stopped',error:failure.message,errorCode:'AGENT_CANCELLED'});
           t.planning.messages.push({id:randomUUID(),role:'system',stage:stageId,kind:'discussion',text:'問答已停止，原任務、成果與驗收保持原樣；未接續原工作。',at:now()});
           return {status:planningStatus(t),extra:{stopped:true}};
         }
         if (failure?.code === 'AGENT_CANCELLED') {
+          finishRun('stopped','已停止');
           // 已確認 CLI 結束：中斷步驟沒有完成，保留對話與檔案，等使用者決定接續。
           Object.assign(turn, { status: 'stopped', error: failure.message, errorCode: 'AGENT_CANCELLED', changed });
           t.planning.stopped = { stage: stageId, itemId: metadata.workItemId || null, agent: agentLabel(agent), turnId, phase: t.planning.phase, startedAt: running?.startedAt || null, at: now(), changed, replan: stageId === 'C' && t.planning.phase === 'execute' };
@@ -604,6 +629,7 @@ export class Coach {
           return { status: planningStatus(t), extra: { stopped: true, error: { code: 'AGENT_CANCELLED', message: failure.message } } };
         }
         if (failure) {
+          finishRun(failure.code === 'AGENT_INTERRUPTED' ? 'unknown' : 'failed', failure.code === 'AGENT_INTERRUPTED' ? '結果未知' : '執行失敗', failure.message);
           Object.assign(turn, { status: failure.code === 'AGENT_INTERRUPTED' ? 'unknown' : 'failed', error: failure.message, errorCode: failure.code || 'AGENT_FAILED' });
           if (failure.code === 'AGENT_FILTERED') turn.response = failure.detail;
           t.planning.messages.push({ id: randomUUID(), role: 'system', stage: stageId, text: `${executionName}沒有完成（${agentLabel(agent)}）：${failure.message}${failure.detail ? `\n${failure.detail.slice(-400)}` : ''}`, at: now() });
@@ -614,12 +640,15 @@ export class Coach {
         const draft = structuredClone(t);
         try { await apply(draft, result.text, agentLabel(agent), prepared); }
         catch (error) {
+          finishRun('failed','回覆無法使用',error.message);
           await this.audit(id, 'STAGE_FAILED', { stage: stageId, agent: agentLabel(agent), code: 'RESPONSE_INVALID', message: error.message });
           Object.assign(turn, { status: 'failed', error: error.message, errorCode: 'RESPONSE_INVALID' });
           t.planning.messages.push({ id: randomUUID(), role: 'system', stage: stageId, text: `回覆無法使用：${error.message}。當次 prompt 與回覆已保留，可檢查後重試。`, at: now() });
           return { status: planningStatus(t), extra: { error: { code: 'RESPONSE_INVALID', message: error.message } } };
         }
         const completed = draft.planning.learningTurns.find(entry => entry.id === turnId);
+        const completedRun = (draft.planning.runs || []).find(entry => entry.turnId === turnId);
+        if (completedRun) Object.assign(completedRun, { status:'done', endedAt:now(), step:'完成待你查看', error:null });
         completed.status = 'completed';
         completed.afterRevision = t.revision + 1;
         completed.nextAction = planningAction(draft);

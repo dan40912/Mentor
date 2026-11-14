@@ -14,7 +14,7 @@ import { Memory } from './memory.js';
 import { Trash } from './trash.js';
 import { Conversations } from './conversations.js';
 import { Projects } from './projects.js';
-import { Coach } from './coach.js';
+import { Coach, runSummaries } from './coach.js';
 import { gitHead, itemDiff, itemChanges } from './git-diff.js';
 import { artifactPath, validateArtifactName } from './artifact-path.js';
 import { diagnose } from './agents.js';
@@ -219,7 +219,7 @@ export async function createRequestHandler({ root = appDir, port = 4317, runAgen
         });
         return res.end(html);
       }
-      if (req.method === 'GET' && /^\/assets\/(mentor\.svg|openai\.svg|claude\.svg|copilot\.svg|conversation\.js|project\.js|control\.js|auto\.js|feedback\.js|item-names\.js|upload\.js)$/.test(req.url)) {
+      if (req.method === 'GET' && /^\/assets\/(mentor\.svg|openai\.svg|claude\.svg|copilot\.svg|conversation\.js|project\.js|control\.js|auto\.js|feedback\.js|item-names\.js|plain-words\.js|upload\.js)$/.test(req.url)) {
         res.writeHead(200, { 'Content-Type': req.url.endsWith('.js') ? 'application/javascript; charset=utf-8' : req.url.endsWith('.svg') ? 'image/svg+xml' : 'image/png', 'Cache-Control': req.url.endsWith('.js') ? 'no-store' : 'max-age=86400' });
         return res.end(await readFile(path.join(webDir, 'assets', path.basename(req.url))));
       }
@@ -286,6 +286,10 @@ export async function createRequestHandler({ root = appDir, port = 4317, runAgen
           const receiver = new URLSearchParams(query || '').get('for') || 'unassigned';
           if (!['codex', 'claude', 'copilot', 'unassigned'].includes(receiver)) return send(400, { code: 'UNKNOWN_RECEIVER' });
           return send(200, compactHandoff(task, receiver));
+        }
+        if (id && action === 'runs') {
+          const { task } = await tasks.get(id);
+          return send(200, { runs:runSummaries(task) });
         }
         if (id && action === 'events') return send(200, { events: await coach.events(id) });
         if (id && action === 'conversation') return send(200, await conversations.read((await tasks.get(id)).task));

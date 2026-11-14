@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { TaskStore, parseTask, serializeTask, planningAction } from '../src/tasks.js';
-import { Coach } from '../src/coach.js';
+import { Coach, runSummaries } from '../src/coach.js';
 import { buildArgs, classify, extractJson, runAgent } from '../src/agents.js';
 import { defaultStageSettings } from '../src/models.js';
 import { Memory } from '../src/memory.js';
@@ -198,6 +198,8 @@ test('restart recovery marks an unfinished step as unknown', async () => {
   assert.equal(after.planning.running, null);
   assert.match(after.planning.messages.at(-1).text, /結果未知/);
   assert.equal(after.planning.learningTurns.at(-1).status, 'unknown');
+  assert.equal(after.planning.runs.find(run => run.turnId === unfinished.id).status, 'unknown');
+  assert.equal(runSummaries(after).at(-1).status, 'unknown');
 });
 
 test('standard profile: skeleton first, sensors, diary, learning loop, rules for the next task, change requests', async () => {
