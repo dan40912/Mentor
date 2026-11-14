@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // 測試用假 CLI：依提示中的角色回傳固定內容，不消耗真實額度。
-import { writeFileSync, readFileSync } from 'node:fs';
+import { writeFileSync, readFileSync, appendFileSync } from 'node:fs';
 const args = process.argv.slice(2);
 let prompt = '';
 for await (const chunk of process.stdin) prompt += chunk;
@@ -8,6 +8,7 @@ const out = args.includes('-o') ? args[args.indexOf('-o') + 1] : null;
 // 瀏覽器驗收時用 FAKE_MODE_FILE 切換模式，不必重啟服務。
 const fromFile = () => { try { return readFileSync(process.env.FAKE_MODE_FILE, 'utf8').trim(); } catch { return ''; } };
 const [mode, hangMs] = ((process.env.FAKE_MODE_FILE && fromFile()) || process.env.FAKE_MODE || 'ok').split(':');
+if(['parallel','parallel-fail-one'].includes(mode)&&process.env.FAKE_RUN_LOG)appendFileSync(process.env.FAKE_RUN_LOG,`${JSON.stringify({event:'start',cwd:process.cwd(),at:Date.now()})}\n`);
 // slow：先寫一半的檔案再等很久，用來測停止；hang：忽略 SIGTERM，且讓孫程序握住輸出，模擬無法確認結束。
 if (mode === 'slow' || mode === 'slow-login' || mode === 'hang') {
   if (mode === 'slow-login') process.stderr.write('HTTP 401 Unauthorized · Please run /login\n');
@@ -21,6 +22,7 @@ if (mode === 'slow' || mode === 'slow-login' || mode === 'hang') {
   }
   await new Promise(resolve => setTimeout(resolve, 60000));
 }
+if(mode==='parallel-stop-one'&&prompt.includes('可停止工作')){writeFileSync('partial.html','正在寫入');await new Promise(resolve=>setTimeout(resolve,Number(hangMs||3000)));}
 if (mode === 'login') { process.stderr.write('Not logged in · Please run /login\n'); process.exit(1); }
 const diary = prompt.includes('diary') ? { diary: { interpretations: ['把「新品」解讀成年度新品'], deviations: [], tradeoffs: ['選 HTML 不選 PPT，因為要可互動'], openQuestions: ['預算上限未知'] } } : {};
 const learning = mode === 'no-learning' ? {} : { learning: { change: '補上明確的成功標準', reason: '原需求缺少可檢查的結果', evidence: '這次需求對話', lesson: '先說清楚讀者要做什麼決定，再安排內容。', nextPrompt: '請做十頁簡報，讓主管當場決定新品是否立案，逐項附資料來源。', question: '為什麼要先說主管要做的決定？' } };
@@ -40,4 +42,6 @@ if (mode === 'filter-zero') reply = 'The model returned no content because the r
 if (mode === 'malformed-a' && prompt.includes('「任務制定」')) reply = '我無法提供任務卡。';
 if (mode === 'empty-b' && prompt.includes('「Grill me」')) reply = json({ ready: false, questions: [] });
 if (mode === 'quote-filter') reply = json({ explanation: 'The model returned no content because the response was blocked by content filtering.' });
+if(mode==='parallel-fail-one'&&prompt.includes('故意失敗工作')){if(process.env.FAKE_RUN_LOG)appendFileSync(process.env.FAKE_RUN_LOG,`${JSON.stringify({event:'end',cwd:process.cwd(),at:Date.now()})}\n`);process.stderr.write('Not logged in · Please run /login\n');process.exit(1);}
+if(mode==='parallel'&&process.env.FAKE_RUN_LOG){await new Promise(resolve=>setTimeout(resolve,Number(hangMs||300)));appendFileSync(process.env.FAKE_RUN_LOG,`${JSON.stringify({event:'end',cwd:process.cwd(),at:Date.now()})}\n`);}
 if (out) writeFileSync(out, reply); else process.stdout.write(args[args.indexOf('--output-format')+1]==='json' ? JSON.stringify({type:'result',is_error:false,result:reply}) : reply);

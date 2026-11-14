@@ -138,7 +138,7 @@ export async function createRequestHandler({ root = appDir, port = 4317, runAgen
   const token = randomBytes(32).toString('hex');
   const obsidian = new ObsidianBridge();
   const taskCreations = new Map();
-  let settings = { revision: 1, stages: defaultStageSettings() };
+  let settings = { revision: 1, maxParallelRuns: 2, stages: defaultStageSettings() };
   const diagnosis = {};
   let workspaceChatBusy = false;
   let queue = Promise.resolve();
@@ -162,7 +162,7 @@ export async function createRequestHandler({ root = appDir, port = 4317, runAgen
         if (resolved.modelId !== value.modelId || resolved.effort !== value.effort) throw new Error('INVALID_SETTINGS');
       }
     }
-    settings = saved;
+    settings = { ...saved, maxParallelRuns: Number.isInteger(saved.maxParallelRuns) && saved.maxParallelRuns >= 1 && saved.maxParallelRuns <= 4 ? saved.maxParallelRuns : 2 };
   } catch (error) {
     if (error.code !== 'ENOENT') console.error('設定檔格式不支援，改用預設角色設定：', error.message);
   }
@@ -236,6 +236,7 @@ export async function createRequestHandler({ root = appDir, port = 4317, runAgen
         return send(200, { turns: await workspaceChatTurns(root) });
       }
       const taskRoute = req.url.match(/^\/api\/tasks(?:\/(TASK-[a-zA-Z0-9-]+)(?:\/([a-z-]+))?)?(?:\?(.*))?$/);
+      const runRoute = req.url.match(/^\/api\/tasks\/(TASK-[a-zA-Z0-9-]+)\/runs(?:\/([a-f0-9-]+)\/(stop|retry))?$/);
       const projectRoute = req.url.match(/^\/api\/projects(?:\/([^/]+)(?:\/(save|summary|trash|stop-all))?)?$/);
       const trashRoute = req.url.match(/^\/api\/trash(?:\/(T-[0-9]{8}-[a-f0-9]{8})\/(restore|purge))?$/);
       if (req.method === 'GET' && trashRoute && !trashRoute[1]) {
@@ -364,6 +365,13 @@ export async function createRequestHandler({ root = appDir, port = 4317, runAgen
         return send(201, { attachment: await coach.attachments.stage(params.get('name'), req, params.has('batch') ? params.get('batch') : undefined, params.has('index') ? Number(params.get('index')) : undefined) });
       }
       const input = await body(req);
+      if(runRoute){
+        const [,id,runId,action]=runRoute,key=req.headers['idempotency-key'];
+        if(typeof key!=='string'||!/^[a-zA-Z0-9-]{8,80}$/.test(key))throw new TaskError(400,'IDEMPOTENCY_KEY_REQUIRED','缺少 Idempotency-Key。');
+        if(!action){const result=await coach.queueRuns(id,input.revision,key,input);return send(202,result);}
+        if(action==='stop'){const result=await coach.stopRun(id,runId,{key});return send(202,result);}
+        if(action==='retry'){const result=await coach.retryRun(id,runId,input.revision,key,input);return send(202,result);}
+      }
       if (req.url === '/api/workspace-chat') {
         if (workspaceChatBusy) throw new TaskError(429, 'CHAT_BUSY', '上一則訊息還在處理，請稍後再送出。');
         workspaceChatBusy = true;
@@ -422,7 +430,9 @@ export async function createRequestHandler({ root = appDir, port = 4317, runAgen
       if (req.url === '/api/settings') {
         const update = queue.then(async () => {
           if (input.revision !== settings.revision) return send(409, { code: 'REVISION_CONFLICT', revision: settings.revision });
-          const next = { revision: settings.revision + 1, stages: {} };
+          const maxParallelRuns=input.maxParallelRuns??settings.maxParallelRuns??2;
+          if(!Number.isInteger(maxParallelRuns)||maxParallelRuns<1||maxParallelRuns>4)throw new TaskError(400,'PARALLEL_LIMIT_INVALID','並行 AI 數量請設為 1 到 4。');
+          const next = { revision: settings.revision + 1, maxParallelRuns, stages: {} };
           for (const stage of stages) next.stages[stage.id] = resolveStageInput(stage.id, input.stages?.[stage.id]);
           await atomicWrite(settingsPath, JSON.stringify(next, null, 2));
           settings = next;

@@ -248,7 +248,127 @@ export class Coach {
     this.questions = new Map();
     this.executeFile = executeFile;
     this.attachments = new Attachments(root);
-    Object.assign(this, { store, settings, root, memory, children: new Map(), drivers: new Set(), overrides: new Map(), cancelled: new Set(), pending: new Map(), retries: new Map() });
+    Object.assign(this, { store, settings, root, memory, children: new Map(), drivers: new Set(), runDrivers: new Set(), overrides: new Map(), cancelled: new Set(), pending: new Map(), retries: new Map() });
+  }
+
+  parallelLimit() {
+    const value=this.settings().maxParallelRuns;
+    return Number.isInteger(value)&&value>=1&&value<=4?value:2;
+  }
+
+  syncLegacyRunning(planning) {
+    const active=(planning.runs||[]).find(run=>run.status==='running');
+    planning.running=active?{stage:active.stage||'D',provider:active.provider,modelId:active.modelId,effort:active.effort,agent:active.agent||active.provider||'AI 助手',startedAt:active.startedAt,turnId:active.turnId,workItemId:active.workItemId||null,mode:'write',...(active.stopping?{stopping:active.stopping}:{})}:null;
+  }
+
+  migrateLegacyRun(task){
+    const legacy=task.planning?.running;
+    if(!legacy)return;
+    task.planning.runs||=[];
+    if(!task.planning.runs.some(run=>run.turnId===legacy.turnId))task.planning.runs.push({id:legacy.turnId,turnId:legacy.turnId,executionKey:task.id,workItemId:legacy.workItemId||null,role:legacy.workItemId||stageName(legacy.stage),purpose:legacy.workItemId||stageName(legacy.stage),provider:legacy.provider,modelId:legacy.modelId,effort:legacy.effort,agent:legacy.agent,stage:legacy.stage,status:'running',startedAt:legacy.startedAt,endedAt:null,step:`正在${stageName(legacy.stage)}`,outputDir:null,error:null,stopping:legacy.stopping||null});
+  }
+
+  async queueRuns(id, revision, key, { itemIds = [], providers: assignments = {} } = {}) {
+    if(typeof key!=='string'||!/^[a-zA-Z0-9-]{8,80}$/.test(key))throw new TaskError(400,'IDEMPOTENCY_KEY_REQUIRED','缺少 Idempotency-Key。');
+    if(!Array.isArray(itemIds)||itemIds.length>20||itemIds.some(item=>typeof item!=='string')||!assignments||typeof assignments!=='object'||Array.isArray(assignments)||Object.keys(assignments).some(itemId=>!itemIds.includes(itemId)))throw new TaskError(400,'RUNS_INVALID','工作項目或 AI 指派格式不正確。');
+    const result=await this.store.mutate(id,revision,key,t=>{
+      if(t.planning?.phase!=='execute')throw new TaskError(409,'WRONG_PHASE','請先核准計畫。');
+      if(t.trashed)throw new TaskError(409,'TASK_TRASHED','任務在回收桶，請先還原。');
+      this.migrateLegacyRun(t);
+      const selected=itemIds.length?itemIds:[...new Set((t.planning.workItems||[]).filter(item=>item.owner==='ai'&&item.status==='TODO').map(item=>item.id))];
+      if(!selected.length)throw new TaskError(409,'NO_RUNNABLE_ITEMS','目前沒有可交給 AI 的工作項目。');
+      if(new Set(selected).size!==selected.length)throw new TaskError(400,'RUNS_INVALID','工作項目不能重複。');
+      const created=[];
+      for(const workItemId of selected){
+        const item=this.item(t,workItemId);
+        if(item.owner!=='ai'||!['TODO','BLOCKED'].includes(item.status))throw new TaskError(409,'ITEM_NOT_RUNNABLE',`「${item.title}」目前不能重新執行。`);
+        if((t.planning.runs||[]).some(run=>run.workItemId===item.id&&['queued','running'].includes(run.status)))throw new TaskError(409,'RUN_ALREADY_QUEUED',`「${item.title}」已在排程或執行中。`);
+        const provider=assignments[item.id]||null;
+        const agent=this.agentFor('D',provider,t);
+        const readyNow=ready(t.planning.workItems,item,unlockOf(t));
+        const run={id:randomUUID(),workItemId:item.id,role:item.title,purpose:item.detail||item.title,provider:agent.provider,modelId:agent.modelId,effort:agent.effort,agent:agentLabel(agent),stage:'D',status:'queued',startedAt:null,endedAt:null,step:readyNow?'排隊中':`等待前置項目：${(item.dependsOn||[]).filter(dep=>!unlockOf(t).includes(t.planning.workItems.find(w=>w.id===dep)?.status)).join('、')}`,outputDir:path.join(t.allowedRoots[0],item.id),turnId:null,error:null};
+        (t.planning.runs||=[]).push(run);created.push(run.id);
+      }
+      return {status:planningStatus(t),extra:{runIds:created}};
+    },'runs-queue',{itemIds,assignments});
+    this.driveRuns(id);
+    return result;
+  }
+
+  async driveRuns(id) {
+    if(this.runDrivers.has(id))return;
+    this.runDrivers.add(id);
+    const launched=[];
+    try{
+      let task=await this.latest(id);
+      let slots=this.parallelLimit()-(task.planning.runs||[]).filter(run=>run.status==='running').length;
+      if(slots<=0)return;
+      for(const run of (task.planning.runs||[]).filter(entry=>entry.status==='queued')){
+        if(slots<=0)break;
+        task=await this.latest(id);
+        const current=(task.planning.runs||[]).find(entry=>entry.id===run.id);
+        if(!current||current.status!=='queued')continue;
+        const item=task.planning.workItems.find(entry=>entry.id===current.workItemId);
+        if(!item||!['TODO','BLOCKED'].includes(item.status)){await this.setRunStatus(id,current.id,'failed','工作項目已不可執行','狀態已變更，請重新整理任務。');continue;}
+        if(!ready(task.planning.workItems,item,unlockOf(task))){await this.setRunStep(id,current.id,`等待前置項目：${(item.dependsOn||[]).filter(dep=>!unlockOf(task).includes(task.planning.workItems.find(w=>w.id===dep)?.status)).join('、')}`);continue;}
+        slots--;
+        try{const started=await this.execute(id,item.id,'D',{runId:current.id,provider:current.provider,outputDir:current.outputDir,parallel:true});launched.push(started.done);}
+        catch(error){await this.setRunStatus(id,current.id,'failed','無法開始',error.message);}
+      }
+    }catch(error){console.error(error);}
+    finally{this.runDrivers.delete(id);}
+    for(const done of launched)done.finally(()=>this.driveRuns(id)).catch(()=>{});
+  }
+
+  async setRunStatus(id,runId,status,step,error=null){
+    return this.store.mutate(id,'latest',null,t=>{const run=(t.planning.runs||[]).find(entry=>entry.id===runId);if(!run)throw new TaskError(404,'RUN_NOT_FOUND','找不到這次工作。');Object.assign(run,{status,step,error,endedAt:now()});this.syncLegacyRunning(t.planning);return{status:planningStatus(t)};});
+  }
+
+  async setRunStep(id,runId,step){
+    return this.store.mutate(id,'latest',null,t=>{const run=(t.planning.runs||[]).find(entry=>entry.id===runId);if(run?.status==='queued')run.step=step;return{status:planningStatus(t)};});
+  }
+
+  async stopRun(id,runId,{graceMs=5000,confirmMs=15000,global=false,key=null}={}){
+    const task=await this.latest(id),run=(task.planning.runs||[]).find(entry=>entry.id===runId);
+    if(!run||run.status!=='running')throw new TaskError(409,'RUN_NOT_RUNNING','這次工作目前沒有在執行。');
+    const executionKey=run.executionKey||runId;
+    if(this.cancelled.has(executionKey))return{stopping:true,task};
+    this.cancelled.add(executionKey);const requestedAt=now();
+    const updated=await this.store.mutate(id,'latest',key,t=>{
+      const active=(t.planning.runs||[]).find(entry=>entry.id===runId);
+      if(active)active.stopping={requestedAt,unconfirmed:false,global};
+      if(t.planning.running?.turnId===active?.turnId)t.planning.running.stopping=active.stopping;
+      return{status:planningStatus(t)};
+    },'run-stop',{runId});
+    await this.audit(id,global?'STOP_REQUESTED':'RUN_STOP_REQUESTED',{runId,workItemId:run.workItemId});
+    killTree(this.children.get(executionKey),'SIGTERM');
+    const kill=setTimeout(()=>killTree(this.children.get(executionKey),'SIGKILL'),graceMs);
+    const flag=setTimeout(async()=>{
+      if(!this.pending.has(executionKey))return;
+      await this.store.mutate(id,'latest',null,t=>{const active=(t.planning.runs||[]).find(entry=>entry.id===runId);if(active?.stopping)active.stopping.unconfirmed=true;if(t.planning.running?.turnId===active?.turnId)t.planning.running.stopping=active.stopping;return{status:planningStatus(t)};}).catch(()=>{});
+      await this.audit(id,'RUN_STOP_UNCONFIRMED',{runId});
+    },confirmMs);
+    kill.unref?.();flag.unref?.();this.pending.get(executionKey)?.finally(()=>{clearTimeout(kill);clearTimeout(flag);});
+    return{stopping:true,task:updated.task};
+  }
+
+  async retryRun(id,runId,revision,key,{provider}={}){
+    const task=await this.latest(id),previous=(task.planning.runs||[]).find(entry=>entry.id===runId);
+    if(!previous||!['failed','stopped','unknown'].includes(previous.status))throw new TaskError(409,'RUN_NOT_RETRYABLE','只有失敗、停止或結果未知的工作可以重新交辦。');
+    const item=this.item(task,previous.workItemId);
+    const targetProvider=provider||previous.provider;
+    const agent=this.agentFor('D',targetProvider,task);
+    const handoff=compactHandoff(task,targetProvider).content;
+    const outputDir=previous.outputDir||path.join(task.allowedRoots[0],item.id);
+    const result=await this.store.mutate(id,revision,key,t=>{
+      const current=(t.planning.runs||[]).find(entry=>entry.id===runId);
+      if(!current||!['failed','stopped','unknown'].includes(current.status))throw new TaskError(409,'RUN_NOT_RETRYABLE','這次工作狀態已改變，請重新整理。');
+      if((t.planning.runs||[]).some(run=>run.workItemId===item.id&&run.status==='running'))throw new TaskError(409,'RUN_ALREADY_ACTIVE','同一工作項目已有 AI 在執行。');
+      if(['BLOCKED','REVIEW_FAIL'].includes(item.status))item.status='TODO';
+      const next={id:randomUUID(),workItemId:item.id,role:item.title,purpose:item.detail||item.title,provider:agent.provider,modelId:agent.modelId,effort:agent.effort,agent:agentLabel(agent),stage:'D',status:'queued',startedAt:null,endedAt:null,step:'已排入接手工作',outputDir,turnId:null,error:null,handoff};
+      t.planning.runs.push(next);return{status:planningStatus(t),extra:{runId:next.id}};
+    },'run-retry',{runId,provider:targetProvider});
+    this.driveRuns(id);return result;
   }
 
   // 只增不改的事件紀錄。人的回覆逐字保存。
@@ -338,10 +458,11 @@ export class Coach {
         if (t.planning.autopilot) { t.planning.autopilot = null; }
         // 停止請求送出後服務就重啟：無法確認 CLI 是否結束，仍記為已停止，讓你核對後接續。
         if (running?.stopping && !running.discussion) t.planning.stopped = { stage: running.stage, itemId: running.workItemId || null, agent: running.agent, turnId: running.turnId, phase: t.planning.phase, startedAt: running.startedAt, at: now(), changed: [], afterRestart: true };
-        for (const active of [running, ...unfinished].filter(Boolean)) {
+        const activeRuns=[...new Map([running,...unfinished].filter(Boolean).map(active=>[active.turnId,active])).values()];
+        for (const active of activeRuns) {
           const turn = t.planning.learningTurns?.find(entry => entry.id === active.turnId);
           if (turn) Object.assign(turn, { status: 'unknown', completedAt: now(), error: '服務重啟，結果未知。' });
-          if (!running) t.planning.messages.push({ id: randomUUID(), role: 'system', stage: 'D', text: `服務重啟時，工作項目 ${active.workItemId || ''} 的結果未知，請檢查成果後再決定是否重跑。`, at: now() });
+          if (active.turnId!==running?.turnId) t.planning.messages.push({ id: randomUUID(), role: 'system', stage: 'D', text: `服務重啟時，工作項目 ${active.workItemId || ''} 的結果未知，請檢查成果後再決定是否重跑。`, at: now() });
         }
         if (running) t.planning.messages.push({ id: randomUUID(), role: 'system', stage: running.stage, text: `服務重啟時，${running.discussion?'問答':stageName(running.stage)}（${running.agent}）沒有完成，結果未知。${running.discussion?'這次問答未完成，可重新提問；原工作沒有接續。':'請檢查產出資料夾後重新執行。'}`, at: now() });
         return { status: planningStatus(t) };
@@ -354,28 +475,9 @@ export class Coach {
   async stop(id, { graceMs = 5000, confirmMs = 15000 } = {}) {
     const task = await this.latest(id);
     if (!task.planning?.running) throw new TaskError(409, 'NOTHING_RUNNING', '目前沒有正在執行的 AI。');
-    if (this.cancelled.has(id)) return { stopping: true, task: (await this.store.get(id)).task };
-    this.cancelled.add(id);
-    const requestedAt = now();
-    const result = await this.store.mutate(id, 'latest', null, t => {
-      if (t.planning.running) t.planning.running.stopping = { requestedAt, unconfirmed: false };
-      return { status: planningStatus(t) };
-    });
-    await this.audit(id, 'STOP_REQUESTED', { stage: task.planning.running.stage, turnId: task.planning.running.turnId });
-    const child = this.children.get(id);
-    killTree(child, 'SIGTERM');
-    const kill = setTimeout(() => killTree(this.children.get(id), 'SIGKILL'), graceMs);
-    const flag = setTimeout(async () => {
-      if (!this.pending.has(id)) return;
-      await this.store.mutate(id, 'latest', null, t => {
-        if (t.planning.running?.stopping) t.planning.running.stopping.unconfirmed = true;
-        return { status: planningStatus(t) };
-      }).catch(() => {});
-      await this.audit(id, 'STOP_UNCONFIRMED', {});
-    }, confirmMs);
-    kill.unref?.(); flag.unref?.();
-    this.pending.get(id)?.finally(() => { clearTimeout(kill); clearTimeout(flag); });
-    return { stopping: true, task: result.task };
+    const run=(task.planning.runs||[]).find(entry=>entry.turnId===task.planning.running.turnId);
+    if(!run)throw new TaskError(409,'NOTHING_RUNNING','目前沒有可停止的 AI 執行紀錄。');
+    return this.stopRun(id,run.id,{graceMs,confirmMs,global:true});
   }
 
   cancel(id) { return this.stop(id); }
@@ -514,7 +616,7 @@ export class Coach {
       for (const item of items) Object.assign(item, { status: 'DONE', humanNote: '', doneAt: now() });
       if (t.planning.workItems.every(i => i.status === 'DONE')) { t.planning.phase = 'done'; t.current.summary = `全部 ${t.planning.workItems.length} 個工作項目已由你確認。`; }
       return { status: planningStatus(t) };
-    }, 'confirm-all', {}).then(async r => { await this.audit(id, 'ITEMS_CONFIRMED', { items: r.task.planning.workItems.filter(i => i.doneAt && Date.now() - Date.parse(i.doneAt) < 5000).map(i => i.id) }); return r; });
+    }, 'confirm-all', {}).then(async r => { await this.audit(id, 'ITEMS_CONFIRMED', { items: r.task.planning.workItems.filter(i => i.doneAt && Date.now() - Date.parse(i.doneAt) < 5000).map(i => i.id) }); this.driveRuns(id); return r; });
   }
 
   // 中斷期間有變動的檔案：可能只寫了一半，接續前要核對，不算完成。
@@ -562,31 +664,44 @@ export class Coach {
   // AI 在背景執行：先標記 running 並立即回應，跑完再用最新 revision 寫回結果。
   async withAgent(id, stageId, mode, cwd, buildPrompt, apply, metadata = {}) {
     const executionName=metadata.discussion?'任務問答':stageName(stageId);
+    const executionKey=metadata.runId||id;
     let task = await this.latest(id);
     const agent = this.agentFor(stageId, metadata.provider || this.overrides.get(id), task);
-    task.folderListing = await this.listing(task.allowedRoots[0]);
-    if (task.planning.running || this.pending.has(id)) throw new TaskError(409, 'AGENT_BUSY', 'AI 還在進行中，等它完成再操作。');
+    task.folderListing = await this.listing(metadata.outputDir||task.allowedRoots[0]);
+    if(metadata.runId){
+      const queued=(task.planning.runs||[]).find(run=>run.id===metadata.runId&&run.status==='queued');
+      const active=(task.planning.runs||[]).filter(run=>run.status==='running').length;
+      if(!queued||this.pending.has(executionKey)||active>=this.parallelLimit())throw new TaskError(409,'AGENT_BUSY','目前沒有可用的執行位置。');
+    }else if (task.planning.running || this.pending.has(id)) throw new TaskError(409, 'AGENT_BUSY', 'AI 還在進行中，等它完成再操作。');
     if (task.trashed) throw new TaskError(409, 'TASK_TRASHED', '任務在回收桶，請先還原。');
     const stopped = task.planning.stopped;
     const resuming = stopped && stopped.stage === stageId && (stopped.itemId || null) === (metadata.workItemId || null);
     const resumeNote = resuming ? `\n\n【接續說明】上一次「${executionName}」在執行中被使用者停止，沒有完成。${stopped.changed?.length ? `中斷期間有變動的檔案：${stopped.changed.join('、')}。這些檔案可能只寫了一半，不能直接當成完成。` : ''}請先核對產出資料夾現有檔案與任務卡最新版本，沿用已確認的成果，再把這一步做完。` : '';
     const instructionNote = metadata.instruction ? `\n\n【使用者最新補充指示（優先於先前內容，原文）】\n${metadata.instruction}` : '';
     const attached = metadata.discussion ? {text:'',images:[]} : await attachmentContext(task, { provider: agent.provider, mode });
-    const prompt = `${await buildPrompt(task)}${attached.text}${resumeNote}${instructionNote}\n\n${LEARNING}`;
+    const runPrompt=metadata.parallel?`\n\n【本工作項目專屬資料夾】\n只能在 ${cwd} 內建立或修改本項成果。輸出清單使用相對於這個資料夾的檔名；不得讀寫其他工作項目的資料夾。${metadata.handoff?`\n\n【接手摘要】\n${metadata.handoff}`:''}${metadata.sources?`\n\n【可讀取的前置成果】\n${metadata.sources}`:''}`:'';
+    const prompt = `${await buildPrompt(task)}${attached.text}${resumeNote}${instructionNote}${runPrompt}\n\n${LEARNING}`;
     const lastReply = task.planning.messages.filter(m => m.role === 'user' && m.stage === stageId && m.kind !== 'discussion').at(-1);
     const item = metadata.workItemId && task.planning.workItems.find(w => w.id === metadata.workItemId);
     const userInput = metadata.userInput ?? lastReply?.text ?? (item ? `${executionName}：${item.title}${stageId === 'F' ? `\n修正意見：${(item.fixes || []).join('\n')}` : ''}` : `${executionName}：依目前任務卡接續`);
     const inputKind = metadata.inputKind || (lastReply ? 'user' : stageId === 'B' ? 'automatic' : 'action');
     const turnId = randomUUID();
     // 上一次執行剛結束時重按停止會留下標記；此時沒有執行中的 CLI，標記只可能屬於舊的執行。
-    this.cancelled.delete(id);
-    const started = await this.store.mutate(id, task.revision, null, t => {
+    this.cancelled.delete(executionKey);
+    const started = await this.store.mutate(id, metadata.runId ? 'latest' : task.revision, null, t => {
       const startedAt = now();
+      if(metadata.runId){
+        const queued=(t.planning.runs||[]).find(entry=>entry.id===metadata.runId&&entry.status==='queued');
+        const active=(t.planning.runs||[]).filter(entry=>entry.status==='running').length;
+        if(!queued||active>=this.parallelLimit())throw new TaskError(409,'AGENT_BUSY','目前沒有可用的執行位置。');
+      }
       (t.planning.learningTurns ||= []).push({ id: turnId, stage: stageId, provider: agent.provider, modelId: agent.modelId, effort: agent.effort, agent: agentLabel(agent), startedAt, status: 'running', prompt, userInput, inputKind, workItemId: metadata.workItemId || null, beforeRevision: task.revision, context: turnContext(task), simulated: /fake-cli/i.test(path.basename(process.env[{codex:'AWC_CODEX_BIN',claude:'AWC_CLAUDE_BIN',copilot:'AWC_COPILOT_BIN'}[agent.provider]] || '')) });
-      t.planning.running = { stage: stageId, provider: agent.provider, modelId: agent.modelId, effort: agent.effort, agent: agentLabel(agent), startedAt, turnId, workItemId: metadata.workItemId || null, mode, ...(metadata.discussion?{discussion:true}:{}) };
       const workItem = metadata.workItemId ? this.item(t, metadata.workItemId) : null;
-      (t.planning.runs ||= []).push({ id:turnId, workItemId:metadata.workItemId||null, role:workItem?.title||stageName(stageId), purpose:workItem?.detail||workItem?.title||stageName(stageId), provider:agent.provider, modelId:agent.modelId, effort:agent.effort, status:'running', startedAt, endedAt:null, step:`正在${stageName(stageId)}`, outputDir:cwd, turnId, error:null });
-      if (t.planning.runs.length > 200) t.planning.runs = t.planning.runs.filter(run => run.status === 'running').concat(t.planning.runs.filter(run => run.status !== 'running').slice(-180));
+      let run=metadata.runId?(t.planning.runs||[]).find(entry=>entry.id===metadata.runId):null;
+      if(run)Object.assign(run,{status:'running',startedAt,endedAt:null,step:`正在${stageName(stageId)}`,outputDir:cwd,turnId,stage:stageId,provider:agent.provider,modelId:agent.modelId,effort:agent.effort,agent:agentLabel(agent),executionKey});
+      else{run={id:turnId,workItemId:metadata.workItemId||null,role:workItem?.title||stageName(stageId),purpose:workItem?.detail||workItem?.title||stageName(stageId),provider:agent.provider,modelId:agent.modelId,effort:agent.effort,agent:agentLabel(agent),stage:stageId,status:'running',startedAt,endedAt:null,step:`正在${stageName(stageId)}`,outputDir:cwd,turnId,error:null,executionKey};(t.planning.runs||=[]).push(run);}
+      if (t.planning.runs.length > 200) t.planning.runs = t.planning.runs.filter(entry => entry.status === 'running').concat(t.planning.runs.filter(entry => entry.status !== 'running').slice(-180));
+      this.syncLegacyRunning(t.planning);
       t.planning.stopped = null;
       return { status: 'RUNNING' };
     });
@@ -595,24 +710,25 @@ export class Coach {
      try {
       let result, failure, prepared;
       try {
-        result = await this.runAgent({ ...agent, mode, cwd, prompt, images: attached.images, onSpawn: child => { this.children.set(id, child); if (this.cancelled.has(id)) child.kill('SIGTERM'); } });
+        result = await this.runAgent({ ...agent, mode, cwd, prompt, images: attached.images, onSpawn: child => { this.children.set(executionKey, child); if (this.cancelled.has(executionKey)) child.kill('SIGTERM'); } });
         if (metadata.beforeApply) prepared = await metadata.beforeApply(result.text, await this.latest(id));
       } catch (error) {
-        failure = this.cancelled.has(id) ? new AgentError('AGENT_CANCELLED', '你已停止這次執行。') : error;
+        failure = this.cancelled.has(executionKey) ? new AgentError('AGENT_CANCELLED', '你已停止這次執行。') : error;
       } finally {
-        this.children.delete(id);
-        this.cancelled.delete(id);
+        this.children.delete(executionKey);
+        this.cancelled.delete(executionKey);
       }
       task = await this.latest(id);
       if (failure) await this.audit(id, failure.code === 'AGENT_CANCELLED' ? 'STAGE_STOPPED' : 'STAGE_FAILED', { stage: stageId, agent: agentLabel(agent), code: failure.code, message: failure.message });
-      const changed = failure?.code === 'AGENT_CANCELLED' && mode === 'write' ? await this.changedSince(cwd, task.planning.running?.startedAt || now()) : [];
+      const changed = failure?.code === 'AGENT_CANCELLED' && mode === 'write' ? await this.changedSince(cwd, (task.planning.runs||[]).find(entry=>entry.id===(metadata.runId||turnId))?.startedAt || now()) : [];
       return await this.store.mutate(id, 'latest', null, async t => {
         const running = t.planning.running;
-        t.planning.running = null;
+        if(running?.turnId===turnId)t.planning.running = null;
         const turn = t.planning.learningTurns.find(entry => entry.id === turnId);
         turn.completedAt = now();
         const run = (t.planning.runs || []).find(entry => entry.turnId === turnId);
-        const finishRun = (status, step, error = null) => { if (run) Object.assign(run, { status, step, error, endedAt:now() }); };
+        const globalStop=Boolean(run?.stopping?.global||!metadata.runId);
+        const finishRun = (status, step, error = null) => { if (run) Object.assign(run, { status, step, error, endedAt:now(), stopping:null }); this.syncLegacyRunning(t.planning); };
         if (failure?.code === 'AGENT_CANCELLED' && metadata.discussion) {
           finishRun('stopped','已停止');
           Object.assign(turn,{status:'stopped',error:failure.message,errorCode:'AGENT_CANCELLED'});
@@ -623,9 +739,9 @@ export class Coach {
           finishRun('stopped','已停止');
           // 已確認 CLI 結束：中斷步驟沒有完成，保留對話與檔案，等使用者決定接續。
           Object.assign(turn, { status: 'stopped', error: failure.message, errorCode: 'AGENT_CANCELLED', changed });
-          t.planning.stopped = { stage: stageId, itemId: metadata.workItemId || null, agent: agentLabel(agent), turnId, phase: t.planning.phase, startedAt: running?.startedAt || null, at: now(), changed, replan: stageId === 'C' && t.planning.phase === 'execute' };
+          if(globalStop)t.planning.stopped = { stage: stageId, itemId: metadata.workItemId || null, agent: agentLabel(agent), turnId, phase: t.planning.phase, startedAt: run?.startedAt || null, at: now(), changed, replan: stageId === 'C' && t.planning.phase === 'execute' };
           t.planning.messages.push({ id: randomUUID(), role: 'system', stage: stageId, text: `你停止了${executionName}${metadata.workItemId ? ` ${metadata.workItemId}` : ''}（${agentLabel(agent)}），已確認 CLI 結束。這一步沒有完成${changed.length ? `；產出資料夾有 ${changed.length} 個檔案在這段期間變動，可能只寫了一半，接續時會先核對` : ''}。`, at: now() });
-          if (t.planning.autopilot) { t.planning.autopilot = null; t.planning.messages.push({ id: randomUUID(), role: 'system', stage: stageId, text: '你停止了這次執行，自動模式已關閉。要繼續請再按「交給 AI 一路做到完」。', at: now() }); }
+          if (globalStop&&t.planning.autopilot) { t.planning.autopilot = null; t.planning.messages.push({ id: randomUUID(), role: 'system', stage: stageId, text: '你停止了這次執行，自動模式已關閉。要繼續請再按「交給 AI 一路做到完」。', at: now() }); }
           return { status: planningStatus(t), extra: { stopped: true, error: { code: 'AGENT_CANCELLED', message: failure.message } } };
         }
         if (failure) {
@@ -649,6 +765,7 @@ export class Coach {
         const completed = draft.planning.learningTurns.find(entry => entry.id === turnId);
         const completedRun = (draft.planning.runs || []).find(entry => entry.turnId === turnId);
         if (completedRun) Object.assign(completedRun, { status:'done', endedAt:now(), step:'完成待你查看', error:null });
+        this.syncLegacyRunning(draft.planning);
         completed.status = 'completed';
         completed.afterRevision = t.revision + 1;
         completed.nextAction = planningAction(draft);
@@ -668,10 +785,10 @@ export class Coach {
       });
      } finally {
       // 在 done 解決之前就移除，接續的下一個階段才不會被誤判為忙碌。
-      this.pending.delete(id);
+      this.pending.delete(executionKey);
      }
     })();
-    this.pending.set(id, done);
+    this.pending.set(executionKey, done);
     done.catch(error => console.error(error));
     return { ...started, done };
   }
@@ -948,8 +1065,32 @@ export class Coach {
     return item;
   }
 
-  async execute(id, itemId, stageId = 'D') {
-    const outDir = (await this.latest(id)).allowedRoots[0];
+  async execute(id, itemId, stageId = 'D', runOptions = {}) {
+    const initial=await this.latest(id), outputRoot=initial.allowedRoots[0];
+    let outDir=outputRoot;
+    let sourceSummary='';
+    if(runOptions.parallel){
+      outDir=path.join(outputRoot,itemId);
+      await mkdir(outDir,{recursive:true});
+      const [rootReal,dirReal]=await Promise.all([realpath(outputRoot),realpath(outDir)]);
+      if(!dirReal.startsWith(`${rootReal}${path.sep}`))throw new TaskError(403,'RUN_OUTPUT_PATH','工作項目資料夾位置不受支援。');
+      const sourceRows=[];
+      for(const dep of initial.planning.workItems.find(item=>item.id===itemId)?.dependsOn||[]){
+        const source=initial.planning.workItems.find(item=>item.id===dep);
+        for(const output of source?.outputs||[]){
+          const candidate=path.resolve(outputRoot,output.file);
+          if(!candidate.startsWith(`${rootReal}${path.sep}`))continue;
+          try{
+            const real=await realpath(candidate),info=await stat(real);
+            if(!real.startsWith(`${rootReal}${path.sep}`)||!info.isFile())continue;
+            const relative=path.relative(outputRoot,real),target=path.join(outDir,'.mentor-sources',dep,relative);
+            await mkdir(path.dirname(target),{recursive:true});await writeFile(target,await readFile(real));
+            sourceRows.push(`${dep}/${relative.split(path.sep).join('/')} → .mentor-sources/${dep}/${relative.split(path.sep).join('/')}`);
+          }catch{}
+        }
+      }
+      sourceSummary=sourceRows.join('\n')||'沒有已完成的前置成果。';
+    }
     return this.withAgent(id, stageId, 'write', outDir, t => {
       const item = this.item(t, itemId);
       if (t.planning.phase !== 'execute') throw new TaskError(409, 'WRONG_PHASE', '請先核准計畫。');
@@ -972,7 +1113,7 @@ export class Coach {
         try {
           const real = await realpath(full);
           if (!real.startsWith(`${outDir}${path.sep}`) || !(await stat(real)).isFile()) continue;
-          outputs.push({ file: path.relative(outDir, real).split(path.sep).join('/'), sha: sha256(await readFile(real)) });
+          outputs.push({ file: path.relative(outputRoot, real).split(path.sep).join('/'), sha: sha256(await readFile(real)) });
         } catch {}
       }
       item.attempts += 1;
@@ -989,10 +1130,10 @@ export class Coach {
       } else item.blocked = null;
       item.executor = agent;
       item.review = null;
-      item.sensors = await outputSensors(outDir, item, t.planning.outline);
+      item.sensors = await outputSensors(outputRoot, item, t.planning.outline);
       if (testResult) item.sensors.push({ ...testResult, attempt: item.attempts, stage: stageId, at: now() });
       this.addDiary(t, stageId, extractJson(text)?.diary, agent);
-    }, { workItemId: itemId, beforeApply: async (text, task) => {
+    }, { workItemId: itemId, ...(runOptions.parallel?{runId:runOptions.runId,provider:runOptions.provider,outputDir:outDir,parallel:true,sources:sourceSummary,handoff:(initial.planning.runs||[]).find(run=>run.id===runOptions.runId)?.handoff}:{}), beforeApply: async (text, task) => {
       const parsed = parseExecution(text, task.preview);
       if (parsed.status !== 'DONE' || parsed.metadataError) return null;
       const command = parsed.testCommand ?? task.planning.card.testCommand;
@@ -1212,6 +1353,7 @@ export class Coach {
     }, 'confirm', { itemId, accept, note }).then(async result => {
       const done = result.task.planning.workItems.find(i => i.id === itemId)?.status === 'DONE';
       await this.audit(id, done ? 'ITEM_CONFIRMED' : 'ITEM_RETURNED', { itemId, text: String(note || '') });
+      if(done)this.driveRuns(id);
       return result;
     });
   }
