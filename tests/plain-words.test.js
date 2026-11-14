@@ -34,6 +34,20 @@ test('static interface copy avoids engineering terms from the glossary', () => {
   assert.doesNotMatch(Object.values(terms).join(' '),banned);
 });
 
+test('task details, plan preview, work cards, and work panel copy are scanned',()=>{
+  const slices=[
+    html.slice(html.indexOf('function renderPlanning('),html.indexOf('// 使用者正在輸入或展開行內表單時')),
+    html.slice(html.indexOf('function renderRunCard('),html.indexOf('function renderWorkspacePanels(')),
+    html.slice(html.indexOf('async function previewPlan('),html.indexOf('function renderHandoffTaskPicker(')),
+    html.slice(html.indexOf('function openTask('),html.indexOf('function renderSessions('))
+  ];
+  const visibleLiterals=slices.flatMap(slice=>[...slice.matchAll(/element\(\s*['"][^'"]+['"]\s*,\s*(['"])([^'"\\]*(?:\\.[^'"\\]*)*)\1/g)].map(match=>match[2]));
+  const visible=visibleLiterals.join(' ');
+  const banned=/\b(?:revision|workItem|sensor|PASS|FAIL|NOT_RUN|provider|effort|token|CLI|exit code|stdout|stderr|UTF-8 bytes|SHA-256)\b|階段 [A-F]/i;
+  assert.doesNotMatch(visible,banned,visible);
+  assert.ok(slices.length===4);
+});
+
 test('server serves the language glossary to the chat page', async () => {
   const server = await readFile(new URL('../src/server.js', import.meta.url), 'utf8');
   assert.ok(server.includes('plain-words\\.js'));

@@ -1532,7 +1532,7 @@ function workDialog(title){
 async function previewPlan(t){
  const {plan}=await request(`/api/tasks/${t.id}/plan`);if(!plan)throw new Error('目前沒有待核准的方案。');
  const d=workDialog('預覽並核准計畫');
- d.append(definition([['原始要求',plan.request],['AI 的理解',plan.interpretation],['產出範圍',plan.outputRoot],['套用效果',plan.effect],['復原方式',plan.recovery],['方案版本',`revision ${plan.revision} · ${plan.id.slice(0,12)}`]]));
+ d.append(definition([['原始要求',plan.request],['AI 的理解',plan.interpretation],['產出範圍',plan.outputRoot],['套用效果',plan.effect],['復原方式',plan.recovery],['方案版本',`第 ${plan.revision} 版 · ${plan.id.slice(0,12)}`]]));
  for(const [heading,values] of [['可以修改',plan.scope?.allowed],['禁止操作',plan.scope?.forbidden],['鎖定條件',plan.scope?.locked?.map(v=>v.text)],['任務限制',plan.constraints],['尚待核對',plan.unknowns]]){d.append(element('h3',heading),element('p',(values||[]).join('；')||'未記錄','small'));}
  for(const item of plan.items)d.append(element('h3',`${item.id} ${item.title} · ${item.owner==='human'?'由你處理':'由 AI 處理'}`),element('p',item.detail||'未記錄'),element('p',`驗收：${(item.acceptance||[]).join('；')}`,'small muted'));
  const error=element('p','','notice'),ok=element('button',`核准這 ${plan.items.length} 項工作`,'btn primary'),edit=element('button','先修改方案','btn');error.hidden=true;error.setAttribute('role','alert');edit.onclick=()=>{d.close();focusInstruct();};
@@ -1547,9 +1547,9 @@ async function showRoundCards(t){
   box.append(definition([['本輪要求',c.userInput||'未記錄'],['當時理解',c.context?.interpretation||'舊紀錄未保存'],['實際結果',c.outcome],['版本',`${c.baseRevision??'未知'} → ${c.resultRevision??'尚無'}`],['當輪下一步',c.next?.label||'未記錄，請查看任務目前狀態']]));
   if(c.aiClaims?.change)box.append(element('p',`AI 自述改動：${c.aiClaims.change}`,'small'));
   if(c.aiClaims?.evidence)box.append(element('p',`AI 聲稱的證據（非獨立驗證）：${c.aiClaims.evidence}`,'small muted'));
-  for(const o of c.outputs){const file=typeof o==='string'?o:o.file||o.path,b=element('button',`查看目前檔案：${file}`,'btn');b.onclick=busy(b,async()=>{d.close();await openPreview(t.id,file,b);});box.append(b,element('p',`這輪登記 SHA-256：${typeof o==='object'&&o.sha?o.sha:'未記錄'}。按鍵開啟目前檔案，不能據此當成這輪原始內容。`,'small muted'));}
+  for(const o of c.outputs){const file=typeof o==='string'?o:o.file||o.path,b=element('button',`查看目前檔案：${file}`,'btn');b.onclick=busy(b,async()=>{d.close();await openPreview(t.id,file,b);});box.append(b,element('p',`這輪記錄的成果摘要：${typeof o==='object'&&o.sha?o.sha:'未記錄'}。按鍵開啟目前檔案，不能據此當成這輪原始內容。`,'small muted'));}
   if(c.checks.length)box.append(sensorList(c.checks));else box.append(element('p','機器檢查未記錄，不視為通過。','small muted'));
-  box.append(element('p',`本輪輸入 ${c.contextMetrics.input.characters} 字元／${c.contextMetrics.input.utf8Bytes} UTF-8 bytes；輸出 ${c.contextMetrics.output.characters} 字元。${c.contextMetrics.usageLabel||'Token 與費用未知。'}`,'small muted'),element('p',`來源：${c.source}`,'small muted'));d.append(box);
+  box.append(element('p',`本輪輸入 ${c.contextMetrics.input.characters} 字元；輸出 ${c.contextMetrics.output.characters} 字元。${c.contextMetrics.usageLabel||'用量與費用尚未提供。'}`,'small muted'),element('p',`來源：${c.source}`,'small muted'));d.append(box);
  }
  const brief=element('button','準備精簡接手包','btn primary');brief.onclick=busy(brief,async()=>showCompactHandoff(t));d.append(brief);
 }
