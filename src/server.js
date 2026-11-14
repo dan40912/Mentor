@@ -24,6 +24,7 @@ import { summarize, MOMENTS } from './feedback.js';
 import { writeHandoff, previewHandoff } from './handoffs.js';
 import { readAttachment } from './attachments.js';
 import { ProjectNotes } from './project-notes.js';
+import { extractSlides, checkNumberSources, parseDecisionCard } from './output-preview.js';
 
 const appDir = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const webDir = path.join(appDir, 'web');
@@ -287,6 +288,21 @@ export async function createRequestHandler({ root = appDir, port = 4317, runAgen
           const note = await projectNotes.sync(task, (await tasks.list()).filter(t => !t.trashed));
           return send(200, note);
         }
+        if (id && action === 'slides') {
+          const { task } = await tasks.get(id);
+          const file = new URLSearchParams(query || '').get('file');
+          if (path.extname(file || '').toLowerCase() !== '.html') throw new TaskError(415, 'SLIDE_PREVIEW_UNSUPPORTED', '逐頁預覽目前只支援已登記的 HTML 簡報。');
+          const preview = await previewArtifact(tasks, root, id, file);
+          const slides = extractSlides(preview.content.toString('utf8'));
+          if (!slides.length) throw new TaskError(422, 'SLIDES_NOT_FOUND', '這份 HTML 沒有可辨認的投影片區塊。');
+          const materials = [task.goal, task.planning?.request, ...(task.facts || []).map(f => `${f.label} ${f.value}`)];
+          for (const attachment of task.attachments || []) {
+            try { materials.push((await readAttachment(task, attachment.id)).content.toString('utf8')); } catch { /* Missing or unsupported material remains unverified. */ }
+          }
+          const cards = slides.map(slide => ({ ...slide, numbers: checkNumberSources(slide.html, materials) }));
+          const decision = parseDecisionCard(preview.content.toString('utf8')) || parseDecisionCard(task.current?.summary || '');
+          return send(200, { slides: cards, decision });
+        }
         if (id && ['work-cards', 'plan', 'handoff-summary'].includes(action)) {
           const task = (await tasks.list()).find(t => t.id === id && !t.error);
           if (!task) throw new TaskError(404, 'TASK_NOT_FOUND', '找不到任務。');
@@ -501,7 +517,20 @@ export async function createRequestHandler({ root = appDir, port = 4317, runAgen
         autopilot: (id, key) => coach.setAutopilot(id, input.revision, key, input),
         feedback: (id, key) => coach.feedback(id, input.revision, key, input),
         agents: (id, key) => coach.setAgents(id, input.revision, key, input),
-        'confirm-all': (id, key) => coach.confirmAll(id, input.revision, key)
+        'confirm-all': (id, key) => coach.confirmAll(id, input.revision, key),
+        'decision-card': async (id, key) => {
+          const { task } = await tasks.get(id);
+          if (task.revision !== input.revision) throw new TaskError(409, 'REVISION_CONFLICT', '任務已被更新，請重新整理後再操作。', { revision: task.revision });
+          const preview = await previewArtifact(tasks, root, id, input.file);
+          const card = parseDecisionCard(preview.content.toString('utf8'));
+          if (!card || card.error || !Number.isInteger(input.optionIndex) || !card.options[input.optionIndex]) throw new TaskError(400, 'DECISION_CARD_INVALID', '這份成果沒有可保存的決策選項。');
+          const option = card.options[input.optionIndex], decisionId = randomUUID(), optionIds = optionIndex => `O${optionIndex + 1}`;
+          return tasks.mutate(id, input.revision, key, current => {
+            const options = card.options.map((item, index) => ({ id: optionIds(index), label: item.label, cost: item.costs.join('；'), benefits: item.benefits, evidence: item.evidence }));
+            current.decisions.push({ id: decisionId, status: 'DECIDED', question: card.question || '請選擇一個方案', options, recommendation: card.recommendation, recommendationReason: card.recommendationReason, choice: optionIds(input.optionIndex), note: String(input.note || '').slice(0, 1000), decidedAt: new Date().toISOString(), source: input.file });
+            return {};
+          }, 'decision-card', { file: input.file, optionIndex: input.optionIndex, note: input.note || '' });
+        }
       };
       if (taskRoute?.[1] && coachActions[taskRoute[2]]) {
         const [, id, action] = taskRoute;
