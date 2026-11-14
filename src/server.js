@@ -82,6 +82,24 @@ async function atomicWrite(file, content) {
   await renameReplace(temporary, file);
 }
 
+function normalizeTaskProposal(proposal, diagnosis, fallbackProvider) {
+  if (proposal === undefined) return { proposal: null, warnings: [] };
+  if (!proposal || typeof proposal !== 'object' || Array.isArray(proposal) || typeof proposal.goal !== 'string' || proposal.goal.trim().length < 4 || proposal.goal.length > 6000 || !Array.isArray(proposal.steps) || proposal.steps.length > 8) {
+    throw new TaskError(400, 'PROPOSAL_INVALID', '工作提案格式不正確，請重新整理提案。');
+  }
+  const warnings = [];
+  const steps = proposal.steps.map((step, index) => {
+    if (!step || typeof step !== 'object' || typeof step.title !== 'string' || !step.title.trim() || step.title.length > 120 || typeof step.purpose !== 'string' || !step.purpose.trim() || step.purpose.length > 300) {
+      throw new TaskError(400, 'PROPOSAL_INVALID', `提案第 ${index + 1} 項缺少名稱或說明。`);
+    }
+    const requested = ['codex', 'claude', 'copilot'].includes(step.agent) ? step.agent : null;
+    const agent = requested && diagnosis[requested]?.ok === true ? requested : fallbackProvider;
+    if (agent !== requested) warnings.push(`「${step.title.trim()}」原建議的 AI 尚未確認可用，先改用角色設定的 ${agent}。`);
+    return { title: step.title.trim().slice(0, 120), purpose: step.purpose.trim().slice(0, 300), agent, reason: String(step.reason || '').slice(0, 300) };
+  });
+  return { proposal: { goal: proposal.goal.trim(), audience: String(proposal.audience || '').slice(0, 300), format: String(proposal.format || '').slice(0, 100), steps, userActions: Array.isArray(proposal.userActions) ? proposal.userActions.slice(0, 8).map(String) : [], materials: Array.isArray(proposal.materials) ? proposal.materials.slice(0, 8).map(String) : [], missingMaterials: Array.isArray(proposal.missingMaterials) ? proposal.missingMaterials.slice(0, 8).map(String) : [] }, warnings };
+}
+
 export function handoffMarkdown(input, id) {
   const model = resolveModel(input.provider, input.modelKey);
   for (const field of ['goal', 'scope', 'acceptance', 'next']) {
@@ -515,7 +533,14 @@ export async function createRequestHandler({ root = appDir, port = 4317, runAgen
         const cached = key && taskCreations.get(key);
         if (cached && cached.fingerprint !== fingerprint) throw new TaskError(409, 'IDEMPOTENCY_KEY_REUSED', '相同操作識別不能套用不同任務內容。');
         if (!cached && key && taskCreations.size >= 500) throw new TaskError(429, 'CREATION_LIMIT', '這個服務階段已保存 500 次建立操作，請先確認現有任務；重新啟動會清除連線與操作快取。');
-        const run = cached?.run || coach.create(input);
+        const taskInput = { ...input };
+        if (input.proposal !== undefined) {
+          const normalized = normalizeTaskProposal(input.proposal, diagnosis, settings.stages.D.provider);
+          taskInput.request = normalized.proposal.goal;
+          taskInput.proposal = normalized.proposal;
+          taskInput.proposalWarnings = normalized.warnings;
+        }
+        const run = cached?.run || coach.create(taskInput);
         if (key && !cached) { taskCreations.set(key, { fingerprint, run }); run.catch(() => taskCreations.delete(key)); }
         const result = await run;
         return send(202, { task: result.task });

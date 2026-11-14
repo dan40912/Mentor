@@ -2192,12 +2192,13 @@ async function assignTask(task,idempotencyKey=crypto.randomUUID()){
   send.disabled = true;
   const reply = message('正在建立任務…');
   try{
-    const details=typeof task==='string'?task:[task.goal,`對象：${task.audience||'待確認'}`,`成果：${task.format||'待確認'}`,...(task.steps||[]).map(step=>`- ${step.title}：${step.purpose}；建議 AI 助手：${step.agent||'待安排'}（${step.reason||'依任務內容安排'}）`),...(task.userActions||[]).map(item=>`- 需要使用者：${item}`)].join('\n');
-    const result = await request('/api/tasks',{request:details,autopilot:false},{'Idempotency-Key':idempotencyKey});
+    const details=typeof task==='string'?task:task.goal;
+    const result = await request('/api/tasks',{request:details,profile:'quick',...(typeof task==='string'?{}:{proposal:task}),autopilot:false},{'Idempotency-Key':idempotencyKey});
     tasks = [result.task,...tasks.filter(item => item.id !== result.task.id)];
     renderOverview();
     ensurePolling();
-    reply.textContent = '已建立任務。可以打開任務查看 AI 整理的任務卡與後續進度。';
+    const warnings=(result.task.planning?.messages||[]).filter(item=>item.role==='system'&&item.stage==='D').map(item=>item.text);
+    reply.textContent = `已建立任務。${warnings.length?warnings.join(' '):''}可以打開任務查看 AI 整理的任務卡與後續進度。`;
     action(reply,'查看任務',() => {setChat(false,false);openTask(result.task.id);});
     return true;
   }catch(error){
