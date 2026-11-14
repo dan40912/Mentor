@@ -34,7 +34,11 @@ cd Mentor
 npm run demo
 ```
 
-Open the printed URL, normally [127.0.0.1:4317](http://127.0.0.1:4317). **Each demo launch recreates `.demo-home/`**; never keep real work there. You can read fictional tasks, make sample decisions and inspect handoffs without an AI login. The demo does not automatically replace subsequent agent calls with fake CLI calls: executing AI work uses your logged-in account and quota.
+Open the printed URL, normally [127.0.0.1:4317](http://127.0.0.1:4317). Demo data lives in a temporary folder and is removed when the demo service stops. Every AI reply in demo mode comes from the fake CLI; it does not use an AI account or quota.
+
+### For a first-time, nontechnical user
+
+Install Node.js 20 or later, then double-click `start.cmd` on Windows or `start.command` on macOS. On Linux, run `./start.sh`. The scripts check the Node version, start Mentor and open your browser. The first-run guide checks each available AI CLI and offers a separate simulated demo. Each AI check makes one real CLI request and may use quota. The guide links to the providers’ installation and sign-in instructions. Example tasks fill the new-task form so you can adjust the request before starting.
 
 For your own separate data directory:
 

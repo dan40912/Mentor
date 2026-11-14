@@ -1,7 +1,8 @@
 // 建立一份虛構的示範資料並啟動 Mentor：npm run demo
-// 資料放在 .demo-home/，不會碰到你自己的 vault。
-import { mkdir, writeFile, rm } from 'node:fs/promises';
+// 資料放在系統暫存目錄，與正式工作區分開。
+import { mkdir, writeFile, rm, mkdtemp } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { serializeTask, sha256 } from '../src/tasks.js';
@@ -9,9 +10,8 @@ import { Projects } from '../src/projects.js';
 import { Memory } from '../src/memory.js';
 
 const appDir = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
-const home = path.join(appDir, '.demo-home');
+const home = await mkdtemp(path.join(tmpdir(), 'mentor-demo-'));
 const vault = path.join(home, 'vault');
-await rm(home, { recursive: true, force: true });
 await mkdir(vault, { recursive: true });
 
 const base = (id, dir) => ({
@@ -58,6 +58,8 @@ await new Projects(path.join(vault, 'projects')).create({ name: 'Demo 專案' })
 await new Memory(path.join(vault, 'memory')).append('project', 'Demo 專案', '取捨', '交辦前先寫讀者與他要做的決定，AI 的第一版就會準很多。', '示範規則');
 
 const port = process.env.PORT || '4317';
-console.log(`\nMentor demo 資料已建立在 ${home}\n開啟 http://127.0.0.1:${port}\n`);
-const child = spawn(process.execPath, [path.join(appDir, 'src', 'server.js')], { stdio: 'inherit', env: { ...process.env, PORT: port, MENTOR_HOME: home } });
-child.on('exit', code => process.exit(code ?? 0));
+const fakeCli = path.join(appDir, 'tests', 'fixtures', 'fake-cli.mjs');
+console.log(`\nMentor demo 使用獨立虛構資料；所有 AI 回覆均為模擬。\n資料暫存於 ${home}\n開啟 http://127.0.0.1:${port}\n`);
+const child = spawn(process.execPath, [path.join(appDir, 'src', 'server.js')], { stdio: 'inherit', env: { ...process.env, PORT: port, MENTOR_HOME: home, AWC_CODEX_BIN: fakeCli, AWC_CLAUDE_BIN: fakeCli, AWC_COPILOT_BIN: fakeCli, FAKE_MODE: 'ok' } });
+child.on('exit', async code => { await rm(home, { recursive: true, force: true }); process.exit(code ?? 0); });
+for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, () => child.kill('SIGTERM'));

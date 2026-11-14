@@ -4,6 +4,7 @@ import { planPreview } from './plan-preview.js';
 import { compactHandoff } from './compact-handoff.js';
 import { probePreview, localPreviewUrl } from './review-settings.js';
 import http from 'node:http';
+import { spawn } from 'node:child_process';
 import { randomUUID, randomBytes } from 'node:crypto';
 import { mkdir, readFile, writeFile, realpath, readdir, stat } from 'node:fs/promises';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -25,6 +26,7 @@ import { writeHandoff, previewHandoff } from './handoffs.js';
 import { readAttachment } from './attachments.js';
 import { ProjectNotes } from './project-notes.js';
 import { extractSlides, checkNumberSources, parseDecisionCard } from './output-preview.js';
+import { errorGuidance } from './error-guidance.js';
 
 const appDir = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const webDir = path.join(appDir, 'web');
@@ -143,6 +145,7 @@ export async function createRequestHandler({ root = appDir, port = 4317, runAgen
   let settings = { revision: 1, maxParallelRuns: 2, stages: defaultStageSettings() };
   const diagnosis = {};
   let workspaceChatBusy = false;
+  let demoChild = null, demoPort = null;
   let queue = Promise.resolve();
   await mkdir(memory, { recursive: true });
   const canonicalRoot = await realpath(root);
@@ -179,6 +182,7 @@ export async function createRequestHandler({ root = appDir, port = 4317, runAgen
     const requestPort = typeof port === 'function' ? port() : port;
     const origin = `http://127.0.0.1:${requestPort}`;
     const send = (status, data) => {
+      if (data?.code && !data.guidance) { const guidance = errorGuidance(data.code); if (guidance) data = { ...data, guidance }; }
       if (data?.task && !data.task.error) data = { ...data, task: { ...data.task, workCards: workCards(data.task).slice(-3) } };
       res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
       res.end(JSON.stringify(data));
@@ -404,6 +408,27 @@ export async function createRequestHandler({ root = appDir, port = 4317, runAgen
           return send(200, await workspaceChat({ input, root, taskStore: tasks, agent: settings.stages.B, runner: runAgent }));
         }finally{workspaceChatBusy = false;}
       }
+      if (req.url === '/api/onboarding/demo') {
+        if (demoChild && demoChild.exitCode === null) return send(200, { url: `http://127.0.0.1:${demoPort}`, simulated: true });
+        const probe = http.createServer();
+        demoPort = await new Promise((resolve, reject) => { probe.once('error', reject); probe.listen(0, '127.0.0.1', () => { const value = probe.address().port; probe.close(error => error ? reject(error) : resolve(value)); }); });
+        const fakeCli = path.join(appDir, 'tests', 'fixtures', 'fake-cli.mjs');
+        demoChild = spawn(process.execPath, [path.join(appDir, 'scripts', 'demo.mjs')], { cwd: appDir, stdio: 'ignore', windowsHide: true, env: { ...process.env, PORT: String(demoPort), AWC_CODEX_BIN: fakeCli, AWC_CLAUDE_BIN: fakeCli, AWC_COPILOT_BIN: fakeCli, FAKE_MODE: 'ok' } });
+        demoChild.once('error', () => { demoChild = null; });
+        demoChild.once('exit', () => { demoChild = null; demoPort = null; });
+        const ready = await new Promise(resolve => {
+          const deadline = Date.now() + 8000;
+          const check = () => {
+            if (!demoChild || demoChild.exitCode !== null) return resolve(false);
+            const probeRequest = http.get(`http://127.0.0.1:${demoPort}/api/health`, response => { response.resume(); resolve(response.statusCode === 200); });
+            probeRequest.setTimeout(500, () => probeRequest.destroy());
+            probeRequest.on('error', () => { if (Date.now() >= deadline) resolve(false); else setTimeout(check, 100); });
+          };
+          check();
+        });
+        if (!ready) throw new TaskError(503, 'DEMO_START_FAILED', '獨立示範服務沒有啟動，正式工作區未變更。');
+        return send(202, { url: `http://127.0.0.1:${demoPort}`, simulated: true });
+      }
       if (req.url === '/api/knowledge') {
         const { content } = input;
         if (typeof content !== 'string' || !content.trim() || Buffer.byteLength(content) > 35000) {
@@ -576,10 +601,10 @@ export async function createRequestHandler({ root = appDir, port = 4317, runAgen
         return send(error.status, { code: error.code, message: error.message, ...error.extra, nextStep: error.status === 409 ? '重新整理，比對最新內容後再操作。' : undefined });
       }
       console.error(error);
-      send(400, { code: 'REQUEST_FAILED', message: error.message, nextStep: '檢查輸入；保存失敗時查看終端錯誤。' });
+      send(400, { code: error.message === 'BODY_TOO_LARGE' ? 'BODY_TOO_LARGE' : 'REQUEST_FAILED', message: error.message === 'BODY_TOO_LARGE' ? '這次送出的內容超過 40 KB。' : error.message, detail: error.message, nextStep: '檢查輸入；保存失敗時查看終端錯誤。' });
     }
   };
-  return { handler, coach };
+  return { handler, coach, stopDemo: () => { if (demoChild) killTree(demoChild, 'SIGTERM'); } };
 }
 
 // 測試用：不監聽埠，回傳可直接呼叫 request listener 的 server。
@@ -588,6 +613,7 @@ export async function createApplication(home = root, port = 4317) {
   const server = http.createServer(app.handler);
   const { coach } = app;
   server.stopAgents = () => { for (const child of coach.children.values()) killTree(child, 'SIGTERM'); return coach.children.size; };
+  server.stopDemo = app.stopDemo;
   return server;
 }
 
@@ -606,6 +632,7 @@ export async function startServer(port = Number(flag('port') || process.env.PORT
   // 服務結束時一併停掉它啟動的 CLI，不留在背景繼續跑、繼續寫檔。
   const { coach } = app;
   server.stopAgents = () => { for (const child of coach.children.values()) killTree(child, 'SIGTERM'); return coach.children.size; };
+  server.stopDemo = app.stopDemo;
   return server;
 }
 
@@ -614,6 +641,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     console.log(`Mentor: http://127.0.0.1:${server.address().port}`);
     for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, () => {
       const stopped = server.stopAgents();
+      server.stopDemo?.();
       if (stopped) console.log(`已停止 ${stopped} 個執行中的 AI。下次啟動時這些步驟會標成結果未知。`);
       server.close();
       setTimeout(() => process.exit(0), 300).unref();
