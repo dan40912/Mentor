@@ -21,11 +21,18 @@ export function extractSlides(html) {
   return slides;
 }
 
-const numberTokens = text => [...new Set((String(text).match(/(?<![\p{L}\p{N}])[-+]?\d[\d,]*(?:\.\d+)?\s?(?:%|％|萬|億|元|美元|人|次|天|月|年|倍|位)?/gu) || []).map(value => value.trim()))];
+const numericPattern = /(?<![\d.,])[-+]?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?\s*(?:%|％|萬|億|元|美元|人|次|天|月|年|倍|位)?(?![\d.,])/gu;
+const numberTokens = text => [...new Set((String(text).match(numericPattern)||[]).map(value=>value.trim()))];
+function normalizeNumberToken(token){
+  const match=String(token).match(/^([-+]?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?)(\s*(?:%|％|萬|億|元|美元|人|次|天|月|年|倍|位)?)$/u);
+  if(!match)return null;
+  return {value:match[1].replaceAll(',',''),unit:match[2].trim().replace('％','%')};
+}
 
 export function checkNumberSources(output, materials = []) {
   const source = materials.map(item => typeof item === 'string' ? item : item.text || item.content || '').join('\n');
-  return numberTokens(textOnly(String(output).replace(/<[^>]+>/g, ' '))).map(number => ({ number, result: source.includes(number) ? '有來源' : '無來源' }));
+  const sourceTokens=numberTokens(source).map(normalizeNumberToken).filter(Boolean);
+  return numberTokens(textOnly(String(output).replace(/<[^>]+>/g, ' '))).map(number => {const token=normalizeNumberToken(number);const found=token&&sourceTokens.some(candidate=>candidate.value===token.value&&candidate.unit===token.unit);return{number,result:found?'有來源':'無來源'};});
 }
 
 export function parseDecisionCard(content) {

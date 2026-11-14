@@ -17,6 +17,13 @@ test('numeric source check reports unsupported numbers explicitly', () => {
   assert.deepEqual(checkNumberSources('42%', ['42%']), [{ number: '42%', result: '有來源' }]);
 });
 
+test('numeric matching respects digit boundaries, thousands separators, and units',()=>{
+  assert.deepEqual(checkNumberSources('20%',['素材記載120%']),[{number:'20%',result:'無來源'}]);
+  assert.deepEqual(checkNumberSources('1,200',['素材記載1200']),[{number:'1,200',result:'有來源'}]);
+  assert.deepEqual(checkNumberSources('3',['2030']),[{number:'3',result:'無來源'}]);
+  assert.deepEqual(checkNumberSources('3%',['3 人']),[{number:'3%',result:'無來源'}]);
+});
+
 test('decision card keeps recommendation distinct from user choice and rejects malformed data', () => {
   const card = parseDecisionCard('```mentor-decision\n{"question":"延長試行嗎？","options":[{"label":"延長","benefits":["多收資料"],"costs":["多花時間"],"evidence":["素材 A"]}],"unknowns":["成本尚未核對"],"recommendation":"延長","recommendationReason":"資料仍不足"}\n```');
   assert.equal(card.options[0].label, '延長');
