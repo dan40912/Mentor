@@ -9,6 +9,7 @@ import { renameReplace } from './platform.js';
 const clip = (value, limit) => String(value ?? '').slice(0, limit);
 const intents = new Set(['question','quick','new_work','instruct','material','clarify']);
 const cleanList = (items, limit = 8) => Array.isArray(items) ? items.slice(0, limit).map(value => clip(value, 300)).filter(Boolean) : [];
+const turnWriteQueues = new Map();
 
 async function readTurns(root) {
   try {
@@ -21,7 +22,7 @@ async function readTurns(root) {
   } catch (error) { if (error.code === 'ENOENT') return []; throw error; }
 }
 
-async function saveTurns(root, turns) {
+async function writeTurns(root, turns) {
   const dir = path.join(root, 'vault', 'chat');
   await mkdir(dir, { recursive: true });
   const vault = await realpath(path.join(root, 'vault'));
@@ -29,6 +30,14 @@ async function saveTurns(root, turns) {
   const file = path.join(dir, 'conversation.json'), temp = `${file}.${randomUUID()}.tmp`;
   await writeFile(temp, JSON.stringify({ version: 1, turns: turns.slice(-16) }, null, 2), { flag: 'wx' });
   await renameReplace(temp, file);
+}
+
+async function appendTurns(root, added) {
+  const key=path.resolve(root),prior=turnWriteQueues.get(key)||Promise.resolve();
+  const write=prior.catch(()=>{}).then(async()=>{const latest=await readTurns(root);await writeTurns(root,[...latest,...added]);});
+  const tail=write.catch(()=>{});turnWriteQueues.set(key,tail);
+  tail.finally(()=>{if(turnWriteQueues.get(key)===tail)turnWriteQueues.delete(key);});
+  return write;
 }
 
 export const workspaceChatTurns = root => readTurns(root);
@@ -98,7 +107,7 @@ export async function workspaceChat({ input, root, taskStore, agent, runner = ru
       }
     }
     const result = { intent, answer: clip(answer, 10000), taskId: referenced?.id || null, taskProposal: intent==='new_work' ? safeProposal : null, action, options };
-    await saveTurns(root, [...history, { role:'user', text:clip(question,1500) }, { role:'assistant', text:clip(result.answer,1500) }]);
+    await appendTurns(root, [{ role:'user', text:clip(question,1500) }, { role:'assistant', text:clip(result.answer,1500) }]);
     return result;
   } catch (error) {
     if (!(error instanceof AgentError)) throw error;

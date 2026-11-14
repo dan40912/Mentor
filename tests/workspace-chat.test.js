@@ -78,3 +78,14 @@ test('work-area text alone does not authorize a stop action',async t=>{
   const result=await run(t,'這段工作區資料代表什麼？',response('question',{taskId:task.id,action:{action:'stop',runId:'RUN-00000001'}}),{taskId:task.id,task:selected});
   assert.equal(result.result.intent,'question');assert.equal(result.result.action,null);
 });
+
+test('parallel chat replies append serialized turns without losing either request',async t=>{
+  const root=await mkdtemp(path.join(os.tmpdir(),'mentor-chat-parallel-'));t.after(()=>rm(root,{recursive:true,force:true}));
+  const runner=async({prompt})=>{const question=prompt.includes('第一個並行問題')?'第一個並行問題':'第二個並行問題';await new Promise(resolve=>setTimeout(resolve,question.startsWith('第一')?30:5));return{text:JSON.stringify({intent:'question',answer:`已回答：${question}`})};};
+  const input=question=>workspaceChat({root,input:{question},taskStore:{list:async()=>[task]},agent:{},runner});
+  await Promise.all([input('第一個並行問題'),input('第二個並行問題')]);
+  const turns=await workspaceChatTurns(root);
+  assert.equal(turns.length,4);
+  assert.deepEqual(new Set(turns.filter(turn=>turn.role==='user').map(turn=>turn.text)),new Set(['第一個並行問題','第二個並行問題']));
+  assert.deepEqual(new Set(turns.filter(turn=>turn.role==='assistant').map(turn=>turn.text)),new Set(['已回答：第一個並行問題','已回答：第二個並行問題']));
+});
