@@ -416,6 +416,7 @@ module.exports = class MentorPlugin extends Plugin {
       const who=host.createEl('select',{attr:{'aria-label':'下一步 AI'}});for(const [v,n] of [['inherit','沿用設定'],['codex|default','Codex'],['claude|default','Claude Code'],['copilot|default','Copilot']])who.createEl('option',{text:n,value:v});
       button(host,'保存後續 AI 指派',()=>invoke('agents',{all:who.value}));
       button(host,'準備跨 AI 接手包',()=>this.handoff(task));
+      button(host,'開啟專案筆記',()=>this.projectNote(task));
     }).open();
   }
   ask(task) {
@@ -478,5 +479,14 @@ module.exports = class MentorPlugin extends Plugin {
         const name=`${folder}/${task.id}-r${r.revision}.md`;await this.app.vault.create(name,r.content);modal.close();await this.app.workspace.openLinkText(name,'',false);
       },true);
     }).open();
+  }
+  async projectNote(task) {
+    const note=await this.api(`/tasks/${task.id}/project-note`);
+    const folder='Mentor 專案筆記';if(!this.app.vault.getAbstractFileByPath(folder))await this.app.vault.createFolder(folder);
+    const name=`${folder}/${note.filename}`;const current=this.app.vault.getAbstractFileByPath(name);
+    if(current){const raw=await this.app.vault.read(current);if(raw!==note.content)throw new Error('Obsidian 已有同名筆記且內容不同。為保留你的修改，沒有覆寫；請下載新版後手動核對。');}
+    else await this.app.vault.create(name,note.content);
+    if(note.conflict)new Notice('系統區塊修改已保留在筆記衝突段落，請核對。');
+    await this.app.workspace.openLinkText(name,'',false);
   }
 };

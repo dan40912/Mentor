@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // 測試用假 CLI：依提示中的角色回傳固定內容，不消耗真實額度。
-import { writeFileSync, readFileSync } from 'node:fs';
+import { writeFileSync, readFileSync, appendFileSync } from 'node:fs';
 const args = process.argv.slice(2);
 let prompt = '';
 for await (const chunk of process.stdin) prompt += chunk;
@@ -8,6 +8,7 @@ const out = args.includes('-o') ? args[args.indexOf('-o') + 1] : null;
 // 瀏覽器驗收時用 FAKE_MODE_FILE 切換模式，不必重啟服務。
 const fromFile = () => { try { return readFileSync(process.env.FAKE_MODE_FILE, 'utf8').trim(); } catch { return ''; } };
 const [mode, hangMs] = ((process.env.FAKE_MODE_FILE && fromFile()) || process.env.FAKE_MODE || 'ok').split(':');
+if(['parallel','parallel-fail-one'].includes(mode)&&process.env.FAKE_RUN_LOG)appendFileSync(process.env.FAKE_RUN_LOG,`${JSON.stringify({event:'start',cwd:process.cwd(),at:Date.now()})}\n`);
 // slow：先寫一半的檔案再等很久，用來測停止；hang：忽略 SIGTERM，且讓孫程序握住輸出，模擬無法確認結束。
 if (mode === 'slow' || mode === 'slow-login' || mode === 'hang') {
   if (mode === 'slow-login') process.stderr.write('HTTP 401 Unauthorized · Please run /login\n');
@@ -21,14 +22,17 @@ if (mode === 'slow' || mode === 'slow-login' || mode === 'hang') {
   }
   await new Promise(resolve => setTimeout(resolve, 60000));
 }
+if(mode==='parallel-stop-one'&&prompt.includes('可停止工作')){writeFileSync('partial.html','正在寫入');await new Promise(resolve=>setTimeout(resolve,Number(hangMs||3000)));}
 if (mode === 'login') { process.stderr.write('Not logged in · Please run /login\n'); process.exit(1); }
 const diary = prompt.includes('diary') ? { diary: { interpretations: ['把「新品」解讀成年度新品'], deviations: [], tradeoffs: ['選 HTML 不選 PPT，因為要可互動'], openQuestions: ['預算上限未知'] } } : {};
 const learning = mode === 'no-learning' ? {} : { learning: { change: '補上明確的成功標準', reason: '原需求缺少可檢查的結果', evidence: '這次需求對話', lesson: '先說清楚讀者要做什麼決定，再安排內容。', nextPrompt: '請做十頁簡報，讓主管當場決定新品是否立案，逐項附資料來源。', question: '為什麼要先說主管要做的決定？' } };
 const json = value => '```json\n' + JSON.stringify({ ...value, ...diary, ...learning }) + '\n```';
 let reply;
-if (prompt.includes('「任務問答」')) reply = json({intent:'question',answer:'這是測試問答：只根據保存的紀錄說明，尚未修改成果或通過驗收。',proposedChange:'',scope:'current'});
+if (prompt.includes('你是 Mentor 工作區助理') && prompt.includes('R3_END_TO_END_FIXTURE')) reply = json({intent:'new_work',answer:'我先整理工作提案，確認後才會建立任務。',taskId:null,proposal:{goal:'R3_END_TO_END_FIXTURE：比較虛構資料並製作十頁簡報',audience:'虛構主管',format:'簡報',steps:[{title:'第一項虛構整理',purpose:'整理測試資料甲',agent:'claude',reason:'測試指派'},{title:'第二項虛構整理',purpose:'整理測試資料乙',agent:'codex',reason:'測試指派'},{title:'合併虛構成果',purpose:'合併前兩項測試成果',agent:'claude',reason:'測試指派'}],userActions:[],materials:[],missingMaterials:[]},action:null,options:[]});
+else if (prompt.includes('「任務問答」')) reply = json({intent:'question',answer:'這是測試問答：只根據保存的紀錄說明，尚未修改成果或通過驗收。',proposedChange:'',scope:'current'});
 else if (prompt.includes('「任務制定」')) reply = json({ card: { title: '新品簡報', project: prompt.includes('Alpha') ? 'Alpha' : undefined, goal: '說服主管核准新品', audience: '主管', deliverable: 'HTML 簡報', success: ['主管當場決定'], constraints: [], unknowns: ['頁數'] }, coaching: '原需求沒寫讀者。' });
 else if (prompt.includes('「Grill me」')) reply = json(prompt.includes('十頁') ? { questions: [], coaching: '回答很具體。', card: { title: '新品簡報', goal: '說服主管核准新品', audience: '主管', deliverable: 'HTML 簡報 10 頁', success: ['主管當場決定'], constraints: ['10 頁'], unknowns: [] }, ready: true, readyReason: '讀者與篇幅都清楚了' } : { questions: [{ q: '要幾頁？', why: '決定密度' }], coaching: '先講讀者要做的決定。', card: { title: '新品簡報' }, ready: false });
+else if (prompt.includes('「擬定大綱」') && prompt.includes('R3_END_TO_END_FIXTURE')) reply = json({ outline: { storyline: '虛構簡報工作鏈', logic: ['各自整理', '合併成果'], sections: [{ no: 1, title: '虛構內容', point: '各項皆為測試資料', evidence: '測試 fixture', visual: { type: 'none', count: 0 } }], imageTotal: 0 }, workItems: [{ id: 'W1', title: '第一項虛構整理', detail: '整理測試資料甲', owner: 'ai', agent: 'claude', acceptance: ['有 deck.html'], dependsOn: [] }, { id: 'W2', title: '第二項虛構整理', detail: '整理測試資料乙', owner: 'ai', agent: 'codex', acceptance: ['有 deck.html'], dependsOn: [] }, { id: 'W3', title: '合併虛構成果', detail: '合併前兩項測試成果', owner: 'ai', agent: 'claude', acceptance: ['有 deck.html'], dependsOn: ['W1','W2'] }], coaching: '使用固定虛構資料。' });
 else if (prompt.includes('「擬定大綱」')) reply = json({ outline: { storyline: prompt.includes('修改意見') ? '新品值得做（改版）' : '新品值得做', logic: ['痛點', '方案', '決策'], sections: [{ no: 1, title: '痛點', point: '客訴多', evidence: '客服數據', visual: { type: 'chart', count: 1 } }, { no: 2, title: '方案', point: '新品', evidence: '無依據', visual: { type: 'none', count: 0 } }], imageTotal: 1 }, workItems: [{ id: 'W1', title: '產出 HTML', detail: '單檔', owner: 'ai', acceptance: ['有 deck.html'], dependsOn: [] }, { id: 'W2', title: '提供數據', detail: '', owner: 'human', acceptance: ['數據到位'], dependsOn: [] }], coaching: '先看主線。' });
 else if (prompt.includes('「執行」') && mode === 'nofiles') reply = '我描述了要做什麼。\nSTATUS: DONE\nFILES: 無\n證據：見回覆\n未完成：無';
 else if (prompt.includes('「執行」') && mode === 'verification-only') { writeFileSync('verification.md', '已更新驗證紀錄'); reply = 'STATUS: DONE\nFILES: verification.md\n證據：verification.md\n未完成：無\n' + json({}); }
@@ -40,4 +44,6 @@ if (mode === 'filter-zero') reply = 'The model returned no content because the r
 if (mode === 'malformed-a' && prompt.includes('「任務制定」')) reply = '我無法提供任務卡。';
 if (mode === 'empty-b' && prompt.includes('「Grill me」')) reply = json({ ready: false, questions: [] });
 if (mode === 'quote-filter') reply = json({ explanation: 'The model returned no content because the response was blocked by content filtering.' });
+if(mode==='parallel-fail-one'&&prompt.includes('故意失敗工作')){if(process.env.FAKE_RUN_LOG)appendFileSync(process.env.FAKE_RUN_LOG,`${JSON.stringify({event:'end',cwd:process.cwd(),at:Date.now()})}\n`);process.stderr.write('Not logged in · Please run /login\n');process.exit(1);}
+if(mode==='parallel'&&process.env.FAKE_RUN_LOG){await new Promise(resolve=>setTimeout(resolve,Number(hangMs||300)));appendFileSync(process.env.FAKE_RUN_LOG,`${JSON.stringify({event:'end',cwd:process.cwd(),at:Date.now()})}\n`);}
 if (out) writeFileSync(out, reply); else process.stdout.write(args[args.indexOf('--output-format')+1]==='json' ? JSON.stringify({type:'result',is_error:false,result:reply}) : reply);

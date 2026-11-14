@@ -15,7 +15,7 @@ export function fixture() {
       querySelector() { return this.label ??= {}; }
     };
   }
-  const selectors = ['preview-dialog', 'preview-layout', 'preview-content', 'review-changes', 'preview-status', 'preview-title', 'preview-modes', 'preview-source', 'task-dialog', 'task-detail', 'task-title'];
+  const selectors = ['preview-dialog', 'preview-layout', 'preview-content', 'review-changes', 'preview-status', 'preview-title', 'preview-modes', 'preview-source', 'task-dialog', 'task-detail', 'task-title', 'handoff-task', 'handoff-preview'];
   const nodes = Object.fromEntries(selectors.map(id => ['#' + id, element('div')]));
   const dialog = nodes['#preview-dialog'];dialog.id = 'preview-dialog';dialog.open = false;
   dialog.showModal = () => { assert.equal(dialog.open, false);dialog.open = true; };dialog.close = () => { dialog.open = false;dialog.onclose?.(); };dialog.addEventListener = (name,fn) => { if(name==='close')dialog.onclose=fn; };
@@ -27,6 +27,7 @@ export function fixture() {
   const calls = [], blobs = [], storage = new Map(), tasks = [reviewTask(), { id: 'OTHER', planning: { workItems: [{ id: 'W1', title: '其他任務', outputs: [{ file: 'other.html' }] }] } }];
   const ctx = vm.createContext({
     $: s => nodes[s], element, tasks, previewReturn: null, previewBlob: null, Blob,
+    busy: (_button, fn) => (...args) => fn(...args),
     document: { getElementById: id => nodes['#' + id] },
     localStorage: { getItem: k => storage.get(k), setItem: (k, v) => storage.set(k, v) },
     refreshSession: async () => {}, tell: message => assert.fail(message),

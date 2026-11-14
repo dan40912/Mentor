@@ -14,6 +14,7 @@ const [shared, html, control, auto, server] = await Promise.all([
 ]);
 const holder = html.split('\n').find(line => line.startsWith('const holderOf='));
 const render = html.slice(html.indexOf('function renderPlanning('), html.indexOf('// 使用者正在輸入或展開行內表單時'));
+const parallelHelpers=html.slice(html.indexOf('function parallelReadyItems('),html.indexOf('async function runAction('));
 const track = html.slice(html.indexOf('function trackOf('), html.indexOf('function track(t,'));
 function node(tag, text = '', className = '') {
   return { tag, textContent: text ?? '', className, dataset: {}, style: {}, children: [],
@@ -40,6 +41,7 @@ function context(extra = {}) {
   vm.runInContext(shared, ctx);
   vm.runInContext(html.slice(html.indexOf('function diffButton('),html.indexOf('async function openDiff(')),ctx);
   vm.runInContext(html.slice(html.indexOf('function reviewButton('), html.indexOf('function openReview(')), ctx);
+  vm.runInContext(parallelHelpers,ctx);
   return ctx;
 }
 

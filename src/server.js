@@ -4,6 +4,7 @@ import { planPreview } from './plan-preview.js';
 import { compactHandoff } from './compact-handoff.js';
 import { probePreview, localPreviewUrl } from './review-settings.js';
 import http from 'node:http';
+import { spawn } from 'node:child_process';
 import { randomUUID, randomBytes } from 'node:crypto';
 import { mkdir, readFile, writeFile, realpath, readdir, stat } from 'node:fs/promises';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -14,15 +15,18 @@ import { Memory } from './memory.js';
 import { Trash } from './trash.js';
 import { Conversations } from './conversations.js';
 import { Projects } from './projects.js';
-import { Coach } from './coach.js';
+import { Coach, runSummaries } from './coach.js';
 import { gitHead, itemDiff, itemChanges } from './git-diff.js';
 import { artifactPath, validateArtifactName } from './artifact-path.js';
 import { diagnose } from './agents.js';
-import { workspaceChat } from './workspace-chat.js';
+import { workspaceChat, workspaceChatTurns } from './workspace-chat.js';
 import { TaskStore, TaskError, buildBrief, sha256 } from './tasks.js';
 import { summarize, MOMENTS } from './feedback.js';
 import { writeHandoff, previewHandoff } from './handoffs.js';
 import { readAttachment } from './attachments.js';
+import { ProjectNotes } from './project-notes.js';
+import { extractSlides, checkNumberSources, parseDecisionCard } from './output-preview.js';
+import { errorGuidance } from './error-guidance.js';
 
 const appDir = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const webDir = path.join(appDir, 'web');
@@ -76,6 +80,24 @@ async function atomicWrite(file, content) {
   const temporary = `${file}.${randomUUID()}.tmp`;
   await writeFile(temporary, content, { flag: 'wx' });
   await renameReplace(temporary, file);
+}
+
+function normalizeTaskProposal(proposal, diagnosis, fallbackProvider) {
+  if (proposal === undefined) return { proposal: null, warnings: [] };
+  if (!proposal || typeof proposal !== 'object' || Array.isArray(proposal) || typeof proposal.goal !== 'string' || proposal.goal.trim().length < 4 || proposal.goal.length > 6000 || !Array.isArray(proposal.steps) || proposal.steps.length > 8) {
+    throw new TaskError(400, 'PROPOSAL_INVALID', '工作提案格式不正確，請重新整理提案。');
+  }
+  const warnings = [];
+  const steps = proposal.steps.map((step, index) => {
+    if (!step || typeof step !== 'object' || typeof step.title !== 'string' || !step.title.trim() || step.title.length > 120 || typeof step.purpose !== 'string' || !step.purpose.trim() || step.purpose.length > 300) {
+      throw new TaskError(400, 'PROPOSAL_INVALID', `提案第 ${index + 1} 項缺少名稱或說明。`);
+    }
+    const requested = ['codex', 'claude', 'copilot'].includes(step.agent) ? step.agent : null;
+    const agent = requested && diagnosis[requested]?.ok === true ? requested : fallbackProvider;
+    if (agent !== requested) warnings.push(`「${step.title.trim()}」原建議的 AI 尚未確認可用，先改用角色設定的 ${agent}。`);
+    return { title: step.title.trim().slice(0, 120), purpose: step.purpose.trim().slice(0, 300), agent, reason: String(step.reason || '').slice(0, 300) };
+  });
+  return { proposal: { goal: proposal.goal.trim(), audience: String(proposal.audience || '').slice(0, 300), format: String(proposal.format || '').slice(0, 100), steps, userActions: Array.isArray(proposal.userActions) ? proposal.userActions.slice(0, 8).map(String) : [], materials: Array.isArray(proposal.materials) ? proposal.materials.slice(0, 8).map(String) : [], missingMaterials: Array.isArray(proposal.missingMaterials) ? proposal.missingMaterials.slice(0, 8).map(String) : [] }, warnings };
 }
 
 export function handoffMarkdown(input, id) {
@@ -138,9 +160,10 @@ export async function createRequestHandler({ root = appDir, port = 4317, runAgen
   const token = randomBytes(32).toString('hex');
   const obsidian = new ObsidianBridge();
   const taskCreations = new Map();
-  let settings = { revision: 1, stages: defaultStageSettings() };
+  let settings = { revision: 1, maxParallelRuns: 2, stages: defaultStageSettings() };
   const diagnosis = {};
   let workspaceChatBusy = false;
+  let demoChild = null, demoPort = null;
   let queue = Promise.resolve();
   await mkdir(memory, { recursive: true });
   const canonicalRoot = await realpath(root);
@@ -151,6 +174,7 @@ export async function createRequestHandler({ root = appDir, port = 4317, runAgen
   const diagnosisPath = path.join(root, '.diagnosis.json');
   try { const saved = JSON.parse(await readFile(diagnosisPath, 'utf8')); for (const id of ['codex','claude','copilot']) if (typeof saved[id]?.ok === 'boolean') diagnosis[id] = saved[id]; } catch (error) { if (error.code !== 'ENOENT') throw error; }
   const tasks = new TaskStore(memory);
+  const projectNotes = new ProjectNotes(root);
   try {
     const saved = JSON.parse(await readFile(settingsPath, 'utf8'));
     if (!Number.isInteger(saved.revision) || saved.revision < 1 || !saved.stages) throw new Error('INVALID_SETTINGS');
@@ -162,7 +186,7 @@ export async function createRequestHandler({ root = appDir, port = 4317, runAgen
         if (resolved.modelId !== value.modelId || resolved.effort !== value.effort) throw new Error('INVALID_SETTINGS');
       }
     }
-    settings = saved;
+    settings = { ...saved, maxParallelRuns: Number.isInteger(saved.maxParallelRuns) && saved.maxParallelRuns >= 1 && saved.maxParallelRuns <= 4 ? saved.maxParallelRuns : 2 };
   } catch (error) {
     if (error.code !== 'ENOENT') console.error('設定檔格式不支援，改用預設角色設定：', error.message);
   }
@@ -170,12 +194,17 @@ export async function createRequestHandler({ root = appDir, port = 4317, runAgen
   const conversations = new Conversations(path.join(memory, 'conversations'));
   const projects = new Projects(path.join(memory, 'projects'));
   const coach = new Coach(tasks, () => settings, root, memoryStore, runAgent, executeFile);
+  tasks.onChanged = async task => {
+    const all = (await tasks.list()).filter(t => !t.trashed && t.id !== task.id).concat(task);
+    await projectNotes.sync(task, all);
+  };
   await coach.recover();
   const trash = new Trash(memory, tasks, coach);
   const handler = async (req, res) => {
     const requestPort = typeof port === 'function' ? port() : port;
     const origin = `http://127.0.0.1:${requestPort}`;
     const send = (status, data) => {
+      if (data?.code && !data.guidance) { const guidance = errorGuidance(data.code); if (guidance) data = { ...data, guidance }; }
       if (data?.task && !data.task.error) data = { ...data, task: { ...data.task, workCards: workCards(data.task).slice(-3) } };
       res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
       res.end(JSON.stringify(data));
@@ -219,7 +248,7 @@ export async function createRequestHandler({ root = appDir, port = 4317, runAgen
         });
         return res.end(html);
       }
-      if (req.method === 'GET' && /^\/assets\/(mentor\.svg|openai\.svg|claude\.svg|copilot\.svg|conversation\.js|project\.js|control\.js|auto\.js|feedback\.js|item-names\.js|upload\.js)$/.test(req.url)) {
+      if (req.method === 'GET' && /^\/assets\/(mentor\.svg|openai\.svg|claude\.svg|copilot\.svg|conversation\.js|project\.js|control\.js|auto\.js|feedback\.js|item-names\.js|plain-words\.js|upload\.js)$/.test(req.url)) {
         res.writeHead(200, { 'Content-Type': req.url.endsWith('.js') ? 'application/javascript; charset=utf-8' : req.url.endsWith('.svg') ? 'image/svg+xml' : 'image/png', 'Cache-Control': req.url.endsWith('.js') ? 'no-store' : 'max-age=86400' });
         return res.end(await readFile(path.join(webDir, 'assets', path.basename(req.url))));
       }
@@ -231,7 +260,12 @@ export async function createRequestHandler({ root = appDir, port = 4317, runAgen
       if (req.method === 'GET' && req.url === '/api/health') {
         return send(200, { status: 'ok', execution: 'controlled-cli-and-manual-handoff', memory });
       }
+      if (req.method === 'GET' && req.url === '/api/workspace-chat') {
+        if (!req.headers.cookie?.split('; ').includes(`awc=${token}`)) return send(403, { code: 'SESSION_REQUIRED' });
+        return send(200, { turns: await workspaceChatTurns(root) });
+      }
       const taskRoute = req.url.match(/^\/api\/tasks(?:\/(TASK-[a-zA-Z0-9-]+)(?:\/([a-z-]+))?)?(?:\?(.*))?$/);
+      const runRoute = req.url.match(/^\/api\/tasks\/(TASK-[a-zA-Z0-9-]+)\/runs(?:\/([a-f0-9-]+)\/(stop|retry|reassign))?$/);
       const projectRoute = req.url.match(/^\/api\/projects(?:\/([^/]+)(?:\/(save|summary|trash|stop-all))?)?$/);
       const trashRoute = req.url.match(/^\/api\/trash(?:\/(T-[0-9]{8}-[a-f0-9]{8})\/(restore|purge))?$/);
       if (req.method === 'GET' && trashRoute && !trashRoute[1]) {
@@ -274,6 +308,27 @@ export async function createRequestHandler({ root = appDir, port = 4317, runAgen
         if (!req.headers.cookie?.split('; ').includes(`awc=${token}`)) return send(403, { code: 'SESSION_REQUIRED' });
         const [, id, action, query] = taskRoute;
         if (!id && !action) return send(200, { tasks: await Promise.all((await tasks.list()).map(async task => ({ ...task, workCards: workCards(task).slice(-3), gitAvailable: !task.error && Boolean(await gitHead(task.allowedRoots?.[0])) }))) });
+        if (id && action === 'project-note') {
+          const task = (await tasks.list()).find(t => t.id === id && !t.error && !t.trashed);
+          if (!task) throw new TaskError(404, 'TASK_NOT_FOUND', '找不到任務。');
+          const note = await projectNotes.read(task, (await tasks.list()).filter(t => !t.trashed));
+          return send(200, note);
+        }
+        if (id && action === 'slides') {
+          const { task } = await tasks.get(id);
+          const file = new URLSearchParams(query || '').get('file');
+          if (path.extname(file || '').toLowerCase() !== '.html') throw new TaskError(415, 'SLIDE_PREVIEW_UNSUPPORTED', '逐頁預覽目前只支援已登記的 HTML 簡報。');
+          const preview = await previewArtifact(tasks, root, id, file);
+          const slides = extractSlides(preview.content.toString('utf8'));
+          if (!slides.length) throw new TaskError(422, 'SLIDES_NOT_FOUND', '這份 HTML 沒有可辨認的投影片區塊。');
+          const materials = [task.goal, task.planning?.request, ...(task.facts || []).map(f => `${f.label} ${f.value}`)];
+          for (const attachment of task.attachments || []) {
+            try { materials.push((await readAttachment(task, attachment.id)).content.toString('utf8')); } catch { /* Missing or unsupported material remains unverified. */ }
+          }
+          const cards = slides.map(slide => ({ ...slide, numbers: checkNumberSources(slide.html, materials) }));
+          const decision = parseDecisionCard(preview.content.toString('utf8')) || parseDecisionCard(task.current?.summary || '');
+          return send(200, { slides: cards, decision });
+        }
         if (id && ['work-cards', 'plan', 'handoff-summary'].includes(action)) {
           const task = (await tasks.list()).find(t => t.id === id && !t.error);
           if (!task) throw new TaskError(404, 'TASK_NOT_FOUND', '找不到任務。');
@@ -282,6 +337,11 @@ export async function createRequestHandler({ root = appDir, port = 4317, runAgen
           const receiver = new URLSearchParams(query || '').get('for') || 'unassigned';
           if (!['codex', 'claude', 'copilot', 'unassigned'].includes(receiver)) return send(400, { code: 'UNKNOWN_RECEIVER' });
           return send(200, compactHandoff(task, receiver));
+        }
+        if (id && action === 'runs') {
+          const { task } = await tasks.get(id);
+          const runs=runSummaries(task);
+          return send(200, { runs:task.planning?.workItems?.length?runs.filter(run=>run.workItemId):runs });
         }
         if (id && action === 'events') return send(200, { events: await coach.events(id) });
         if (id && action === 'conversation') return send(200, await conversations.read((await tasks.get(id)).task));
@@ -356,12 +416,41 @@ export async function createRequestHandler({ root = appDir, port = 4317, runAgen
         return send(201, { attachment: await coach.attachments.stage(params.get('name'), req, params.has('batch') ? params.get('batch') : undefined, params.has('index') ? Number(params.get('index')) : undefined) });
       }
       const input = await body(req);
+      if(runRoute){
+        const [,id,runId,action]=runRoute,key=req.headers['idempotency-key'];
+        if(typeof key!=='string'||!/^[a-zA-Z0-9-]{8,80}$/.test(key))throw new TaskError(400,'IDEMPOTENCY_KEY_REQUIRED','缺少 Idempotency-Key。');
+        if(!action){const result=await coach.queueRuns(id,input.revision,key,input);return send(202,result);}
+        if(action==='stop'){const result=await coach.stopRun(id,runId,{key});return send(202,result);}
+        if(action==='retry'){const result=await coach.retryRun(id,runId,input.revision,key,input);return send(202,result);}
+        if(action==='reassign'){const result=await coach.reassignRun(id,runId,input.revision,key,input);return send(200,result);}
+      }
       if (req.url === '/api/workspace-chat') {
         if (workspaceChatBusy) throw new TaskError(429, 'CHAT_BUSY', '上一則訊息還在處理，請稍後再送出。');
         workspaceChatBusy = true;
         try{
-          return send(200, await workspaceChat({ input, root, taskStore: tasks, agent: settings.stages.B, runner: runAgent }));
+          return send(200, await workspaceChat({ input, root, taskStore: tasks, agent: settings.stages.B, runner: runAgent, diagnosis }));
         }finally{workspaceChatBusy = false;}
+      }
+      if (req.url === '/api/onboarding/demo') {
+        if (demoChild && demoChild.exitCode === null) return send(200, { url: `http://127.0.0.1:${demoPort}`, simulated: true });
+        const probe = http.createServer();
+        demoPort = await new Promise((resolve, reject) => { probe.once('error', reject); probe.listen(0, '127.0.0.1', () => { const value = probe.address().port; probe.close(error => error ? reject(error) : resolve(value)); }); });
+        const fakeCli = path.join(appDir, 'tests', 'fixtures', 'fake-cli.mjs');
+        demoChild = spawn(process.execPath, [path.join(appDir, 'scripts', 'demo.mjs')], { cwd: appDir, stdio: 'ignore', windowsHide: true, env: { ...process.env, PORT: String(demoPort), AWC_CODEX_BIN: fakeCli, AWC_CLAUDE_BIN: fakeCli, AWC_COPILOT_BIN: fakeCli, FAKE_MODE: 'ok' } });
+        demoChild.once('error', () => { demoChild = null; });
+        demoChild.once('exit', () => { demoChild = null; demoPort = null; });
+        const ready = await new Promise(resolve => {
+          const deadline = Date.now() + 8000;
+          const check = () => {
+            if (!demoChild || demoChild.exitCode !== null) return resolve(false);
+            const probeRequest = http.get(`http://127.0.0.1:${demoPort}/api/health`, response => { response.resume(); resolve(response.statusCode === 200); });
+            probeRequest.setTimeout(500, () => probeRequest.destroy());
+            probeRequest.on('error', () => { if (Date.now() >= deadline) resolve(false); else setTimeout(check, 100); });
+          };
+          check();
+        });
+        if (!ready) throw new TaskError(503, 'DEMO_START_FAILED', '獨立示範服務沒有啟動，正式工作區未變更。');
+        return send(202, { url: `http://127.0.0.1:${demoPort}`, simulated: true });
       }
       if (req.url === '/api/knowledge') {
         const { content } = input;
@@ -414,7 +503,9 @@ export async function createRequestHandler({ root = appDir, port = 4317, runAgen
       if (req.url === '/api/settings') {
         const update = queue.then(async () => {
           if (input.revision !== settings.revision) return send(409, { code: 'REVISION_CONFLICT', revision: settings.revision });
-          const next = { revision: settings.revision + 1, stages: {} };
+          const maxParallelRuns=input.maxParallelRuns??settings.maxParallelRuns??2;
+          if(!Number.isInteger(maxParallelRuns)||maxParallelRuns<1||maxParallelRuns>4)throw new TaskError(400,'PARALLEL_LIMIT_INVALID','並行 AI 數量請設為 1 到 4。');
+          const next = { revision: settings.revision + 1, maxParallelRuns, stages: {} };
           for (const stage of stages) next.stages[stage.id] = resolveStageInput(stage.id, input.stages?.[stage.id]);
           await atomicWrite(settingsPath, JSON.stringify(next, null, 2));
           settings = next;
@@ -447,7 +538,14 @@ export async function createRequestHandler({ root = appDir, port = 4317, runAgen
         const cached = key && taskCreations.get(key);
         if (cached && cached.fingerprint !== fingerprint) throw new TaskError(409, 'IDEMPOTENCY_KEY_REUSED', '相同操作識別不能套用不同任務內容。');
         if (!cached && key && taskCreations.size >= 500) throw new TaskError(429, 'CREATION_LIMIT', '這個服務階段已保存 500 次建立操作，請先確認現有任務；重新啟動會清除連線與操作快取。');
-        const run = cached?.run || coach.create(input);
+        const taskInput = { ...input };
+        if (input.proposal !== undefined) {
+          const normalized = normalizeTaskProposal(input.proposal, diagnosis, settings.stages.D.provider);
+          taskInput.request = normalized.proposal.goal;
+          taskInput.proposal = normalized.proposal;
+          taskInput.proposalWarnings = normalized.warnings;
+        }
+        const run = cached?.run || coach.create(taskInput);
         if (key && !cached) { taskCreations.set(key, { fingerprint, run }); run.catch(() => taskCreations.delete(key)); }
         const result = await run;
         return send(202, { task: result.task });
@@ -459,6 +557,8 @@ export async function createRequestHandler({ root = appDir, port = 4317, runAgen
         answer: (id, key) => coach.answer(id, input.revision, key, input),
         outline: id => coach.draftOutline(id, input.feedback),
         learn: (id, key) => coach.keepLearnings(id, input.revision, key, input),
+        'review-candidates': (id, key) => coach.reviewCandidates(id, input.revision, key),
+        'confirm-review': (id, key) => coach.confirmReviewCandidates(id, input.revision, key, input),
         reflect: (id, key) => coach.reflect(id, input.revision, key, input),
         approve: (id, key) => coach.approveOutline(id, input.revision, key, input.proposalId ?? null),
         execute: id => coach.execute(id, input.itemId),
@@ -474,7 +574,20 @@ export async function createRequestHandler({ root = appDir, port = 4317, runAgen
         autopilot: (id, key) => coach.setAutopilot(id, input.revision, key, input),
         feedback: (id, key) => coach.feedback(id, input.revision, key, input),
         agents: (id, key) => coach.setAgents(id, input.revision, key, input),
-        'confirm-all': (id, key) => coach.confirmAll(id, input.revision, key)
+        'confirm-all': (id, key) => coach.confirmAll(id, input.revision, key),
+        'decision-card': async (id, key) => {
+          const { task } = await tasks.get(id);
+          if (task.revision !== input.revision) throw new TaskError(409, 'REVISION_CONFLICT', '任務已被更新，請重新整理後再操作。', { revision: task.revision });
+          const preview = await previewArtifact(tasks, root, id, input.file);
+          const card = parseDecisionCard(preview.content.toString('utf8'));
+          if (!card || card.error || !Number.isInteger(input.optionIndex) || !card.options[input.optionIndex]) throw new TaskError(400, 'DECISION_CARD_INVALID', '這份成果沒有可保存的決策選項。');
+          const option = card.options[input.optionIndex], decisionId = randomUUID(), optionIds = optionIndex => `O${optionIndex + 1}`;
+          return tasks.mutate(id, input.revision, key, current => {
+            const options = card.options.map((item, index) => ({ id: optionIds(index), label: item.label, cost: item.costs.join('；'), benefits: item.benefits, evidence: item.evidence }));
+            current.decisions.push({ id: decisionId, status: 'DECIDED', question: card.question || '請選擇一個方案', options, recommendation: card.recommendation, recommendationReason: card.recommendationReason, choice: optionIds(input.optionIndex), note: String(input.note || '').slice(0, 1000), decidedAt: new Date().toISOString(), source: input.file });
+            return {};
+          }, 'decision-card', { file: input.file, optionIndex: input.optionIndex, note: input.note || '' });
+        }
       };
       if (taskRoute?.[1] && coachActions[taskRoute[2]]) {
         const [, id, action] = taskRoute;
@@ -520,10 +633,10 @@ export async function createRequestHandler({ root = appDir, port = 4317, runAgen
         return send(error.status, { code: error.code, message: error.message, ...error.extra, nextStep: error.status === 409 ? '重新整理，比對最新內容後再操作。' : undefined });
       }
       console.error(error);
-      send(400, { code: 'REQUEST_FAILED', message: error.message, nextStep: '檢查輸入；保存失敗時查看終端錯誤。' });
+      send(400, { code: error.message === 'BODY_TOO_LARGE' ? 'BODY_TOO_LARGE' : 'REQUEST_FAILED', message: error.message === 'BODY_TOO_LARGE' ? '這次送出的內容超過 40 KB。' : error.message, detail: error.message, nextStep: '檢查輸入；保存失敗時查看終端錯誤。' });
     }
   };
-  return { handler, coach };
+  return { handler, coach, stopDemo: () => { if (demoChild) killTree(demoChild, 'SIGTERM'); } };
 }
 
 // 測試用：不監聽埠，回傳可直接呼叫 request listener 的 server。
@@ -532,6 +645,7 @@ export async function createApplication(home = root, port = 4317) {
   const server = http.createServer(app.handler);
   const { coach } = app;
   server.stopAgents = () => { for (const child of coach.children.values()) killTree(child, 'SIGTERM'); return coach.children.size; };
+  server.stopDemo = app.stopDemo;
   return server;
 }
 
@@ -546,6 +660,7 @@ export async function startServer(port = Number(flag('port') || process.env.PORT
   // 服務結束時一併停掉它啟動的 CLI，不留在背景繼續跑、繼續寫檔。
   const { coach } = app;
   server.stopAgents = () => { for (const child of coach.children.values()) killTree(child, 'SIGTERM'); return coach.children.size; };
+  server.stopDemo = app.stopDemo;
   return server;
 }
 
@@ -554,6 +669,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     console.log(`Mentor: http://127.0.0.1:${server.address().port}`);
     for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, () => {
       const stopped = server.stopAgents();
+      server.stopDemo?.();
       if (stopped) console.log(`已停止 ${stopped} 個執行中的 AI。下次啟動時這些步驟會標成結果未知。`);
       server.close();
       setTimeout(() => process.exit(0), 300).unref();

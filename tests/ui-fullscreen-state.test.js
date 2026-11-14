@@ -35,6 +35,7 @@ function fixture(storage = new Map(), fail = {}) {
       setItem(k, v) { writes.push([k, v]);if (fail.write) throw Error('full');storage.set(k, v); }
     },
     fetch: async () => ({ ok: false, json: async () => ({ message: 'test fixture' }) }),
+    busy: (_button, fn) => (...args) => fn(...args),
     tasks: [{ id: 'a', title: 'a', error: 'fixture' }, { id: 'b', title: 'b', error: 'fixture' }],
     restoreFocus: null, holderOf: () => 'you', holderText: { you: '你' }, taskMenu() {}, element: () => node('p'),
     matchMedia: () => ({ matches: true }), afterSheetClose() {}, previewReturn: null, previewBlob: null

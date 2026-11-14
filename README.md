@@ -34,7 +34,11 @@ cd Mentor
 npm run demo
 ```
 
-Open the printed URL, normally [127.0.0.1:4317](http://127.0.0.1:4317). **Each demo launch recreates `.demo-home/`**; never keep real work there. You can read fictional tasks, make sample decisions and inspect handoffs without an AI login. The demo does not automatically replace subsequent agent calls with fake CLI calls: executing AI work uses your logged-in account and quota.
+Open the printed URL, normally [127.0.0.1:4317](http://127.0.0.1:4317). Demo data lives in a temporary folder and is removed when the demo service stops. Every AI reply in demo mode comes from the fake CLI; it does not use an AI account or quota.
+
+### For a first-time, nontechnical user
+
+Install Node.js 20 or later, then double-click `start.cmd` on Windows or `start.command` on macOS. On Linux, run `./start.sh`. The scripts check the Node version, start Mentor and open your browser. The first-run guide checks each available AI CLI and offers a separate simulated demo. Each AI check makes one real CLI request and may use quota. The guide links to the providers’ installation and sign-in instructions. Example tasks fill the new-task form so you can adjust the request before starting.
 
 For your own separate data directory:
 
@@ -43,6 +47,8 @@ npm start -- --home ~/mentor-data --port 4318
 ```
 
 Without arguments, npm start uses this checkout’s `vault/` and `outputs/`. `MENTOR_HOME` and `PORT` are also supported. Stop with Ctrl+C. Use a different port and home when another Mentor service is running.
+
+Each task update also refreshes a readable project note under `vault/notes/`. Open or download the Markdown from task details. The optional Obsidian plugin can create the note in the currently selected Vault without replacing an existing note.
 
 ## Complete one task
 
@@ -54,6 +60,8 @@ Without arguments, npm start uses this checkout’s `vault/` and `outputs/`. `ME
 6. Review the acceptance list yourself and keep untested items unverified. Save useful lessons for later tasks.
 
 Real execution needs an installed, logged-in Codex, Claude Code or GitHub Copilot CLI. Model access, fees and limits depend on your account. Mentor supplies no model subscription and does not guarantee automatic quota switching. Reading and manual handoff remain possible without a CLI.
+
+Independent work items can run through different agents at the same time. The “工作中” panel shows each agent, its plain-language state and current action, dependencies and elapsed time. Expand a card to inspect the actual prompt and reply. You can stop one active item, reassign queued work, or retry a failed or stopped item with a compact handoff. Stops, reassignments and scope changes require your confirmation; completed work still waits for your review. Status polling pauses while the page is hidden.
 
 ## Work in Obsidian
 

@@ -105,6 +105,7 @@ test('real request handlers archive card, conversation and output IDs; reject wr
 test('new task submit failure and upload retry keep the draft text, batch identity and successful IDs', async () => {
   let failUpload=true,failCreate=true,run;const requests=[];
   const host=new Node('div'),form=new Node('form'),area=new Node('textarea'),button=new Node('button');button.type='submit';form.append(area,button);area.value='請整理這份草稿';form.reset=()=>{area.value='';};
+  form.elements={autopilot:{checked:false},full:{checked:false,disabled:false}};
   const b=browser(async(url,data)=>{requests.push({url,data});if(url==='/api/uploads/batches')return {id:'draft-batch',results:data.names.map((name,index)=>({name,index}))};if(url.startsWith('/api/uploads?')){if(failUpload)throw new Error('網路失敗');return {attachment:{id:'draft-file'}};}if(url==='/api/tasks'&&data){if(failCreate)throw new Error('建立失敗');return {task:{id:'new-task'}};}if(url==='/api/tasks')return {tasks:[]};return {};});
   Object.assign(b.c,{state:{},$:selector=>selector==='#draft-form'?form:selector==='#draft-attachments'?host:{close(){}},FormData:class{*[Symbol.iterator](){yield ['request',area.value];}},busy:(_button,fn)=>()=>{run=fn();return run;},renderOverview(){},ensurePolling(){}});
   vm.runInContext(html.slice(html.indexOf('const draftAttachments='),html.indexOf("$('#settings').onsubmit=")),b.c);

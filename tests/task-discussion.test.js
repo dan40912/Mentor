@@ -13,12 +13,12 @@ import {workCardsMarkdown} from '../src/work-cards.js';
 import {prompts} from '../src/coach.js';
 
 async function setup(t,runner){
- const home=await mkdtemp(path.join(tmpdir(),'mentor-question-'));t.after(()=>rm(home,{recursive:true,force:true}));
+ const home=await mkdtemp(path.join(tmpdir(),'mentor-question-'));let app;t.after(async()=>{if(app){await app.settle();const deadline=Date.now()+5000;while(Date.now()<deadline){await app.coach.store.queue;if(!app.coach.drivers.size&&!app.coach.pending.size&&!app.coach.runDrivers.size&&!app.coach.children.size)break;await new Promise(resolve=>setTimeout(resolve,10));}await app.coach.store.queue;}await rm(home,{recursive:true,force:true});});
  await mkdir(path.join(home,'vault'));const out=path.join(home,'outputs');await mkdir(out);await writeFile(path.join(out,'note.md'),'UNCHANGED');
  const task=demoTask('TASK-question',out);task.status='READY';task.planning.workItems=[{id:'W1',title:'來源',detail:'原工作',owner:'ai',status:'DONE',acceptance:['保留原文'],dependsOn:[],outputs:[{file:'note.md'}],doneAt:'yesterday'}];
  task.planning.autopilot={full:false,waitingFor:{kind:'confirm'}};
  await writeFile(path.join(home,'vault',task.id+'.md'),serializeTask(task));
- const app=await requestApp(home,runner),cookie=(await app.fetch('/')).headers.get('set-cookie').split(';')[0],csrf=(await(await app.fetch('/api/session',{headers:{cookie}})).json()).csrfToken;
+ app=await requestApp(home,runner);const cookie=(await app.fetch('/')).headers.get('set-cookie').split(';')[0],csrf=(await(await app.fetch('/api/session',{headers:{cookie}})).json()).csrfToken;
  const headers={cookie,'x-csrf-token':csrf,'content-type':'application/json','idempotency-key':'question-request-001'};
  return {app,task,out,headers,post:input=>app.fetch(`/api/tasks/${task.id}/ask`,{method:'POST',headers,body:JSON.stringify(input)})};
 }
