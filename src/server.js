@@ -23,6 +23,7 @@ import { TaskStore, TaskError, buildBrief, sha256 } from './tasks.js';
 import { summarize, MOMENTS } from './feedback.js';
 import { writeHandoff, previewHandoff } from './handoffs.js';
 import { readAttachment } from './attachments.js';
+import { ProjectNotes } from './project-notes.js';
 
 const appDir = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const webDir = path.join(appDir, 'web');
@@ -151,6 +152,7 @@ export async function createRequestHandler({ root = appDir, port = 4317, runAgen
   const diagnosisPath = path.join(root, '.diagnosis.json');
   try { const saved = JSON.parse(await readFile(diagnosisPath, 'utf8')); for (const id of ['codex','claude','copilot']) if (typeof saved[id]?.ok === 'boolean') diagnosis[id] = saved[id]; } catch (error) { if (error.code !== 'ENOENT') throw error; }
   const tasks = new TaskStore(memory);
+  const projectNotes = new ProjectNotes(root);
   try {
     const saved = JSON.parse(await readFile(settingsPath, 'utf8'));
     if (!Number.isInteger(saved.revision) || saved.revision < 1 || !saved.stages) throw new Error('INVALID_SETTINGS');
@@ -279,6 +281,12 @@ export async function createRequestHandler({ root = appDir, port = 4317, runAgen
         if (!req.headers.cookie?.split('; ').includes(`awc=${token}`)) return send(403, { code: 'SESSION_REQUIRED' });
         const [, id, action, query] = taskRoute;
         if (!id && !action) return send(200, { tasks: await Promise.all((await tasks.list()).map(async task => ({ ...task, workCards: workCards(task).slice(-3), gitAvailable: !task.error && Boolean(await gitHead(task.allowedRoots?.[0])) }))) });
+        if (id && action === 'project-note') {
+          const task = (await tasks.list()).find(t => t.id === id && !t.error && !t.trashed);
+          if (!task) throw new TaskError(404, 'TASK_NOT_FOUND', '找不到任務。');
+          const note = await projectNotes.sync(task, (await tasks.list()).filter(t => !t.trashed));
+          return send(200, note);
+        }
         if (id && ['work-cards', 'plan', 'handoff-summary'].includes(action)) {
           const task = (await tasks.list()).find(t => t.id === id && !t.error);
           if (!task) throw new TaskError(404, 'TASK_NOT_FOUND', '找不到任務。');
@@ -557,6 +565,10 @@ export async function createApplication(home = root, port = 4317) {
 export async function startServer(port = Number(flag('port') || process.env.PORT || 4317)) {
   let server;
   const app = await createRequestHandler({ root: flag('home') || process.env.MENTOR_HOME || appDir, port: () => server.address().port });
+  app.coach.store.onChanged = async task => {
+    const all = (await app.coach.store.list()).filter(t => !t.trashed && t.id !== task.id).concat(task);
+    await new ProjectNotes(flag('home') || process.env.MENTOR_HOME || appDir).sync(task, all);
+  };
   server = http.createServer(app.handler);
   await new Promise((resolve, reject) => {
     server.once('error', reject);

@@ -44,6 +44,8 @@ npm start -- --home ~/mentor-data --port 4318
 
 不帶參數的 `npm start` 將資料放在目前專案的 `vault/` 與 `outputs/`。也支援 `MENTOR_HOME` 與 `PORT`。停止服務用 Ctrl+C。若你的原服務已占用連接埠，請使用另一個連接埠與獨立 home。
 
+每次任務更新也會同步整理成白話專案筆記，存於 `vault/notes/`。你可在任務詳情下載 Markdown；已配對的 Obsidian 插件會把筆記新增到目前選取的 Vault，不覆寫同名筆記。
+
 ## 完成第一件工作
 
 1. 按「新任務」，寫下目的、允許變更的範圍與不可改動的限制。

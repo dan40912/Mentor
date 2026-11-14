@@ -324,6 +324,7 @@ export class TaskStore {
     this.dir = dir;
     this.queue = Promise.resolve();
     this.idempotent = new Map();
+    this.onChanged = null;
   }
 
   // 每次 I/O 前確認工作記憶仍是原本的目錄，任務檔不是 symlink。
@@ -368,6 +369,7 @@ export class TaskStore {
       if (!/^TASK-[a-zA-Z0-9-]+$/.test(task.id)) throw new TaskError(400, 'TASK_ID_INVALID', '任務 ID 格式不正確。');
       task.file = `${task.id}.md`;
       await writeFile(await this.safePath(task.file), serializeTask(task), { flag: 'wx' });
+      if (this.onChanged) await this.onChanged(task).catch(error => console.error('專案筆記更新失敗：', error.message));
       return { task: { ...task, nextAction: nextHumanAction(task), feedbackPrompt: pendingFeedback(task) } };
     });
     this.queue = run.catch(() => {});
@@ -401,6 +403,7 @@ export class TaskStore {
         throw new TaskError(409, 'FILE_CHANGED', '任務檔在處理期間被修改，已停止寫入以免覆蓋。', { revision: task.revision - 1 });
       }
       await renameReplace(temporary, target);
+      if (this.onChanged) await this.onChanged(task).catch(error => console.error('專案筆記更新失敗：', error.message));
       if (result?.after) await result.after();
       return { task: { ...task, humanEdited: false, nextAction: nextHumanAction(task), feedbackPrompt: pendingFeedback(task) }, ...result?.extra };
     });

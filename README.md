@@ -44,6 +44,8 @@ npm start -- --home ~/mentor-data --port 4318
 
 Without arguments, npm start uses this checkout’s `vault/` and `outputs/`. `MENTOR_HOME` and `PORT` are also supported. Stop with Ctrl+C. Use a different port and home when another Mentor service is running.
 
+Each task update also refreshes a readable project note under `vault/notes/`. Open or download the Markdown from task details. The optional Obsidian plugin can create the note in the currently selected Vault without replacing an existing note.
+
 ## Complete one task
 
 1. Choose 新任務 and state the goal, allowed changes and restrictions.
