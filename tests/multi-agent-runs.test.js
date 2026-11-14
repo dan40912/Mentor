@@ -119,6 +119,18 @@ test('legacy running records migrate without losing fields and new work can cont
   assert.equal(continued.planning.workItems.find(item=>item.id==='W2').status,'AWAITING_REVIEW');
 });
 
+test('queued work can change AI before start and running work cannot be reassigned',async t=>{
+  const env=await setup(t,{limit:1,titles:['先開始','排隊工作'],dependencies:[[],[]],mode:'parallel:500'});
+  await env.coach.queueRuns(env.id,env.task.revision,'reassign-queue-001',{itemIds:['W1','W2']});
+  let current=await until(async()=>{const task=(await env.store.get(env.id)).task;return task.planning.runs.find(run=>run.workItemId==='W1')?.status==='running'&&task.planning.runs.find(run=>run.workItemId==='W2')?.status==='queued'?task:null;});
+  await assert.rejects(env.coach.reassignRun(env.id,current.planning.runs.find(run=>run.workItemId==='W1').id,current.revision,'reassign-running-001',{provider:'claude'}),{code:'RUN_NOT_QUEUED'});
+  const queuedRun=current.planning.runs.find(run=>run.workItemId==='W2');
+  await env.coach.reassignRun(env.id,queuedRun.id,current.revision,'reassign-waiting-001',{provider:'claude'});
+  current=await until(async()=>{const task=(await env.store.get(env.id)).task;return task.planning.runs.find(run=>run.id===queuedRun.id)?.status==='done'?task:null;});
+  assert.equal(current.planning.runs.find(run=>run.id===queuedRun.id).provider,'claude');
+  assert.equal(current.planning.learningTurns.find(turn=>turn.id===current.planning.runs.find(run=>run.id===queuedRun.id).turnId).provider,'claude');
+});
+
 test('runs API requires session, CSRF and an idempotency key, and GET returns compact run records',async t=>{
   const env=await setup(t,{titles:['API 工作一','API 工作二'],dependencies:[[],[]],mode:'parallel:100'});
   const app=await requestApp(env.dir);

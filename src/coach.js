@@ -371,6 +371,20 @@ export class Coach {
     this.driveRuns(id);return result;
   }
 
+  async reassignRun(id,runId,revision,key,{provider}={}){
+    if(!['codex','claude','copilot'].includes(provider))throw new TaskError(400,'PROVIDER_INVALID','只能指派給可用的 AI。');
+    const task=await this.latest(id),run=(task.planning.runs||[]).find(entry=>entry.id===runId);
+    if(!run||run.status!=='queued')throw new TaskError(409,'RUN_NOT_QUEUED','只有尚未開始的工作可以換 AI。');
+    const agent=this.agentFor('D',provider,task);
+    const result=await this.store.mutate(id,revision,key,t=>{
+      const current=(t.planning.runs||[]).find(entry=>entry.id===runId);
+      if(!current||current.status!=='queued')throw new TaskError(409,'RUN_NOT_QUEUED','這次工作已開始或狀態改變，請重新整理。');
+      Object.assign(current,{provider:agent.provider,modelId:agent.modelId,effort:agent.effort,agent:agentLabel(agent)});
+      return{status:planningStatus(t)};
+    },'run-reassign',{runId,provider});
+    return result;
+  }
+
   // 只增不改的事件紀錄。人的回覆逐字保存。
   async audit(id, type, data = {}) {
     if (!/^TASK-[a-zA-Z0-9-]+$/.test(id)) return;

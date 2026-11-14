@@ -55,6 +55,8 @@ Without arguments, npm start uses this checkout’s `vault/` and `outputs/`. `ME
 
 Real execution needs an installed, logged-in Codex, Claude Code or GitHub Copilot CLI. Model access, fees and limits depend on your account. Mentor supplies no model subscription and does not guarantee automatic quota switching. Reading and manual handoff remain possible without a CLI.
 
+Independent work items can run through different agents at the same time. The “工作中” panel shows each agent, its plain-language state and current action, dependencies and elapsed time. Expand a card to inspect the actual prompt and reply. You can stop one active item, reassign queued work, or retry a failed or stopped item with a compact handoff. Stops, reassignments and scope changes require your confirmation; completed work still waits for your review. Status polling pauses while the page is hidden.
+
 ## Work in Obsidian
 
 ```sh

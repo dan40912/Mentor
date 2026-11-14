@@ -236,7 +236,7 @@ export async function createRequestHandler({ root = appDir, port = 4317, runAgen
         return send(200, { turns: await workspaceChatTurns(root) });
       }
       const taskRoute = req.url.match(/^\/api\/tasks(?:\/(TASK-[a-zA-Z0-9-]+)(?:\/([a-z-]+))?)?(?:\?(.*))?$/);
-      const runRoute = req.url.match(/^\/api\/tasks\/(TASK-[a-zA-Z0-9-]+)\/runs(?:\/([a-f0-9-]+)\/(stop|retry))?$/);
+      const runRoute = req.url.match(/^\/api\/tasks\/(TASK-[a-zA-Z0-9-]+)\/runs(?:\/([a-f0-9-]+)\/(stop|retry|reassign))?$/);
       const projectRoute = req.url.match(/^\/api\/projects(?:\/([^/]+)(?:\/(save|summary|trash|stop-all))?)?$/);
       const trashRoute = req.url.match(/^\/api\/trash(?:\/(T-[0-9]{8}-[a-f0-9]{8})\/(restore|purge))?$/);
       if (req.method === 'GET' && trashRoute && !trashRoute[1]) {
@@ -371,6 +371,7 @@ export async function createRequestHandler({ root = appDir, port = 4317, runAgen
         if(!action){const result=await coach.queueRuns(id,input.revision,key,input);return send(202,result);}
         if(action==='stop'){const result=await coach.stopRun(id,runId,{key});return send(202,result);}
         if(action==='retry'){const result=await coach.retryRun(id,runId,input.revision,key,input);return send(202,result);}
+        if(action==='reassign'){const result=await coach.reassignRun(id,runId,input.revision,key,input);return send(200,result);}
       }
       if (req.url === '/api/workspace-chat') {
         if (workspaceChatBusy) throw new TaskError(429, 'CHAT_BUSY', '上一則訊息還在處理，請稍後再送出。');
