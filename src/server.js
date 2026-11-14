@@ -18,7 +18,7 @@ import { Coach } from './coach.js';
 import { gitHead, itemDiff, itemChanges } from './git-diff.js';
 import { artifactPath, validateArtifactName } from './artifact-path.js';
 import { diagnose } from './agents.js';
-import { workspaceChat } from './workspace-chat.js';
+import { workspaceChat, workspaceChatTurns } from './workspace-chat.js';
 import { TaskStore, TaskError, buildBrief, sha256 } from './tasks.js';
 import { summarize, MOMENTS } from './feedback.js';
 import { writeHandoff, previewHandoff } from './handoffs.js';
@@ -230,6 +230,10 @@ export async function createRequestHandler({ root = appDir, port = 4317, runAgen
       }
       if (req.method === 'GET' && req.url === '/api/health') {
         return send(200, { status: 'ok', execution: 'controlled-cli-and-manual-handoff', memory });
+      }
+      if (req.method === 'GET' && req.url === '/api/workspace-chat') {
+        if (!req.headers.cookie?.split('; ').includes(`awc=${token}`)) return send(403, { code: 'SESSION_REQUIRED' });
+        return send(200, { turns: await workspaceChatTurns(root) });
       }
       const taskRoute = req.url.match(/^\/api\/tasks(?:\/(TASK-[a-zA-Z0-9-]+)(?:\/([a-z-]+))?)?(?:\?(.*))?$/);
       const projectRoute = req.url.match(/^\/api\/projects(?:\/([^/]+)(?:\/(save|summary|trash|stop-all))?)?$/);

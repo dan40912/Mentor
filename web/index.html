@@ -1997,6 +1997,10 @@ function lookup(question){
 let lastAnswer = '';
 const workspaceTurns = [];
 let workspaceRequestPending = false;
+void request('/api/workspace-chat').then(({turns})=>{
+  workspaceTurns.push(...turns.slice(-16));
+  for(const turn of workspaceTurns)message(turn.text,turn.role==='user');
+}).catch(()=>{});
 async function askWorkspace(question){
   if(workspaceRequestPending) return;
   workspaceRequestPending = true;
@@ -2004,20 +2008,33 @@ async function askWorkspace(question){
   const reply = message('正在查看工作區並整理回答…');
   reply.setAttribute('aria-busy','true');
   try{
-    const history = workspaceTurns.slice(-6).map(turn => ({role:turn.role,text:turn.text.slice(0,700)}));
-    const result = await request('/api/workspace-chat',{question,history,taskId:selectedTaskId});
+    const result = await request('/api/workspace-chat',{question,taskId:selectedTaskId});
     reply.textContent = result.answer;
     lastAnswer = result.answer;
     workspaceTurns.push({role:'user',text:question},{role:'assistant',text:result.answer});
-    if(workspaceTurns.length > 6) workspaceTurns.splice(0,workspaceTurns.length-6);
-    if(result.taskProposal && !/^(?:不要|不用|不必|只是|先別)|[？?]$/.test(question)){
-      reply.append(element('p','建議任務：' + result.taskProposal,'small'));
+    if(workspaceTurns.length > 16) workspaceTurns.splice(0,workspaceTurns.length-16);
+    if(result.taskProposal){
+      const proposal=result.taskProposal, card=element('section',undefined,'work-panel-card');
+      card.append(element('h3','工作提案'),element('p',`目標：${proposal.goal}`),element('p',`給誰看：${proposal.audience||'尚未指定'} · 成果：${proposal.format||'尚未指定'}`));
+      for(const step of proposal.steps||[])card.append(element('p',`${step.title}：${step.purpose}（建議由${step.agent||'適合的 AI 助手'}負責：${step.reason||'依工作內容安排'}）`));
+      if(proposal.userActions?.length)card.append(element('p','需要你：'+proposal.userActions.join('、')));
+      if(proposal.materials?.length)card.append(element('p','已有素材：'+proposal.materials.join('、')));
+      if(proposal.missingMaterials?.length)card.append(element('p','還缺少：'+proposal.missingMaterials.join('、')));
+      reply.append(card);
       action(reply,'確認建立任務',async event => {
         const button=event.currentTarget;
         if(pendingTask || workspaceRequestPending) return;
         button.disabled=true;
-        if(!await assignTask(result.taskProposal)) button.disabled=false;
+        if(!await assignTask(proposal,button.dataset.idempotencyKey ||= crypto.randomUUID())) button.disabled=false;
       });
+      action(reply,'修改提案',()=>{promptInput.value='交辦：'+proposal.goal;promptInput.focus();});
+      action(reply,'先問我幾個問題',()=>{promptInput.value='先問我幾個問題，確認這份提案：'+proposal.goal;promptInput.focus();});
+    }
+    if(result.intent==='clarify')for(const option of result.options||[])action(reply,option,()=>{promptInput.value=option;promptInput.focus();});
+    if(result.intent==='quick')action(reply,'存成專案',()=>saveDraft(result.answer));
+    if(['instruct','material'].includes(result.intent)&&result.taskId){
+      const target=tasks.find(task=>task.id===result.taskId);
+      if(target)action(reply,'前往這個任務',()=>openTaskFromChat(target));
     }
     action(reply,'保存這則回覆',() => saveDraft(result.answer));
   }catch(error){
@@ -2082,7 +2099,7 @@ function saveDraft(content){
   editor.focus();
   return true;
 }
-async function assignTask(task){
+async function assignTask(task,idempotencyKey=crypto.randomUUID()){
   if (pendingTask) return;
   if (!state){
     message('本機服務尚未連線。恢復連線後可重新送出。');
@@ -2093,7 +2110,8 @@ async function assignTask(task){
   send.disabled = true;
   const reply = message('正在建立任務…');
   try{
-    const result = await request('/api/tasks',{request:task,autopilot:false});
+    const details=typeof task==='string'?task:[task.goal,`對象：${task.audience||'待確認'}`,`成果：${task.format||'待確認'}`,...(task.steps||[]).map(step=>`- ${step.title}：${step.purpose}；建議 AI 助手：${step.agent||'待安排'}（${step.reason||'依任務內容安排'}）`),...(task.userActions||[]).map(item=>`- 需要使用者：${item}`)].join('\n');
+    const result = await request('/api/tasks',{request:details,autopilot:false},{'Idempotency-Key':idempotencyKey});
     tasks = [result.task,...tasks.filter(item => item.id !== result.task.id)];
     renderOverview();
     ensurePolling();
