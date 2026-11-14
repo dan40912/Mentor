@@ -177,7 +177,7 @@ test('無連接埠：停點切成完全自動 → 批次確認 → 人工項目�
   const created = await coach.create({ request: '我要做一份新品簡報給主管十頁', profile: 'standard', autopilot: true });
   await created.done;
   const latest = async () => (await store.get(created.task.id)).task;
-  const idle = () => !coach.drivers.has(created.task.id) && !coach.pending.has(created.task.id);
+  const idle = () => !coach.drivers.has(created.task.id) && !coach.pending.has(created.task.id) && !coach.runDrivers.has(created.task.id) && coach.children.size===0;
   await waitFor(async () => (await latest()).planning.autopilot?.waitingFor?.kind === 'approve' && idle());
 
   const task = await latest(); task.nextAction = planningAction(task);

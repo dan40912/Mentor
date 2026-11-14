@@ -250,7 +250,7 @@ export class Coach {
     this.questions = new Map();
     this.executeFile = executeFile;
     this.attachments = new Attachments(root);
-    Object.assign(this, { store, settings, root, memory, children: new Map(), drivers: new Set(), runDrivers: new Set(), overrides: new Map(), cancelled: new Set(), pending: new Map(), retries: new Map() });
+    Object.assign(this, { store, settings, root, memory, children: new Map(), drivers: new Set(), runDrivers: new Set(), runDriveAgain: new Set(), overrides: new Map(), cancelled: new Set(), pending: new Map(), retries: new Map() });
   }
 
   parallelLimit() {
@@ -298,7 +298,7 @@ export class Coach {
   }
 
   async driveRuns(id) {
-    if(this.runDrivers.has(id))return;
+    if(this.runDrivers.has(id)){this.runDriveAgain.add(id);return;}
     this.runDrivers.add(id);
     const launched=[];
     try{
@@ -312,13 +312,13 @@ export class Coach {
         if(!current||current.status!=='queued')continue;
         const item=task.planning.workItems.find(entry=>entry.id===current.workItemId);
         if(!item||!['TODO','BLOCKED'].includes(item.status)){await this.setRunStatus(id,current.id,'failed','工作項目已不可執行','狀態已變更，請重新整理任務。');continue;}
-        if(!ready(task.planning.workItems,item,unlockOf(task))){await this.setRunStep(id,current.id,`等待前置項目：${(item.dependsOn||[]).filter(dep=>!unlockOf(task).includes(task.planning.workItems.find(w=>w.id===dep)?.status)).join('、')}`);continue;}
+        if(!ready(task.planning.workItems,item,unlockOf(task)))continue;
         slots--;
         try{const started=await this.execute(id,item.id,'D',{runId:current.id,provider:current.provider,outputDir:current.outputDir,parallel:true});launched.push(started.done);}
         catch(error){await this.setRunStatus(id,current.id,'failed','無法開始',error.message);}
       }
     }catch(error){console.error(error);}
-    finally{this.runDrivers.delete(id);}
+    finally{this.runDrivers.delete(id);if(this.runDriveAgain.delete(id))queueMicrotask(()=>this.driveRuns(id));}
     for(const done of launched)done.finally(()=>this.driveRuns(id)).catch(()=>{});
   }
 
@@ -626,6 +626,14 @@ export class Coach {
         if (!ap || t.trashed) return;
         if (t.planning.stopped || t.planning.running?.stopping) { await this.endAuto(id, '你停止了這次執行，自動模式已關閉。要繼續請再按「交給 AI 一路做到完」。'); return; }
         if (t.planning.running) { await new Promise(r => setTimeout(r, 200)); continue; }
+        const pendingRuns=(t.planning.runs||[]).some(run=>{
+          if(run.status==='running')return true;
+          if(run.status!=='queued')return false;
+          const item=t.planning.workItems.find(entry=>entry.id===run.workItemId);
+          return Boolean(item&&ready(t.planning.workItems,item,unlockOf(t)));
+        });
+        const reviewableParallel=(t.planning.workItems||[]).some(item=>item.owner==='ai'&&item.status==='AWAITING_REVIEW'&&(!item.recheck||ready(t.planning.workItems,item,unlockOf(t))));
+        if (pendingRuns&&!reviewableParallel) { await new Promise(r=>setTimeout(r,200)); continue; }
         // 上一步剛失敗而且不是你按了「繼續」：停下來說明，不自動重試
         const lastTurn = t.planning.learningTurns?.at(-1);
         if (guard === 0 && !ap.go && lastTurn?.status === 'failed') { await this.park(id, { kind: 'error', code: lastTurn.errorCode || 'FAILED', label: lastTurn.error || 'AI 沒有完成這一步。', stage: lastTurn.stage }); return; }
@@ -1236,7 +1244,7 @@ export class Coach {
       this.addDiary(t, 'E', json?.diary, agent);
     }, { workItemId: itemId, ...(instruction ? { instruction, userInput: instruction, inputKind: 'user' } : {}) });
     } catch (error) { cleanup(); throw error; }
-    started.done.finally(cleanup);
+    started.done.finally(()=>{cleanup();this.driveRuns(id);});
     return started;
   }
 

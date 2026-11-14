@@ -6,6 +6,6 @@ import { fileURLToPath } from 'node:url';
 
 const dir = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'tests');
 const files = readdirSync(dir).filter(f => f.endsWith('.test.js')).sort().map(f => path.join(dir, f));
-// 整合測試會建立獨立工作區並啟動子程序；限制 worker 數，避免資源競爭讓背景流程超過測試生命週期。
-const result = spawnSync(process.execPath, ['--test', '--test-concurrency=1', ...files], { stdio: 'inherit' });
+// 由 Node 使用預設並行數；每個整合測試建立自己的工作區與連接埠。
+const result = spawnSync(process.execPath, ['--test', ...files], { stdio: 'inherit' });
 process.exit(result.status ?? 1);

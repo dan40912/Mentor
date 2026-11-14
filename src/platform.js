@@ -58,7 +58,7 @@ export function killTree(child, signal = 'SIGTERM', { platform = process.platfor
 }
 
 // 暫存檔改名覆蓋正本。Windows 上防毒軟體或索引器偶爾會短暫鎖住檔案，改名會回 EPERM／EBUSY，重試幾次即可。
-export async function renameReplace(from, to, { attempts = 5, delayMs = 40 } = {}) {
+export async function renameReplace(from, to, { attempts = 12, delayMs = 50 } = {}) {
   for (let i = 1; ; i++) {
     try { return await rename(from, to); }
     catch (error) {

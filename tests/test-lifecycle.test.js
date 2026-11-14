@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { requestApp, fakeAgent } from './fixtures/request.js';
 
@@ -14,8 +15,21 @@ async function until(check) {
 }
 
 async function fixture(t, command = 'npm test') {
-  const root = await mkdtemp(path.join(process.cwd(), '.test-lifecycle-'));
-  t.after(() => rm(root, { recursive: true, force: true }));
+  const root = await mkdtemp(path.join(tmpdir(), 'mentor-test-lifecycle-'));
+  let app;
+  t.after(async () => {
+    if (app) {
+      await app.settle();
+      const deadline = Date.now() + 5000;
+      while (Date.now() < deadline) {
+        await app.coach.store.queue;
+        if (!app.coach.drivers.size && !app.coach.pending.size && !app.coach.runDrivers.size && !app.coach.children.size) break;
+        await new Promise(resolve => setTimeout(resolve, 10));
+      }
+      await app.coach.store.queue;
+    }
+    await rm(root, { recursive: true, force: true });
+  });
   const calls = [], runs = [];
   const executeFile = (file, args, options) => {
     const child = new EventEmitter();
@@ -26,7 +40,7 @@ async function fixture(t, command = 'npm test') {
     return child;
   };
   let reviewCount = 0;
-  const app = await requestApp(root, async input => {
+  app = await requestApp(root, async input => {
     if (input.prompt.includes('「驗收」角色')) {
       const task = await app.coach.latest(id);
       calls.push({ stage: 'E', prompt: input.prompt, saved: structuredClone(task.planning.workItems[0]) });
